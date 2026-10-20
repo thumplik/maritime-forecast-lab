@@ -105,6 +105,33 @@ python fingerprint.py data/processed/canonical/noaa_us_gulf_2023-06   # order-in
 
 **Results:** The re-ingested June dataset is **identical** to the pre-refactor data: 87,377,629 rows, same content hash. Ingest report: 87,379,611 rows in, 0 dropped (the raw data was already bbox-filtered), 1,982 duplicates; flags bad_mmsi 43,541, sog_sentinel 99,146, sog_implausible 475. Store on real data: a 24 h causal history query takes 0.02 s, and a one-day bbox vessel summary takes 2.1 s.
 
-**Blockers / open questions:** The DMA mapping is unverified. Verify it against one real DMA day before any Danish benchmark (the paper also reports Danish numbers).
+**Blockers / open questions:** The DMA mapping is unverified. Verify it against one real DMA day before any Danish benchmark (the paper also reports Danish numbers). _(Resolved 2026-10-20, see the next entry.)_
 
 **Next step:** Milestone 1 slice 3: `GET /health`, `/datasets`, `/vessels`, `/vessels/{id}/track` in FastAPI over `ParquetStore` and dataset manifests, with typed errors and input limits.
+
+## 2026-10-20 — DMA mapping verified against a real day
+
+**Milestone:** 1 (before slice 3)
+**Done:**
+- DMA 2023 is published only as monthly zips (June 2023 is 21.7 GB). New `scripts/fetch_dma.py` reads the zip directory and one day's member over HTTP ranges (zipfile checks the CRC). It handles daily zips for later years too and writes `data/manifests/dma_fetch.json`. Fetched `aisdk-2023-06-01.csv`: 2.05 GB, 11.8 M rows, 610 MB transferred.
+- Profiled every column domain the mapping depends on, then ingested as `dma_2023-06`.
+- The v1 mapping had three defects:
+  - It kept 525 k non-vessel rows (base stations, AtoN, SAR aircraft, beacons).
+  - It did not map ETA.
+  - It missed three ship-type labels.
+- Fixed in `dma_denmark` **v2**, which is now `verified: true`. Added a generic `drop_values` mapping option (counted as `excluded_by_mapping`). `DROP_REASON_SQL` became `drop_reason_sql(mapping)`.
+- Tests: 88. New: the DMA preset on a synthetic file in DMA layout.
+
+**Commands run:**
+```bash
+curl -r ... 2023/aisdk-2023-06.zip   # first manual member extraction; CRC 0x0e8cd484 verified
+uv run --project backend python scripts/import_ais.py --mapping dma_denmark --dataset-id dma_2023-06 data/raw/dma/2023-06-01/aisdk-2023-06-01.csv
+uv run --project backend python scripts/fetch_dma.py 2023-06-01   # reproduced the same SHA-256 b41f6ab4…
+cd backend && uv run pytest   # 88 passed
+```
+
+**Results:** Every row is accounted for. Implied-speed/SOG ratio is 1.002 (Class A) and 0.995 (Class B), so units, axes and timing are consistent. Positions fall in Danish waters. Median cadence is 10 s for Class A, versus NOAA's about 60 s down-sampled floor. The full table is in `docs/data-contracts.md` under "DMA verification".
+
+**Blockers / open questions:** That DMA timestamps are UTC is documented by DMA but cannot be proven by the internal checks.
+
+**Next step:** Milestone 1 slice 3: FastAPI `GET /health`, `/datasets`, `/vessels`, `/vessels/{id}/track` over `ParquetStore` and dataset manifests.

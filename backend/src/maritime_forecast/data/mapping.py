@@ -77,6 +77,11 @@ class SourceMapping(BaseModel):
         default_factory=lambda: {"nav_status": ["15"], "vessel_type": ["0"]},
         description="Per-field string values that mean 'not available'",
     )
+    drop_values: dict[Literal["transceiver_class", "nav_status", "vessel_type"], list[str]] = Field(
+        default_factory=dict,
+        description="Rows whose field equals one of these values (after null_values and "
+        "value_maps) are dropped and counted as 'excluded_by_mapping', e.g. base stations",
+    )
     value_maps: dict[str, dict[str, str]] = Field(
         default_factory=dict, description="Per-field source value -> canonical value"
     )

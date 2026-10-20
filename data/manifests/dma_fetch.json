@@ -1,0 +1,18 @@
+{
+  "files": {
+    "2023-06-01": {
+      "bytes": 2050045419,
+      "compressed_bytes": 610386268,
+      "crc32": "0x0e8cd484",
+      "date": "2023-06-01",
+      "fetched_at": "2026-10-20T14:27:07+00:00",
+      "member": "aisdk-2023-06-01.csv",
+      "output": "data/raw/dma/2023-06-01/aisdk-2023-06-01.csv",
+      "sha256": "b41f6ab4005f94f862174686dea6762946cb6e5e0b73fb005d4cc980ef243897",
+      "url": "http://aisdata.ais.dk.s3.eu-central-1.amazonaws.com/2023/aisdk-2023-06.zip"
+    }
+  },
+  "index": "http://aisdata.ais.dk/",
+  "license_note": "DMA AIS data terms apply; see http://aisdata.ais.dk/ and dma.dk.",
+  "source": "Danish Maritime Authority historical AIS"
+}

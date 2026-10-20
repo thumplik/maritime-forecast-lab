@@ -21,6 +21,7 @@ make audit        # Milestone 0 coverage audit -> data/runs/coverage_audit/
 make calibrate    # §6.6 golden-number check against the calibration paper
 make splits       # materialize P-known / P-unseen / P-paper manifests
 make import MAPPING=<preset|yaml> DATASET=<id> FILES="..."   # any provider via config/sources/
+make fetch-dma DAYS="2023-06-01"   # Danish AIS; range-reads one day from monthly zips
 ```
 
 Run one script directly: `uv run --project backend python scripts/<name>.py --help`.

@@ -173,7 +173,7 @@ def test_presets_load():
     noaa = load_mapping("noaa_marinecadastre")
     assert noaa.verified and noaa.static_fields_provenance == "backfilled"
     dma = load_mapping("dma_denmark")
-    assert not dma.verified and dma.vessel_class_from == "text_map"
+    assert dma.verified and dma.vessel_class_from == "text_map" and dma.version == 2
     with pytest.raises(ValueError):
         load_mapping("../../etc/passwd")
 
@@ -190,3 +190,43 @@ def test_column_names_are_quoted(tmp_path, monkeypatch):
     )  # fmt: skip
     report, _ = ingest([f], m, "q", store=ParquetStore(tmp_path / "c"))
     assert report.rows_out == 1
+
+
+DMA_HEADER = (
+    "# Timestamp,Type of mobile,MMSI,Latitude,Longitude,Navigational status,ROT,SOG,COG,Heading,"
+    "IMO,Callsign,Name,Ship type,Cargo type,Width,Length,Type of position fixing device,Draught,"
+    "Destination,ETA,Data source type,A,B,C,D"
+)
+# SYNTHETIC rows in the DMA layout (values modelled on what the 2023-06-01 file contains).
+DMA_ROWS = [
+    "01/06/2023 13:05:00,Class A,219000001,55.67,12.59,Under way using engine,0.0,12.3,296.1,511,"
+    "Unknown,,,Cargo,,32,190,GPS,9.4,AARHUS,03/06/2023 11:00:00,AIS,,,,",
+    "01/06/2023 13:05:10,Class B,219000002,56.10,10.20,Unknown value,,102.2,,,"
+    "Unknown,,,Spare 1,,,,Undefined,,,,AIS,,,,",
+    "01/06/2023 13:05:20,Base Station,002190047,55.70,12.60,Unknown value,,,,,"
+    "Unknown,,,Undefined,,,,Surveyed,,,,AIS,,,,",
+    "01/06/2023 13:05:30,AtoN,992191000,55.71,12.61,Unknown value,,,,,"
+    "Unknown,,,Undefined,,,,Surveyed,,,,AIS,,,,",
+    "01/06/2023 13:05:40,Class A,219000003,91,0,Unknown value,,0.0,,,"
+    "Unknown,,,Tanker,,,,GPS,,,,AIS,,,,",
+]
+
+
+def test_dma_preset_on_synthetic_dma_layout(tmp_path, monkeypatch):
+    monkeypatch.setattr(ingest_mod, "MANIFEST_DIR", tmp_path / "m")
+    f = tmp_path / "aisdk-synthetic.csv"
+    f.write_text(DMA_HEADER + "\n" + "\n".join(DMA_ROWS) + "\n")
+    store = ParquetStore(tmp_path / "c")
+    report, written = ingest([f], load_mapping("dma_denmark"), "dma", store=store)
+    assert report.dropped == {"bad_coordinates": 1, "excluded_by_mapping": 2}
+    assert report.rows_out == 2 and written == {"2023-06-01": 2}
+    a, b = store.scan("dma").pl().to_dicts()
+    assert a["observed_at"] == datetime(2023, 6, 1, 13, 5, tzinfo=UTC)
+    assert a["eta"] == datetime(2023, 6, 3, 11, 0, tzinfo=UTC)
+    assert a["vessel_class"] == "cargo" and a["transceiver_class"] == "A"
+    assert a["heading_deg"] is None and a["draft_m"] == 9.4 and a["destination"] == "AARHUS"
+    assert a["nav_status"] == "Under way using engine"
+    assert a["static_fields_provenance"] == "broadcast" and a["source"] == "dma_denmark"
+    assert b["transceiver_class"] == "B" and b["vessel_class"] == "other"
+    assert b["sog_knots"] is None and "sog_sentinel" in b["quality_flags"]
+    assert b["nav_status"] is None

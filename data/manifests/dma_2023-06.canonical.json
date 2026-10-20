@@ -1,0 +1,38 @@
+{
+  "dataset_id": "dma_2023-06",
+  "source_id": "dma_denmark",
+  "mapping_id": "dma_denmark@v2",
+  "canonical_version": "canonical-v2",
+  "ingest_version": "ingest-v1",
+  "region": null,
+  "static_fields_provenance": "broadcast",
+  "inputs": [
+    {
+      "path": "data/raw/dma/2023-06-01/aisdk-2023-06-01.csv",
+      "bytes": 2050045419,
+      "sha256": "b41f6ab4005f94f862174686dea6762946cb6e5e0b73fb005d4cc980ef243897",
+      "report": {
+        "rows_in": 11809593,
+        "dropped": {
+          "bad_coordinates": 58833,
+          "excluded_by_mapping": 525273
+        },
+        "duplicates_removed": 117345,
+        "outside_region": 0,
+        "rows_out": 11108142,
+        "flags": {
+          "bad_mmsi": 42273,
+          "sog_implausible": 2367,
+          "sog_sentinel": 7679
+        }
+      },
+      "ingested_at": "2026-10-20T14:24:42Z"
+    }
+  ],
+  "partitions": {
+    "2023-06-01": 11108142
+  },
+  "notes": "",
+  "git_sha": "6001ca34990ba886ee182b2708b36b4e7458d23d-dirty",
+  "updated_at": "2026-10-20T14:24:42Z"
+}

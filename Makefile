@@ -6,7 +6,7 @@ PY  := $(UV) run --project backend python
 START ?= 2023-06-01
 END   ?= 2023-06-30
 
-.PHONY: help setup test lint format fetch fetch-list canonical audit calibrate splits import notebook
+.PHONY: help setup test lint format fetch fetch-list canonical audit calibrate splits import fetch-dma notebook
 
 help:  ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -38,6 +38,9 @@ audit:  ## Milestone 0 coverage audit
 calibrate:  ## §6.6 golden-number check (needs local data)
 	$(PY) scripts/calibrate.py
 	cd backend && $(UV) run pytest -m golden
+
+fetch-dma:  ## Download DMA days: make fetch-dma DAYS="2023-06-01 2023-06-02"
+	$(PY) scripts/fetch_dma.py $(DAYS)
 
 import:  ## Import other-provider AIS files: make import MAPPING=dma_denmark DATASET=id FILES="a.csv"
 	$(PY) scripts/import_ais.py --mapping $(MAPPING) --dataset-id $(DATASET) $(FILES)

@@ -83,8 +83,20 @@ def _ts(col: str | None, spec: TimestampSpec) -> str:
     )
 
 
-# First matching reason a staged row is dropped, or NULL if it is kept.
-DROP_REASON_SQL = """
+# Staged column holding each string field that drop_values may test (after null/value maps).
+_DROPPABLE = {"transceiver_class": "_transceiver", "nav_status": "nav_status",
+              "vessel_type": "vessel_type"}  # fmt: skip
+
+
+def drop_reason_sql(m: SourceMapping) -> str:
+    """First matching reason a staged row is dropped, or NULL if it is kept."""
+    excluded = " OR ".join(
+        f"{_DROPPABLE[f]} IN ({', '.join(_lit(v) for v in vals)})"
+        for f, vals in m.drop_values.items()
+        if vals
+    )
+    excluded_case = f"WHEN {excluded} THEN 'excluded_by_mapping'" if excluded else ""
+    return f"""
     CASE
       WHEN vessel_id IS NULL OR vessel_id = '' THEN 'missing_vessel_id'
       WHEN observed_at IS NULL THEN 'bad_timestamp'
@@ -92,6 +104,7 @@ DROP_REASON_SQL = """
            OR NOT (latitude_deg BETWEEN -90 AND 90 AND longitude_deg BETWEEN -180 AND 180)
         THEN 'bad_coordinates'
       WHEN latitude_deg = 0 AND longitude_deg = 0 THEN 'null_island'
+      {excluded_case}
     END
 """
 
@@ -158,7 +171,7 @@ def canonical_sql(m: SourceMapping, source: str) -> str:
             {_lit(m.static_fields_provenance)}                 AS static_fields_provenance,
             _raw_sog, _transceiver, _ord
         FROM staged
-        WHERE ({DROP_REASON_SQL}) IS NULL
+        WHERE ({drop_reason_sql(m)}) IS NULL
     ),
     dedup AS (
         SELECT * FROM typed

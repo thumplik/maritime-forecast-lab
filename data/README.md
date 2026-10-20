@@ -19,4 +19,6 @@ Everything here except this file, `.gitkeep`s and `manifests/*.json` is gitignor
 
 Other providers: write a mapping in `config/sources/` (see docs/data-contracts.md), then `make import MAPPING=<name> DATASET=<id> FILES="a.csv b.csv"`.
 
+- **Danish Maritime Authority (DMA)** historical AIS, http://aisdata.ais.dk/. Daily zips for recent years, monthly zips for 2023 and earlier. `scripts/fetch_dma.py` range-reads one day out of a monthly zip. Terrestrial, not down-sampled (Class A about every 10 s). Static fields are broadcast. Check DMA's terms of use before redistributing anything derived from it. One verified day: `dma_2023-06` (see docs/data-contracts.md).
+
 To reproduce: `make fetch && make canonical`. Checksums of every source zip are in the manifest.

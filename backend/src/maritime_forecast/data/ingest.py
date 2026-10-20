@@ -17,8 +17,8 @@ from pathlib import Path
 from maritime_forecast.config import MANIFEST_DIR, REPO_ROOT, BBox
 from maritime_forecast.data.canonical import (
     CANONICAL_VERSION,
-    DROP_REASON_SQL,
     canonical_sql,
+    drop_reason_sql,
     staged_sql,
 )
 from maritime_forecast.data.mapping import SourceMapping
@@ -62,7 +62,7 @@ def build_report(
     rows_in, *_ = con.execute(f"SELECT count(*) FROM ({staged_sql(mapping, src)})").fetchone()
     dropped = dict(
         con.execute(
-            f"SELECT reason, count(*) FROM (SELECT {DROP_REASON_SQL} AS reason "
+            f"SELECT reason, count(*) FROM (SELECT {drop_reason_sql(mapping)} AS reason "
             f"FROM ({staged_sql(mapping, src)})) WHERE reason IS NOT NULL GROUP BY 1 ORDER BY 1"
         ).fetchall()
     )

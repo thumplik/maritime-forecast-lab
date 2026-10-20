@@ -1,9 +1,12 @@
 # Danish Maritime Authority historical AIS CSV (http://aisdata.ais.dk/), the Danish corpus
 # used by TrAISformer and the calibration paper.
-# UNVERIFIED: written from the published column layout, not yet checked against a real file.
-# Check the header, timestamp format and ship-type labels before using it for a benchmark.
+# VERIFIED 2026-10-20 against aisdk-2023-06-01.csv (member of 2023/aisdk-2023-06.zip,
+# SHA-256 b41f6ab4...243897, 11,809,593 rows). Header, timestamp and ETA formats, and every
+# value of Type of mobile / Ship type / Navigational status seen that day are handled.
+# Findings: docs/data-contracts.md "DMA verification".
+# 2023 is published as monthly zips only; later years as daily zips.
 source_id: dma_denmark
-version: 1
+version: 2  # v2: drop non-vessel stations, map ETA, complete ship-type labels
 description: Danish Maritime Authority terrestrial AIS, daily CSV.
 file_format: csv
 columns:
@@ -21,6 +24,7 @@ columns:
   draft_m: Draught
   transceiver_class: Type of mobile   # "Class A" / "Class B" / "Base Station" ...
   destination: Destination
+  eta: ETA                            # same dd/mm/YYYY format as the timestamp
 timestamp:
   timezone: UTC
   format: "%d/%m/%Y %H:%M:%S"
@@ -28,6 +32,10 @@ sog_unit: knots
 null_values:
   nav_status: ["Unknown value"]
   vessel_type: ["Undefined"]
+# Not vessels: shore base stations, aids to navigation, SAR aircraft and distress beacons.
+drop_values:
+  transceiver_class: ["Base Station", "AtoN", "SAR Airborne",
+                      "Search and Rescue Transponder", "Emergency PIRB"]
 value_maps:
   transceiver_class: {"Class A": "A", "Class B": "B"}
 vessel_class_from: text_map
@@ -54,5 +62,8 @@ vessel_class_text_map:
   Military: other
   Other: other
   Reserved: other
+  Spare 1: other
+  Spare 2: other
+  Not party to conflict: other
 static_fields_provenance: broadcast
-verified: false
+verified: true
