@@ -9,4 +9,5 @@
 | [data-contracts.md](data-contracts.md) | Canonical observation schema and NOAA → canonical mapping | When the schema changes |
 | [evaluation-protocol.md](evaluation-protocol.md) | Protocols, leakage guards, metrics, calibration | When the evaluator changes |
 | [cutoff-sampling.md](cutoff-sampling.md) | How cutoffs are chosen and stratified | When the sampler changes |
+| [benchmarks.md](benchmarks.md) | Benchmark results with run ids and file digests | After each kept benchmark run |
 | [model-integration-notes.md](model-integration-notes.md) | Per-model adaptation differences and limitations | When a model is added |

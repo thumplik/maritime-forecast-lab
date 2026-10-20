@@ -57,6 +57,32 @@ Runs:
 - Unit: 7 synthetic cutoffs.
 - Golden (`make calibrate`): 6 real NOAA cutoffs (underway, stationary, transiting) × 3 grids × 3 models = 378 checks. No violations, no vacuous cases, at least 80% `ok` comparisons, 2 min 42 s.
 
+## Runner (Milestone 2)
+
+`evaluation/runner.py` (`make benchmark PROTOCOL=...`) runs these steps:
+
+1. **Cutoff candidates** in the cutoff region, from causal trailing features only. No spike filter, because it looks at the next report.
+2. **Split filter:** keep a candidate only if the manifest puts its whole `[as_of − history, as_of + max horizon]` window in the test split, with no other period inside it.
+3. **Sampling:** the seeded §6.3 sampler (underway and stationary sets), plus the transiting flag.
+4. **Prediction:** batched causal histories, proven equal to `ParquetStore.history()`.
+5. **Truth:** at every grid step, from the truth region. For along/cross-track, the true course is the bracket bearing; when a report falls exactly on the target, it is that report's COG if the vessel is moving.
+
+Paired scoring and failures:
+- A sample counts only if truth is evaluable and every model delivered.
+- Failures are counted per model. `not_evaluable` is reported by horizon, including `model_failed`.
+- (stratum, horizon) cells with fewer than 20 evaluable samples are listed in `dropped_cells`, never dropped silently.
+
+Each cell reports, per model: median and mean error with per-model vessel-bootstrap CIs from shared resamples, p90, |along|/|cross| medians with `n_decomposed`, ADE, failure rate, admission, and a cross-run-comparable `sample_set_sha256`.
+
+Skill against the best baseline uses a **paired** bootstrap CI. It is computed only if every registered baseline is in the run, and it is null if the best baseline's error is under 10 m.
+
+**Headline** is a property of the cell. It requires all of:
+- the horizon is admitted for that stratum;
+- every model's failure rate is at most 1%;
+- the paired set has at least 100 samples from at least 20 vessels.
+
+Runs go to the immutable run store; failed runs are recorded too. Results are in [benchmarks.md](benchmarks.md).
+
 ## Metrics (§6.5)
 
 Geodesic displacement error (km, nmi) per horizon; ADE/FDE; along/cross-track; median, p90, mean with paired bootstrap 95% CI resampling vessels. Paired: identical (cutoff, horizon) set for every model in a comparison.

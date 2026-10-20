@@ -8,7 +8,7 @@ END   ?= 2023-06-30
 
 NPM := npm --prefix frontend
 
-.PHONY: help setup dev web-test gen-api test lint format fetch fetch-list canonical audit calibrate splits import fetch-dma api notebook
+.PHONY: help setup dev web-test gen-api test lint format fetch fetch-list canonical audit calibrate splits import fetch-dma api benchmark notebook
 
 help:  ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -23,7 +23,10 @@ dev:  ## Start API (:8000) and web app (:3000) together
 web-test:  ## Frontend typecheck + unit tests
 	$(NPM) run typecheck && $(NPM) test
 
-gen-api:  ## Regenerate OpenAPI JSON and TypeScript types after API changes
+gen-benchmark:  ## Paired baseline benchmark: make benchmark PROTOCOL=P-known (or P-unseen)
+	$(PY) scripts/run_benchmark.py --protocol $(PROTOCOL)
+
+api:  ## Regenerate OpenAPI JSON and TypeScript types after API changes
 	$(PY) scripts/export_openapi.py && $(NPM) run gen:api
 
 test:  ## Unit tests (no network, no local data)
@@ -59,6 +62,9 @@ import:  ## Import other-provider AIS files: make import MAPPING=dma_denmark DAT
 
 splits:  ## Materialize split manifests into data/manifests/splits/
 	$(PY) scripts/make_splits.py
+
+benchmark:  ## Paired baseline benchmark: make benchmark PROTOCOL=P-known (or P-unseen)
+	$(PY) scripts/run_benchmark.py --protocol $(PROTOCOL)
 
 api:  ## Run the read API on http://localhost:8000 (docs at /docs)
 	cd backend && $(UV) run uvicorn maritime_forecast.api.app:app --reload --port 8000

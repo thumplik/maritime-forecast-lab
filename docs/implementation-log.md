@@ -343,3 +343,57 @@ uv run pytest -m golden                     # 3 passed (calibration, real-data i
 - a first unattended baseline benchmark on June 2023 (P-known and P-unseen).
 
 Then damped velocity (τ fit on train only) and constant turn rate.
+
+## 2026-10-20 — Milestone 2 slice 2: evaluator runner and first baseline benchmarks
+
+**Milestone:** 2
+**Done:**
+- `evaluation/runner.py`: the unattended paired benchmark (see `docs/evaluation-protocol.md` § Runner).
+- `data/cutoffs.cutoff_candidates_sql` uses causal features. `models/base.histories_for_cutoffs` batches histories and is equivalence-tested against `ParquetStore.history()`.
+- `evaluation/bootstrap`:
+  - multinomial-weight vessel bootstrap;
+  - `paired_vessel_bootstrap` with shared resamples;
+  - the weighted median now matches `np.median`. An earlier lower-median version gave a CI that excluded its own estimate; a test caught it.
+- `storage/run_store.py`: write-once, read-only after finalize, SHA-256 of every file including `run.json`, failed runs recorded.
+- `scripts/run_benchmark.py`, `make benchmark`.
+- Schema changes:
+  - `CellResult` gains `n_evaluable`, `n_decomposed`, `best_baseline_id`, and a skill `Stat` with CI.
+  - `BenchmarkRun.dropped_cells` added.
+  - The headline failure tolerance is 1%.
+- Tests: 186 + 1 xfail.
+
+**Leakage review** found no leakage, but eight integrity problems, fixed before any result was kept (the smoke run and an interrupted first full run were discarded):
+
+1. Headline was per-model, although the paired set was shaped by every model's failures. It is now per cell.
+2. Small cells were dropped silently. They are now recorded in `dropped_cells`, decided on the evaluable count.
+3. Along/cross medians covered an unreported subset. `n_decomposed` is now reported, and the exact-hit course comes from the hit report's COG.
+4. Skill was labelled against a damped velocity that does not exist yet. It is now computed only when every registered baseline is present, records `best_baseline_id`, and has a paired CI.
+5. The "paired CI" wording was wrong. It now says "per-model CIs from shared resamples"; the paired contrasts are the skill CIs.
+6. `run.json` was not checksummed, and failed runs left orphan directories. Both fixed.
+7. Sample hashes used run-local ids. They now use `vessel|as_of|horizon`.
+8. Models capped below the longest horizon would have failed everywhere. They are now refused before the run is created.
+
+Nits fixed: a window straddling another period is rejected; truth is filtered to the truth region.
+
+**Commands run:**
+```bash
+cd backend && uv run pytest                     # 186 passed, 1 xfailed
+make benchmark PROTOCOL=P-known                 # 22,639 cutoffs, 50 min (bootstrap-bound)
+make benchmark PROTOCOL=P-unseen                # 4,977 cutoffs, 3.5 min
+```
+
+**Results:** run ids, `files.json` digests and tables are in `docs/benchmarks.md`.
+- Pooled underway: persistence and CV are tied at 1 h, and persistence wins from 2 h (paired CIs exclude 0).
+- Transiting: CV wins 1–3 h, they tie at 6 h, and persistence wins at 12–24 h.
+- P-known and P-unseen agree.
+
+**Blockers / open questions:**
+- The P-known run is bootstrap-bound (about 48 of its 50 min). Vectorize `paired_vessel_bootstrap`, or bootstrap only headline strata.
+- Recommendation: drop `constant_velocity_paper_v1` from product benchmarks; its stationary failures make every stationary cell non-headline.
+
+**Next step:** Milestone 2 slice 3:
+- damped velocity (τ fit per class on the TRAIN split only, with a protocol-leakage test);
+- constant turn rate;
+- `GET /models`, `POST /forecasts` and `/benchmarks` endpoints;
+- feasibility flags (navigable-water mask);
+- the GeoJSON export.

@@ -26,6 +26,7 @@ make splits       # materialize P-known / P-unseen / P-paper manifests
 make import MAPPING=<preset|yaml> DATASET=<id> FILES="..."   # any provider via config/sources/
 make fetch-dma DAYS="2023-06-01"   # Danish AIS; range-reads one day from monthly zips
 make api          # read API on :8000, OpenAPI docs at /docs
+make benchmark PROTOCOL=P-known   # unattended paired benchmark -> data/runs/benchmarks/<run_id>/ (immutable)
 ```
 
 Run one script directly: `uv run --project backend python scripts/<name>.py --help`.
