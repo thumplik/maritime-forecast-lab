@@ -1,6 +1,6 @@
 # Data contracts
 
-Canonical observation schema: build plan §4. This file records the concrete mapping and decisions.
+Canonical observation schema: build plan §4. The executable contract is `maritime_forecast.schemas.Observation`. A unit test asserts that canonical Parquet columns match its fields in order, and that a canonical row validates. This file records the concrete mapping and decisions.
 
 ## NOAA MarineCadastre → canonical
 

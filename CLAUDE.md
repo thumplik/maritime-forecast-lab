@@ -4,7 +4,7 @@ Research workbench for forecasting where an AIS-tracked vessel will be 1 h – 3
 
 ## Where we are
 
-**Current milestone: 0 — data spike and coverage audit.** No frontend, no API, no CI yet.
+**Current milestone: 1 — repository, contracts and data pipeline** (Milestone 0 done; build plan v0.3). No frontend, API or CI yet.
 Status, blockers and next step live in [docs/implementation-log.md](docs/implementation-log.md) — read it first, append to it last.
 
 ## Commands
@@ -19,6 +19,7 @@ make fetch        # download June 2023 NOAA AIS, filtered to the Gulf truth regi
 make canonical    # raw NOAA parquet -> canonical §4 schema in data/processed/
 make audit        # Milestone 0 coverage audit -> data/runs/coverage_audit/
 make calibrate    # §6.6 golden-number check against the calibration paper
+make splits       # materialize P-known / P-unseen / P-paper manifests
 ```
 
 Run one script directly: `uv run --project backend python scripts/<name>.py --help`.
@@ -26,7 +27,7 @@ Ad-hoc data questions: `uv run --project backend python -c "import duckdb; print
 
 ## Layout
 
-- `backend/src/maritime_forecast/` — the package. `config/` (paths, regions), `data/` (ingest, canonicalize, segment, cutoffs), `geo/` (geodesic math), `models/` (forecasters), `evaluation/` (metrics, protocols).
+- `backend/src/maritime_forecast/` — the package. `config/` (paths, regions), `data/` (ingest, canonicalize, segment, cutoffs), `geo/` (geodesic math), `models/` (forecasters), `evaluation/` (truth, admission, splits, metrics), `schemas/` (Pydantic contracts).
 - `scripts/` — thin CLIs over the package (fetch, canonicalize, audit, calibrate).
 - `research/notebooks/` — spike notebooks (jupytext `.py` percent format, so they diff cleanly).
 - `config/regions.yaml` — cutoff and truth regions. Never hardcode coordinates.

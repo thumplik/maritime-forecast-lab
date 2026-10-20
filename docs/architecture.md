@@ -23,5 +23,10 @@ NOAA daily zip (national, ~340 MB)
 | `maritime_forecast.geo.geodesic` | WGS84 direct/inverse problems, along/cross-track |
 | `maritime_forecast.models.baselines` | Persistence, constant velocity (standard + paper-compatible) |
 | `maritime_forecast.evaluation.windows` | Paper-style fixed windows for §6.6 calibration |
+| `maritime_forecast.evaluation.truth` | Bracketed ground truth that never bridges gaps |
+| `maritime_forecast.evaluation.admission` | Per-stratum horizon admission (plan v0.3 §6.4) |
+| `maritime_forecast.evaluation.splits` | Protocol rules: P-known, P-unseen, P-paper |
+| `maritime_forecast.data.cutoffs` | Cutoff sampler, transiting stratum |
+| `maritime_forecast.schemas` | Pydantic contracts: `Observation`, `SplitManifest` |
 
-Not yet built (by design): API, frontend, run store, registry, CI.
+Not yet built: API, frontend, run store, model registry, CI (Milestone 1 continues).

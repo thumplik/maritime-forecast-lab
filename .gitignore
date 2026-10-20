@@ -7,6 +7,8 @@ data/manifests/*
 !data/README.md
 # Dataset manifests are small and are the provenance record; commit them.
 !data/manifests/*.json
+!data/manifests/splits/
+!data/manifests/splits/*.json
 
 # Models, checkpoints, caches
 *.ckpt

@@ -1,6 +1,6 @@
 # Coverage audit — Milestone 0
 
-**Runs:** `coverage_audit_20261020T024624Z` and `calibration_20261020T024511Z`, both at commit `725d401`.
+**Runs:** `coverage_audit_20261020T024624Z` and `calibration_20261020T024511Z` (commit `725d401`). Per-stratum admission and the transiting stratum: `coverage_audit_20261020T025237Z` (build plan v0.3; same sampler and seed).
 **Dataset:** `noaa_us_gulf_2023-06`: NOAA MarineCadastre, 2023-06-01 to 2023-06-30, filtered to the U.S. Gulf truth region (manifest `data/manifests/noaa_us_gulf_2023-06-01_2023-06-30.json`).
 **Reproduce:** `make fetch && make canonical && make audit && make calibrate`. The full per-class tables are in each run's `report.md`. This page summarises them.
 
@@ -38,17 +38,28 @@ The pooled numbers hide a lot of spread between classes. Gulf / box-only:
 - The larger truth region does its job (§0 item 4). For cargo at 24 h it raises coverage from 54% to 77%.
 - **Survivorship (pooled):** the median cutoff SOG of evaluable samples stays at 5.4–5.5 kn at every horizon. No class share moves by more than 5 percentage points. Long-horizon evaluable sets are therefore *not* dominated by slow vessels, but only because tugs, which stay in coverage, are most of the population.
 
-## 3. Horizon admission (§6.4)
+## 3. Horizon admission (§6.4, per stratum since plan v0.3)
 
-Rule as implemented: at least 50% valid truth, evaluable median SOG no more than 25% below the underway population's median, and no class share shifting by more than 15 pp.
+Rule as implemented (`evaluation/admission.py`). A horizon is first-class for a stratum only if all three checks pass within that stratum:
 
-| Horizon | Pooled status |
-|---|---|
-| 1, 2, 3, 6 h | **first-class** |
-| 12, 24 h | **first-class** under the pooled rule. **Recommended: first-class per stratum only** (see §6) |
-| 48, 72 h | not assessed: needs data beyond terrestrial coverage (Milestone 8) |
+- at least 50% of the stratum's cutoffs have valid truth;
+- the mean cutoff SOG of evaluable cutoffs is no more than 25% below the stratum's mean;
+- there are at least 100 evaluable cutoffs from at least 20 vessels.
 
-The pooled rule passes every horizon because tugs dominate it. For the classes where long horizons are interesting (cargo, tanker), coverage at 12–24 h is 76–85%, which still clears 50%. Pleasure craft fail at ≥ 6 h (47%) and fishing is marginal. Recommendation: apply the rule **per vessel-class stratum**. A horizon is first-class for a stratum only if it passes in that stratum.
+Underway strata, valid-truth share (run `coverage_audit_20261020T025237Z`):
+
+| Stratum | cutoffs | 1–3 h | 6 h | 12 h | 24 h |
+|---|---|---|---|---|---|
+| underway: ALL (pooled) | 41,985 | first | first 88.9% | first 86.0% | first 86.6% |
+| **underway: TRANSITING** | 6,744 | first | first 89.3% | first 82.4% | first 76.1% |
+| underway: cargo / tanker | 1,626 / 4,746 | first | first | first | first (77% / 76%) |
+| underway: tug_tow / service / passenger / other / fishing / unknown | | first | first | first | first |
+| underway: pleasure_sail | 1,476 | first (57–71%) | **experimental** (cov 47%) | **experimental** (38%) | **experimental** (39%) |
+| underway: hsc_wig | 70 | **experimental** (n) | experimental (n) | experimental (n) | experimental (n) |
+
+Stationary strata are first-class at every horizon. The exceptions are hsc_wig (too few cutoffs) and `unknown` at 12 h, which fails the speed check.
+
+**Decision:** 1, 2, 3, 6, 12 and 24 h are first-class for every stratum except pleasure_sail at ≥ 6 h and hsc_wig at all horizons. 48 and 72 h are not assessed and need data beyond terrestrial coverage (Milestone 8). Under the v0.2 pooled rule every horizon passed, and that result is superseded.
 
 ## 4. Baseline errors (underway; median km, 95% vessel-bootstrap CI)
 
@@ -69,6 +80,15 @@ The pooled rule passes every horizon because tugs dominate it. For the classes w
 | tanker | 17.7 / **4.4** | 46.0 / **23.9** | 62.8 / 61.8 (tie) |
 | tug_tow | **3.4** / 5.3 | **4.5** / 20.5 | **5.7** / 46.1 |
 | passenger | **3.6** / 10.1 | **4.0** / 40.7 | **4.1** / 92.4 |
+
+**Transiting stratum** (cargo, tanker and passenger ships underway for the last 30 minutes; 6,744 cutoffs from about 1,060 vessels). Median km:
+
+| Horizon | 1 h | 2 h | 3 h | 6 h | 12 h | 24 h |
+|---|---|---|---|---|---|---|
+| Persistence | 18.8 | 34.6 | 47.3 | 61.9 | 60.7 | 58.6 |
+| Constant velocity | **4.3** | **12.8** | **24.3** | 65.6 | 172 | 410 |
+
+CV wins clearly up to 3 h and ties at 6 h. Beyond that, persistence wins, because transiting ships reach port or anchorage and stop. A damped-velocity baseline (plan v0.3) should dominate both here, and retrieval has to beat it.
 
 Along-track and cross-track CV errors are about equal at every horizon (for example 24.9 / 24.5 km median at 6 h). CV errs on route about as much as on speed.
 
@@ -109,6 +129,8 @@ The paper's manifests were not obtained. These choices were declared in `scripts
 
 ## 6. Surprises and recommended plan changes
 
+_Items 1–3 were accepted on 2026-10-19 and are in build plan v0.3._
+
 1. **Persistence is the baseline to beat in port traffic.** §6.5's success condition ("outperform CV *and* persistence") is much harder against persistence than CV beyond 1 h. Proposal: add a **damped-velocity** baseline (speed decays toward 0 with a time constant fit on training data) to Milestone 2. It is cheap and likely beats both baselines on the pooled set, so it raises the bar for retrieval honestly.
 2. **Apply the §6.4 admission rule per stratum** (vessel class × motion state). The pooled rule is satisfied by tugs alone.
 3. **Add a "transiting" stratum.** Use cargo, tanker and passenger-ship cutoffs whose last 30 min are underway, and report it as a headline stratum alongside the pooled numbers. This is where route retrieval should matter, and pooled metrics hide it.
@@ -117,6 +139,6 @@ The paper's manifests were not obtained. These choices were declared in `scripts
 6. **Source data quirks:** NOAA daily CSVs contain malformed lines (360 on 06-10, 4 on 06-13). `fetch_noaa.py` now skips and counts them per day (filter v2). The first 28 days were fetched with v1, which would have failed on any malformed line, so they had none.
 7. The truth region's northern edge (31°N) includes the lower Mississippi up to Baton Rouge. This is harmless for Houston cutoffs but should be noted if the cutoff region ever moves east.
 
-## 7. Smallest next slice (Milestone 1)
+## 7. Next
 
-Add Pydantic models for the canonical observation and the split manifest. Generate a **P-unseen** manifest (chronological + MMSI-hash vessel-disjoint) and a **P-paper** manifest from the calibration reconstruction above. Add tests that prove the manifests are disjoint on their stated axes.
+Milestone 1 started on 2026-10-19 with schemas and split manifests. See `implementation-log.md`.

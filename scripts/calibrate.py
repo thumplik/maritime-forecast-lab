@@ -18,7 +18,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 from datetime import UTC, datetime
 
@@ -28,6 +27,7 @@ import numpy as np
 from maritime_forecast.config import PROCESSED_DIR, RUNS_DIR, region
 from maritime_forecast.data.segment import SegmentConfig, segmented_sql
 from maritime_forecast.evaluation.bootstrap import vessel_bootstrap_ci
+from maritime_forecast.evaluation.splits import P_PAPER_ASSIGNMENT
 from maritime_forecast.evaluation.windows import grid_sql, make_windows
 from maritime_forecast.geo.geodesic import distance_m
 from maritime_forecast.models.baselines import constant_velocity, velocity_from_last_two
@@ -49,8 +49,8 @@ STATIONARY_SOG_KN = 0.5
 
 
 def is_test_vessel(mmsi: str) -> bool:
-    """Stable vessel-disjoint assignment by MMSI hash."""
-    return int(hashlib.sha256(mmsi.encode()).hexdigest(), 16) % 1000 < TEST_FRACTION * 1000
+    """Vessel-disjoint assignment, defined once in the P-paper manifest rule."""
+    return P_PAPER_ASSIGNMENT.assign(mmsi) == "test"
 
 
 def main() -> None:

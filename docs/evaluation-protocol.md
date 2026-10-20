@@ -14,12 +14,18 @@ Normative source: build plan §6. This file records the concrete, implemented ch
 
 ## Protocols (§6.2)
 
-| Id | Split | Status |
+Each protocol is a manifest: a rule in `maritime_forecast/evaluation/splits.py` (model: `schemas/manifest.py`), materialized per dataset by `scripts/make_splits.py` into `data/manifests/splits/<protocol>__<dataset>.json`, which is committed.
+
+| Id | Rule | June 2023 (`noaa_us_gulf_2023-06`) |
 |---|---|---|
-| P-paper | Reconstruction of arXiv 2609.25827 Houston split (vessel-disjoint) | Milestone 0 — calibration only |
-| P-known | Chronological; own earlier voyages allowed | Milestone 1 |
-| P-unseen | Chronological + vessel-disjoint by MMSI hash | Milestone 1 |
-| P-region | Geographic cut | Milestone 1 |
+| P-known | Chronological: train [06-01, 06-17), calibration [06-18, 06-22), test [06-23, 07-01). The 24 h purge gaps between periods are unused | Vessels may appear in every split |
+| P-unseen | Same periods **and** vessels assigned by `sha256("p-unseen-v1" + MMSI) mod 1000`: train [0, 700), calibration [700, 800), test [800, 1000). A sample counts only where the time split and the vessel split agree | 1,711 / 164 / 430 vessels seen in the cutoff region for train / calibration / test |
+| P-paper | Vessel-only: `sha256(MMSI) mod 1000` < 200 → test. Preprocessing parameters are recorded in the manifest. Calibration only | 666 test vessels seen in the cutoff region |
+| P-region | Not yet defined | — |
+
+Membership: `manifest.split_of(vessel, t)` for a point and `manifest.window_split(vessel, start, end)` for a context-plus-label window. A window whose two ends fall in different splits, or in a purge gap, is excluded.
+
+The P-unseen calibration split is small: 4 days and 164 vessels in the cutoff region. Per-stratum conformal radii (Milestone 4) may need pooled strata or a longer period.
 
 ## Metrics (§6.5)
 

@@ -6,7 +6,7 @@ PY  := $(UV) run --project backend python
 START ?= 2023-06-01
 END   ?= 2023-06-30
 
-.PHONY: help setup test lint format fetch fetch-list canonical audit calibrate notebook
+.PHONY: help setup test lint format fetch fetch-list canonical audit calibrate splits notebook
 
 help:  ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -38,6 +38,9 @@ audit:  ## Milestone 0 coverage audit
 calibrate:  ## §6.6 golden-number check (needs local data)
 	$(PY) scripts/calibrate.py
 	cd backend && $(UV) run pytest -m golden
+
+splits:  ## Materialize split manifests into data/manifests/splits/
+	$(PY) scripts/make_splits.py
 
 notebook:  ## Convert the spike notebook to .ipynb and open Jupyter
 	cd backend && $(UV) run jupytext --to ipynb ../research/notebooks/m0_spike.py && $(UV) run jupyter lab ../research/notebooks
