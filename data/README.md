@@ -6,6 +6,7 @@ Everything here except this file, `.gitkeep`s and `manifests/*.json` is gitignor
 |---|---|---|
 | `raw/noaa_<region>/date=YYYY-MM-DD/part-0.parquet` | NOAA daily points, bbox-filtered, original columns typed | `scripts/fetch_noaa.py` |
 | `processed/canonical/<dataset_id>/date=.../*.parquet` | Canonical §4 observations | `scripts/canonicalize.py` |
+| `processed/segmented/<dataset_id>/bucket-NN.parquet` | Segmented observations + motion features (16 vessel-hash buckets) | `scripts/coverage_audit.py` |
 | `manifests/*.json` | Dataset manifests: source URLs, SHA-256, filter, row counts (committed) | fetch / canonicalize |
 | `runs/<run_id>/` | Audit and benchmark outputs with JSON sidecars | audit / benchmark scripts |
 
