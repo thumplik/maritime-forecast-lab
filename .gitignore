@@ -42,3 +42,5 @@ node_modules/
 
 # Claude Code local-only settings
 .claude/settings.local.json
+research/notebooks/*.ipynb
+data/processed/.duckdb_tmp/

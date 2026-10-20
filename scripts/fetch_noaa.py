@@ -36,7 +36,7 @@ import httpx
 from maritime_forecast.config import MANIFEST_DIR, RAW_DIR, BBox, default_region, region
 
 BASE_URL = "https://coast.noaa.gov/htdata/CMSP/AISDataHandler/{year}/AIS_{year}_{mm}_{dd}.zip"
-FILTER_VERSION = "noaa-bbox-v1"
+FILTER_VERSION = "noaa-bbox-v2"  # v2: skip+count malformed CSV lines
 
 # NOAA CSV columns, typed. TRY_CAST so a malformed value becomes NULL instead of aborting.
 SELECT_TYPED = """
@@ -112,8 +112,15 @@ def process_day(d: date, bbox: BBox, out_root: Path, keep_zip: bool) -> dict:
         tmp_out = part_dir / "part-0.parquet.tmp"
         con = duckdb.connect()
         con.execute("SET threads TO 2")
-        src = f"read_csv('{csv_path}', all_varchar=true, header=true)"
-        rows_in = con.execute(f"SELECT count(*) FROM {src}").fetchone()[0]
+        # Malformed lines (e.g. stray quotes in vessel names) are skipped and counted, never
+        # silently: the count goes into the manifest.
+        con.execute(
+            f"CREATE TABLE src AS SELECT * FROM read_csv('{csv_path}', all_varchar=true, "
+            "header=true, ignore_errors=true, store_rejects=true)"
+        )
+        src = "src"
+        rows_in = con.execute("SELECT count(*) FROM src").fetchone()[0]
+        rows_rejected = con.execute("SELECT count(*) FROM reject_errors").fetchone()[0]
         con.execute(
             f"""
             COPY (
@@ -136,6 +143,7 @@ def process_day(d: date, bbox: BBox, out_root: Path, keep_zip: bool) -> dict:
         "zip_bytes": nbytes,
         "zip_sha256": sha,
         "rows_in": int(rows_in),
+        "rows_rejected_malformed": int(rows_rejected),
         "rows_kept": int(rows_kept),
         "output": str(out_file.relative_to(RAW_DIR.parent.parent)),
         "seconds": round(time.time() - t0, 1),
@@ -149,7 +157,9 @@ def main() -> None:
     ap.add_argument("--end", type=date.fromisoformat, default=date(2023, 6, 30))
     ap.add_argument("--region", default=None, help="region name in config/regions.yaml")
     ap.add_argument("--workers", type=int, default=3)
-    ap.add_argument("--keep-zip", action="store_true", help="also keep the national zip in data/raw")
+    ap.add_argument(
+        "--keep-zip", action="store_true", help="also keep the national zip in data/raw"
+    )
     ap.add_argument("--list-only", action="store_true", help="print the URLs and exit")
     args = ap.parse_args()
 
