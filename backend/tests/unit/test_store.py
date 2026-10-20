@@ -34,7 +34,7 @@ def store(tmp_path):
 def test_partitions_by_utc_day(store):
     assert store.datasets() == ["ds"]
     assert store.partitions("ds") == [date(2023, 6, 1), date(2023, 6, 2)]
-    assert store.scan("ds").pl().height == 72
+    assert store.scan("ds").height == 72
 
 
 def test_files_prunes_by_date(store):
@@ -48,10 +48,10 @@ def test_files_prunes_by_date(store):
 
 def test_scan_half_open_window_bbox_vessels_columns(store):
     a, b = T0 + timedelta(minutes=30), T0 + timedelta(minutes=60)
-    df = store.scan("ds", a, b, vessel_ids=["367000001"], columns=["vessel_id", "observed_at"]).pl()
+    df = store.scan("ds", a, b, vessel_ids=["367000001"], columns=["vessel_id", "observed_at"])
     assert df.columns == ["vessel_id", "observed_at"]
     assert df["observed_at"].to_list() == [a, a + timedelta(minutes=10), a + timedelta(minutes=20)]
-    only_east = store.scan("ds", bbox=BBox("e", 28, 31, -94.5, -93.5)).pl()
+    only_east = store.scan("ds", bbox=BBox("e", 28, 31, -94.5, -93.5))
     assert set(only_east["vessel_id"]) == {"367000001"}
 
 
@@ -67,16 +67,18 @@ def test_history_is_causal(store):
 
 def test_track_and_vessels(store):
     assert store.track("ds", "367000002").height == 36
-    v = store.vessels("ds", limit=1, offset=1)
-    assert v["vessel_id"].to_list() == ["367000002"] and v["reports"][0] == 36
+    v, total = store.vessels("ds", limit=1, offset=1)
+    assert v["vessel_id"].to_list() == ["367000002"] and v["reports"][0] == 36 and total == 2
+    empty, total = store.vessels("ds", limit=5, offset=10)
+    assert empty.height == 0 and total == 2
 
 
 def test_write_replaces_only_days_written(store):
     store.write("ds", _rows_sql(n=3, vessels=("367000009",)))  # 22:00-22:20 on 06-01 only
-    assert store.scan("ds", end=datetime(2023, 6, 2, tzinfo=UTC)).pl()[
+    assert store.scan("ds", end=datetime(2023, 6, 2, tzinfo=UTC))[
         "vessel_id"
     ].unique().to_list() == ["367000009"]
-    assert store.scan("ds", start=datetime(2023, 6, 2, tzinfo=UTC)).pl().height == 48
+    assert store.scan("ds", start=datetime(2023, 6, 2, tzinfo=UTC)).height == 48
 
 
 @pytest.mark.parametrize("bad", ["../x", "a/b", "", ".hidden", "x" * 200])
@@ -95,7 +97,7 @@ def test_rejects_unsafe_columns_and_naive_times(store):
 
 
 def test_vessel_ids_are_bound_not_interpolated(store):
-    assert store.scan("ds", vessel_ids=["' OR 1=1 --"]).pl().height == 0
+    assert store.scan("ds", vessel_ids=["' OR 1=1 --"]).height == 0
 
 
 def test_unknown_dataset(store):

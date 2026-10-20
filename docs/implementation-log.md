@@ -135,3 +135,42 @@ cd backend && uv run pytest   # 88 passed
 **Blockers / open questions:** That DMA timestamps are UTC is documented by DMA but cannot be proven by the internal checks.
 
 **Next step:** Milestone 1 slice 3: FastAPI `GET /health`, `/datasets`, `/vessels`, `/vessels/{id}/track` over `ParquetStore` and dataset manifests.
+
+## 2026-10-20 — Milestone 1 slice 3: read API
+
+**Milestone:** 1
+**Done:**
+- `maritime_forecast.api`: FastAPI app factory (`create_app(ApiSettings)`), typed error envelope (`errors.py`), and response models (`models.py`, the OpenAPI source for the future TypeScript client). Endpoints: `GET /health`, `/datasets`, `/vessels`, `/vessels/{id}/track`. Limits and conventions are in `docs/architecture.md` under "Read API". `make api`.
+- `data.segment.gap_segments` and `segments_and_gaps`: pure display segmentation. A gap of more than 30 min starts a new segment, and the track response lists every gap.
+- Store fixes found while doing this:
+  - **Performance:** a DuckDB relation built with bound params and then `.aggregate()`d re-materializes. The month-wide vessel list took 869 s; as one bound statement it takes 0.37 s. `scan()` now returns a Polars DataFrame, and `vessels()` returns `(page, total)`.
+  - **Timezone bug:** DuckDB cursors do not inherit `SET TimeZone`, so times came back in local time (−04:00). `ParquetStore` now sets UTC on every connection. Audit and calibration runs use `connect()` directly, so earlier results are unaffected.
+  - `store.write` ignores an incoming `date` column (hive auto-detection).
+- Tests: 111. New: 24 API tests covering datasets/admission, paging, bbox, half-open windows, offset conversion, gap segments, every error code, input not echoed, OpenAPI paths; plus 4 display-segmentation tests.
+
+**Commands run:**
+```bash
+cd backend && uv add fastapi uvicorn && uv run pytest     # 111 passed
+python -m uvicorn maritime_forecast.api.app:app --port 8765   # smoke test with curl against NOAA + DMA
+```
+
+**Results (real data):**
+
+| Request | Time |
+|---|---|
+| `/datasets` (both datasets; NOAA carries admission from `coverage_audit_20261020T123532Z`) | 14 ms |
+| Month-wide Houston bbox vessel list (3,171) | 2.0 s |
+| Whole-Gulf page of 1,000 | 0.30 s |
+| Month track of vessel 367138690 (32,488 points, 18 segments) | 0.21 s |
+| DMA day track | 16 ms |
+
+A 404 on 2023-06-10 for that vessel was confirmed against raw counts: it has no reports on 06-10 or 06-11.
+
+**Blockers / open questions:** none.
+
+**Next step:** Milestone 1 slice 4:
+
+- Generate TypeScript types from the OpenAPI schema.
+- Build a minimal Next.js + MapLibre frontend that shows a real vessel's track with gaps visibly distinct.
+- Add `make dev` to start both services.
+- Add the CI smoke workflow.

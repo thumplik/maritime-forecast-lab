@@ -67,7 +67,7 @@ def test_generic_csv_rules_and_accounting(env):
     assert report.duplicates_removed == 2 and report.outside_region == 1 and report.rows_out == 2
     # 18:30 Chicago (CDT, -5) is 23:30 UTC, still 2023-06-01
     assert written == {"2023-06-01": 2}
-    a1, b = store.scan("syn").pl().to_dicts()
+    a1, b = store.scan("syn").to_dicts()
     assert a1["observed_at"] == datetime(2023, 6, 1, 12, 0, tzinfo=UTC)  # 07:00 CDT
     assert a1["sog_knots"] == pytest.approx(10.0, rel=1e-6)  # 5.144 m/s
     assert a1["transceiver_class"] == "A" and a1["vessel_class"] == "cargo"
@@ -83,7 +83,7 @@ def test_generic_csv_rules_and_accounting(env):
 def test_explicit_offset_honoured_over_declared_timezone(env):
     store, f, m = env
     ingest([f], m, "syn", store=store, write_manifest=False)
-    t = store.scan("syn", vessel_ids=["367000001"]).pl()["observed_at"].to_list()
+    t = store.scan("syn", vessel_ids=["367000001"])["observed_at"].to_list()
     # "07:00 Chicago" and "12:00Z" are the same instant: deduplicated to one row
     assert t == [datetime(2023, 6, 1, 12, 0, tzinfo=UTC)]
 
@@ -103,7 +103,7 @@ def test_parquet_epoch_ms(tmp_path, monkeypatch):
     )  # fmt: skip
     store = ParquetStore(tmp_path / "c")
     _, written = ingest([p], m, "pq", store=store)
-    row = store.scan("pq").pl().row(0, named=True)
+    row = store.scan("pq").row(0, named=True)
     assert written == {"2023-06-01": 1}
     assert row["observed_at"] == datetime(2023, 6, 1, tzinfo=UTC) and row["sog_knots"] == 12.0
     assert row["static_fields_provenance"] == "unknown" and row["vessel_class"] == "unknown"
@@ -126,11 +126,11 @@ def test_unparseable_value_is_dropped_and_counted(env):
 def test_expect_days_refuses_spill_without_touching_existing(env):
     store, f, m = env
     ingest([f], m, "syn", store=store, write_manifest=False)
-    before = store.scan("syn").pl()
+    before = store.scan("syn")
     f.write_text(CSV.replace("2023-06-01 18:30:00", "2023-06-02 18:30:00"))
     with pytest.raises(ValueError, match="unexpected days"):
         ingest([f], m, "syn", store=store, expect_days={"2023-06-01"}, write_manifest=False)
-    assert store.scan("syn").pl().equals(before)
+    assert store.scan("syn").equals(before)
     assert store.partitions("syn") == [datetime(2023, 6, 1).date()]
 
 
@@ -220,7 +220,7 @@ def test_dma_preset_on_synthetic_dma_layout(tmp_path, monkeypatch):
     report, written = ingest([f], load_mapping("dma_denmark"), "dma", store=store)
     assert report.dropped == {"bad_coordinates": 1, "excluded_by_mapping": 2}
     assert report.rows_out == 2 and written == {"2023-06-01": 2}
-    a, b = store.scan("dma").pl().to_dicts()
+    a, b = store.scan("dma").to_dicts()
     assert a["observed_at"] == datetime(2023, 6, 1, 13, 5, tzinfo=UTC)
     assert a["eta"] == datetime(2023, 6, 3, 11, 0, tzinfo=UTC)
     assert a["vessel_class"] == "cargo" and a["transceiver_class"] == "A"

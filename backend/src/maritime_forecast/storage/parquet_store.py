@@ -48,6 +48,9 @@ class ParquetStore:
     def __init__(self, root: Path = CANONICAL_ROOT, con: duckdb.DuckDBPyConnection | None = None):
         self.root = Path(root)
         self.con = con or connect()
+        # Session settings are per connection (cursors do not inherit them). Times must come
+        # back in UTC and day partitions are UTC days.
+        self.con.execute("SET TimeZone='UTC'")
 
     # -- catalogue -----------------------------------------------------------------------
     def datasets(self) -> list[str]:
@@ -81,17 +84,20 @@ class ParquetStore:
         return [self.root / dataset_id / f"date={d.isoformat()}" / "part-0.parquet" for d in days]
 
     # -- reads ---------------------------------------------------------------------------
-    def scan(
+    def _scan_sql(
         self,
         dataset_id: str,
-        start: datetime | None = None,
-        end: datetime | None = None,
-        bbox: BBox | None = None,
-        vessel_ids: Sequence[str] | None = None,
-        columns: Sequence[str] | None = None,
-        order: bool = True,
-    ) -> duckdb.DuckDBPyRelation:
-        """Observations with start <= observed_at < end, optionally in bbox / for vessels."""
+        start: datetime | None,
+        end: datetime | None,
+        bbox: BBox | None,
+        vessel_ids: Sequence[str] | None,
+        columns: Sequence[str] | None,
+    ) -> tuple[str, list]:
+        """(SQL, params) selecting observations; always executed as one bound statement.
+
+        Do not wrap the result in a DuckDB relation and chain operations on it: with bound
+        parameters that path re-materializes and was measured ~200x slower.
+        """
         files = self.files(dataset_id, start, end)
         if not files:
             raise LookupError(f"no partitions of {dataset_id!r} overlap the requested window")
@@ -111,16 +117,30 @@ class ParquetStore:
             params.append(list(vessel_ids))
         sql = (
             f"SELECT {cols} FROM read_parquet(?, hive_partitioning=false) "
-            f"WHERE {' AND '.join(where)}" + (" ORDER BY vessel_id, observed_at" if order else "")
+            f"WHERE {' AND '.join(where)}"
         )
-        return self.con.sql(sql, params=[[str(f) for f in files], *params])
+        return sql, [[str(f) for f in files], *params]
+
+    def scan(
+        self,
+        dataset_id: str,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        bbox: BBox | None = None,
+        vessel_ids: Sequence[str] | None = None,
+        columns: Sequence[str] | None = None,
+    ) -> pl.DataFrame:
+        """Observations with start <= observed_at < end, optionally in bbox / for vessels,
+        ordered by vessel_id, observed_at."""
+        sql, params = self._scan_sql(dataset_id, start, end, bbox, vessel_ids, columns)
+        return self.con.execute(f"{sql} ORDER BY vessel_id, observed_at", params).pl()
 
     def track(
         self, dataset_id: str, vessel_id: str, start: datetime | None = None,
         end: datetime | None = None,
     ) -> pl.DataFrame:  # fmt: skip
         """One vessel's observations in [start, end), time-ordered."""
-        return self.scan(dataset_id, start, end, vessel_ids=[vessel_id]).pl()
+        return self.scan(dataset_id, start, end, vessel_ids=[vessel_id])
 
     def history(
         self, dataset_id: str, vessel_id: str, as_of: datetime, hours: float
@@ -133,7 +153,7 @@ class ParquetStore:
         df = self.scan(
             dataset_id, as_of - timedelta(hours=hours), as_of + timedelta(microseconds=1),
             vessel_ids=[vessel_id],
-        ).pl()  # fmt: skip
+        )  # fmt: skip
         return df.filter(pl.col("observed_at") > as_of - timedelta(hours=hours))
 
     def vessels(
@@ -144,21 +164,29 @@ class ParquetStore:
         bbox: BBox | None = None,
         limit: int = 100,
         offset: int = 0,
-    ) -> pl.DataFrame:
-        """Per-vessel summary (reports, first/last seen, class), paginated by vessel_id."""
+    ) -> tuple[pl.DataFrame, int]:
+        """Per-vessel summary (reports, first/last seen, class) for one page, plus the total
+        number of matching vessels. Ordered by vessel_id."""
         if not (1 <= limit <= 10_000) or offset < 0:
             raise ValueError("limit must be 1..10000 and offset >= 0")
-        rel = self.scan(dataset_id, start, end, bbox, order=False)
-        return (
-            rel.aggregate(
-                "vessel_id, count(*) AS reports, min(observed_at) AS first_seen, "
-                "max(observed_at) AS last_seen, mode(vessel_class) AS vessel_class",
-                "vessel_id",
-            )
-            .order("vessel_id")
-            .limit(limit, offset)
-            .pl()
-        )
+        sql, params = self._scan_sql(
+            dataset_id, start, end, bbox, None,
+            ["vessel_id", "observed_at", "vessel_class", "latitude_deg", "longitude_deg"],
+        )  # fmt: skip
+        page = self.con.execute(
+            f"""WITH v AS (
+                    SELECT vessel_id, count(*) AS reports, min(observed_at) AS first_seen,
+                           max(observed_at) AS last_seen, mode(vessel_class) AS vessel_class
+                    FROM ({sql}) GROUP BY vessel_id
+                )
+                SELECT *, count(*) OVER () AS total FROM v
+                ORDER BY vessel_id LIMIT {int(limit)} OFFSET {int(offset)}""",
+            params,
+        ).pl()
+        if page.height:
+            return page.drop("total"), int(page["total"][0])
+        total = self.con.execute(f"SELECT count(DISTINCT vessel_id) FROM ({sql})", params)
+        return page.drop("total"), int(total.fetchone()[0])
 
     # -- writes --------------------------------------------------------------------------
     def write(
@@ -174,7 +202,10 @@ class ParquetStore:
         staging.mkdir(parents=True)
         try:
             self.con.execute(
-                f"COPY (SELECT *, strftime(observed_at, '%Y-%m-%d') AS date FROM ({relation_sql})) "
+                # Any incoming `date` column (e.g. hive-detected from a source path) is replaced
+                # by the UTC day of observed_at, which is the partition key.
+                "COPY (SELECT COLUMNS(c -> c <> 'date'), strftime(observed_at, '%Y-%m-%d') AS date "
+                f"FROM ({relation_sql})) "
                 f"TO '{staging}' (FORMAT parquet, COMPRESSION zstd, PARTITION_BY (date), "
                 "FILENAME_PATTERN 'part-{i}', OVERWRITE_OR_IGNORE)"
             )

@@ -6,7 +6,7 @@ PY  := $(UV) run --project backend python
 START ?= 2023-06-01
 END   ?= 2023-06-30
 
-.PHONY: help setup test lint format fetch fetch-list canonical audit calibrate splits import fetch-dma notebook
+.PHONY: help setup test lint format fetch fetch-list canonical audit calibrate splits import fetch-dma api notebook
 
 help:  ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -47,6 +47,9 @@ import:  ## Import other-provider AIS files: make import MAPPING=dma_denmark DAT
 
 splits:  ## Materialize split manifests into data/manifests/splits/
 	$(PY) scripts/make_splits.py
+
+api:  ## Run the read API on http://localhost:8000 (docs at /docs)
+	cd backend && $(UV) run uvicorn maritime_forecast.api.app:app --reload --port 8000
 
 notebook:  ## Convert the spike notebook to .ipynb and open Jupyter
 	cd backend && $(UV) run jupytext --to ipynb ../research/notebooks/m0_spike.py && $(UV) run jupyter lab ../research/notebooks

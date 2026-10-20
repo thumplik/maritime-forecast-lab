@@ -1,0 +1,194 @@
+"""Read API on a SYNTHETIC store (not real AIS)."""
+
+import json
+from datetime import UTC, datetime, timedelta
+
+import pytest
+from fastapi.testclient import TestClient
+
+import maritime_forecast.data.ingest as ingest_mod
+from maritime_forecast.api.app import ApiSettings, create_app, parse_bbox
+from maritime_forecast.api.errors import ApiError
+from maritime_forecast.data.ingest import ingest
+from maritime_forecast.data.mapping import load_mapping
+from maritime_forecast.storage.parquet_store import ParquetStore
+
+T0 = datetime(2023, 6, 1, tzinfo=UTC)
+
+
+def _csv_rows():
+    rows = [
+        "MMSI,BaseDateTime,LAT,LON,SOG,COG,Heading,VesselType,Status,Length,Width,Draft,TransceiverClass"
+    ]
+    # vessel A: every 5 min 00:00-02:00, a 2 h gap, then 04:00-05:00 (two segments)
+    for k in list(range(0, 121, 5)) + list(range(240, 301, 5)):
+        t = T0 + timedelta(minutes=k)
+        rows.append(
+            f"367000001,{t:%Y-%m-%dT%H:%M:%S},{29.0 + k * 1e-3},-94.5,10,0,511,70,0,200,30,9,A"
+        )
+    # vessel B: on 06-02, far east (outside the Houston bbox)
+    for k in range(0, 60, 10):
+        t = T0 + timedelta(days=1, minutes=k)
+        rows.append(f"367000002,{t:%Y-%m-%dT%H:%M:%S},27.0,-85.0,5,90,90,52,0,30,10,,A")
+    return "\n".join(rows) + "\n"
+
+
+@pytest.fixture
+def client(tmp_path, monkeypatch):
+    manifests = tmp_path / "manifests"
+    monkeypatch.setattr(ingest_mod, "MANIFEST_DIR", manifests)
+    f = tmp_path / "noaa.csv"
+    f.write_text(_csv_rows())
+    store = ParquetStore(tmp_path / "canonical")
+    ingest([f], load_mapping("noaa_marinecadastre"), "syn", store=store)
+    # a dataset without a manifest
+    store.write("bare", "SELECT * FROM read_parquet('" + str(store.files("syn")[0]) + "')")
+    runs = tmp_path / "runs" / "coverage_audit_20990101T000000Z"
+    runs.mkdir(parents=True)
+    (runs / "summary.json").write_text(json.dumps({
+        "dataset_id": "syn", "admission_config": {"min_fraction": 0.5},
+        "admission": [{"stratum": "underway:cargo", "horizon_h": 1, "status": "first_class"},
+                      {"stratum": "underway:cargo", "horizon_h": 24, "status": "experimental"}],
+    }))  # fmt: skip
+    settings = ApiSettings(
+        store_root=tmp_path / "canonical",
+        manifest_dir=manifests,
+        runs_dir=tmp_path / "runs",
+        max_window_days=3,
+        max_track_points=1000,
+    )
+    return TestClient(create_app(settings))
+
+
+def err(r, status, code):
+    assert r.status_code == status, r.text
+    body = r.json()
+    assert set(body) == {"error"} and body["error"]["code"] == code
+    return body["error"]
+
+
+def test_health(client):
+    r = client.get("/health").json()
+    assert r["status"] == "ok" and r["datasets"] == 2 and r["data_root_exists"]
+
+
+def test_datasets(client):
+    ds = {d["dataset_id"]: d for d in client.get("/datasets").json()["datasets"]}
+    syn = ds["syn"]
+    assert syn["has_manifest"] and syn["mapping_id"] == "noaa_marinecadastre@v1"
+    assert syn["static_fields_provenance"] == "backfilled"
+    assert (syn["first_day"], syn["last_day"], syn["days"], syn["rows"]) == (
+        "2023-06-01",
+        "2023-06-02",
+        2,
+        44,
+    )
+    assert syn["ingest"]["rows_in"] == 44
+    assert syn["admission"]["strata"]["underway:cargo"] == {
+        "1": "first_class",
+        "24": "experimental",
+    }
+    assert ds["bare"]["has_manifest"] is False and ds["bare"]["admission"] is None
+
+
+def test_vessels_pagination_bbox_window(client):
+    r = client.get("/vessels", params={"dataset_id": "syn", "limit": 1}).json()
+    assert r["total"] == 2 and [v["vessel_id"] for v in r["vessels"]] == ["367000001"]
+    assert r["from"] == "2023-06-01T00:00:00Z" and r["to"] == "2023-06-03T00:00:00Z"
+    r = client.get("/vessels", params={"dataset_id": "syn", "offset": 1}).json()
+    assert [v["vessel_id"] for v in r["vessels"]] == ["367000002"]
+    r = client.get("/vessels", params={"dataset_id": "syn", "bbox": "-96,28,-93.3,30.5"}).json()
+    assert r["total"] == 1 and r["bbox"] == [-96.0, 28.0, -93.3, 30.5]
+    r = client.get("/vessels", params={"dataset_id": "syn", "from": "2023-06-02T00:00:00Z"}).json()
+    assert [v["vessel_id"] for v in r["vessels"]] == ["367000002"]
+    # a non-UTC offset is converted, not rejected
+    r = client.get(
+        "/vessels", params={"dataset_id": "syn", "from": "2023-06-01T19:00:00-05:00"}
+    ).json()
+    assert r["from"] == "2023-06-02T00:00:00Z"
+
+
+def test_track_segments_and_gaps(client):
+    r = client.get("/vessels/367000001/track", params={"dataset_id": "syn"}).json()
+    assert r["n_points"] == 25 + 13 and r["gap_minutes"] == 30
+    assert [s["n_points"] for s in r["segments"]] == [25, 13]
+    assert r["gaps"] == [
+        {"start": "2023-06-01T02:00:00Z", "end": "2023-06-01T04:00:00Z", "duration_s": 7200.0}
+    ]
+    p = r["points"]
+    assert len(p["observed_at"]) == len(p["latitude_deg"]) == len(p["segment"]) == 38
+    assert p["segment"][24:26] == [0, 1] and p["heading_deg"][0] is None  # 511 sentinel
+    assert any("back-filled" in w for w in r["warnings"])
+
+
+def test_track_window_is_half_open(client):
+    r = client.get(
+        "/vessels/367000001/track",
+        params={"dataset_id": "syn", "from": "2023-06-01T00:05:00Z", "to": "2023-06-01T00:15:00Z"},
+    ).json()
+    assert r["points"]["observed_at"] == ["2023-06-01T00:05:00Z", "2023-06-01T00:10:00Z"]
+
+
+@pytest.mark.parametrize(
+    "params,status,code",
+    [
+        ({"dataset_id": "nope"}, 404, "dataset_not_found"),
+        ({"dataset_id": "../etc"}, 422, "invalid_parameter"),
+        ({"dataset_id": "syn", "from": "2023-06-01T00:00:00"}, 422, "invalid_parameter"),  # naive
+        (
+            {"dataset_id": "syn", "from": "2023-06-02T00:00:00Z", "to": "2023-06-01T00:00:00Z"},
+            422,
+            "invalid_parameter",
+        ),
+        (
+            {"dataset_id": "syn", "from": "2023-06-01T00:00:00Z", "to": "2023-06-10T00:00:00Z"},
+            422,
+            "window_too_large",
+        ),
+        ({"dataset_id": "syn", "bbox": "1,2,3"}, 422, "invalid_parameter"),
+        ({"dataset_id": "syn", "bbox": "10,0,5,1"}, 422, "invalid_parameter"),
+        ({"dataset_id": "syn", "limit": 5000}, 422, "invalid_parameter"),
+        ({"dataset_id": "syn", "limit": 0}, 422, "invalid_parameter"),
+        ({}, 422, "invalid_parameter"),
+    ],
+)
+def test_vessels_errors(client, params, status, code):
+    err(client.get("/vessels", params=params), status, code)
+
+
+def test_track_errors(client, tmp_path):
+    err(
+        client.get("/vessels/999999999/track", params={"dataset_id": "syn"}),
+        404,
+        "vessel_not_found",
+    )
+    err(
+        client.get("/vessels/bad id!/track", params={"dataset_id": "syn"}), 422, "invalid_parameter"
+    )
+    e = err(
+        client.get("/vessels/" + "x" * 40 + "/track", params={"dataset_id": "syn"}),
+        422,
+        "invalid_parameter",
+    )
+    assert "x" * 40 not in json.dumps(e)  # input is never echoed back
+
+
+def test_too_many_points(tmp_path, client):
+    small = client.app.state.ctx.settings
+    small.max_track_points = 10
+    e = err(
+        client.get("/vessels/367000001/track", params={"dataset_id": "syn"}), 413, "too_many_points"
+    )
+    assert e["details"] == {"points": 38, "limit": 10}
+
+
+def test_parse_bbox_order():
+    b = parse_bbox("-96,28,-93.3,30.5")
+    assert (b.lon_min, b.lat_min, b.lon_max, b.lat_max) == (-96, 28, -93.3, 30.5)
+    with pytest.raises(ApiError):
+        parse_bbox("-96;28;-93;30")
+
+
+def test_openapi_lists_endpoints(client):
+    paths = client.get("/openapi.json").json()["paths"]
+    assert {"/health", "/datasets", "/vessels", "/vessels/{vessel_id}/track"} <= set(paths)

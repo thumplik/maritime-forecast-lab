@@ -5,7 +5,9 @@ Implemented as DuckDB SQL over canonical observations so it scales to a month of
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta
 
 SEGMENT_VERSION = "segment-v2"  # v2: trailing 30-min SOG mean/min
 
@@ -89,3 +91,41 @@ def segmented_sql(source: str, cfg: SegmentConfig = DEFAULT_SEGMENT_CONFIG) -> s
     WINDOW w30 AS (PARTITION BY vessel_id ORDER BY observed_at
                    RANGE BETWEEN INTERVAL 30 MINUTES PRECEDING AND CURRENT ROW)
     """
+
+
+def gap_segments(observed_at: Sequence[datetime], gap_minutes: float) -> list[int]:
+    """Segment number per report for one time-ordered track: a new segment starts after any
+    gap longer than `gap_minutes`. Pure-Python twin of segment_no in segmented_sql, used for
+    display (a renderer must never connect points across segments)."""
+    out: list[int] = []
+    seg, prev = 0, None
+    limit = timedelta(minutes=gap_minutes)
+    for t in observed_at:
+        if prev is not None:
+            if t < prev:
+                raise ValueError("observed_at must be sorted")
+            if t - prev > limit:
+                seg += 1
+        out.append(seg)
+        prev = t
+    return out
+
+
+def segments_and_gaps(
+    observed_at: Sequence[datetime], segment: Sequence[int]
+) -> tuple[list[dict], list[dict]]:
+    """Summaries of each segment and of each gap between consecutive segments."""
+    segments: list[dict] = []
+    gaps: list[dict] = []
+    start = 0
+    for i in range(1, len(observed_at) + 1):
+        if i == len(observed_at) or segment[i] != segment[i - 1]:
+            segments.append(
+                {"segment": segment[start], "start": observed_at[start],
+                 "end": observed_at[i - 1], "n_points": i - start}
+            )  # fmt: skip
+            if i < len(observed_at):
+                a, b = observed_at[i - 1], observed_at[i]
+                gaps.append({"start": a, "end": b, "duration_s": (b - a).total_seconds()})
+            start = i
+    return segments, gaps

@@ -31,6 +31,7 @@ make fetch      # ~10 GB download, filtered on the fly to ~1 GB of Gulf data
 make canonical  # canonical observations
 make audit      # coverage audit
 make calibrate  # evaluator vs. published numbers
+make api        # read API on http://localhost:8000/docs
 ```
 
 ## Roadmap

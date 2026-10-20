@@ -4,7 +4,7 @@ Research workbench for forecasting where an AIS-tracked vessel will be 1 h – 3
 
 ## Where we are
 
-**Current milestone: 1 — repository, contracts and data pipeline** (Milestone 0 done; build plan v0.3). No frontend, API or CI yet.
+**Current milestone: 1 — repository, contracts and data pipeline** (Milestone 0 done; build plan v0.3). Read API exists (`make api`); no frontend or CI yet.
 Status, blockers and next step live in [docs/implementation-log.md](docs/implementation-log.md) — read it first, append to it last.
 
 ## Commands
@@ -22,6 +22,7 @@ make calibrate    # §6.6 golden-number check against the calibration paper
 make splits       # materialize P-known / P-unseen / P-paper manifests
 make import MAPPING=<preset|yaml> DATASET=<id> FILES="..."   # any provider via config/sources/
 make fetch-dma DAYS="2023-06-01"   # Danish AIS; range-reads one day from monthly zips
+make api          # read API on :8000, OpenAPI docs at /docs
 ```
 
 Run one script directly: `uv run --project backend python scripts/<name>.py --help`.
@@ -47,6 +48,9 @@ Ad-hoc data questions: `uv run --project backend python -c "import duckdb; print
 - Keep functions pure and testable; scripts only do argument parsing and I/O.
 
 ## Gotchas
+
+- DuckDB: run store queries as ONE bound statement (`con.execute(sql, params)`). Chaining `.aggregate()`/`.order()` on a relation built with `params=` re-materializes and was ~2000x slower. Cursors don't inherit `SET TimeZone` — `ParquetStore` sets it per connection.
+- FastAPI: no `from __future__ import annotations` in `api/app.py` (routes use `Annotated` limits that reference `settings`).
 
 - NOAA files are ~340 MB zipped / ~1.5 GB CSV per day nationally. `fetch_noaa.py` streams, filters, and deletes them.
 - NOAA's one-minute down-sampling means the native report floor is ~60 s.
