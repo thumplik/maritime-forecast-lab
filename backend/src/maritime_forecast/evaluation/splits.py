@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from maritime_forecast.schemas.manifest import Period, SplitManifest, VesselAssignment
+from maritime_forecast.config import region
+from maritime_forecast.schemas.manifest import (
+    Box,
+    Period,
+    RegionSplit,
+    SplitManifest,
+    VesselAssignment,
+)
 
 
 def _day(d: int, month: int = 6) -> datetime:
@@ -74,4 +81,25 @@ def p_paper(dataset_id: str) -> SplitManifest:
     )
 
 
-BUILDERS = {"P-known": p_known, "P-unseen": p_unseen, "P-paper": p_paper}
+P_REGION_TEST = "houston_galveston"  # config/regions.yaml
+P_REGION_BUFFER_KM = 50.0
+
+
+def p_region(dataset_id: str) -> SplitManifest:
+    return SplitManifest(
+        protocol="P-region",
+        dataset_id=dataset_id,
+        description="Region-disjoint transfer: test inside Houston-Galveston, train beyond a "
+        f"{P_REGION_BUFFER_KM:g} km buffer elsewhere in the Gulf; combined with the chronological "
+        "periods. Membership is decided by context positions; train/calibration labels must also "
+        "stay on the train side. Expect models with "
+        "absolute-position inputs (TrAISformer) to fail here (build plan §5 N1).",
+        periods=JUNE_2023_PERIODS,
+        purge_hours=PURGE_HOURS,
+        region_split=RegionSplit(
+            test_region=Box(**region(P_REGION_TEST).as_dict()), buffer_km=P_REGION_BUFFER_KM
+        ),
+    )
+
+
+BUILDERS = {"P-known": p_known, "P-unseen": p_unseen, "P-region": p_region, "P-paper": p_paper}

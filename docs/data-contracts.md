@@ -93,3 +93,13 @@ The v1 mapping was wrong in three ways, all fixed in v2:
 3. It missed three ship-type labels.
 
 Not verified: that DMA timestamps are UTC. DMA documents them as UTC, and the speed check proves internal consistency but cannot detect a constant offset. Mapping coverage is checked for 2023 data only; check a later year's daily file before using one.
+
+## Motion state and stationary jitter
+
+- `segment.segmented_sql` labels each report's `motion_state` from the trailing 10-min mean SOG: `stationary` (< 0.5 kn), `slow`, `underway` (≥ 2 kn) or `unknown`. Stationary periods stay in the data as rows (build plan §4).
+- For model windows, `dejitter.dejitter_stationary` replaces positions inside each stationary run with the running mean of that run's positions so far. It is causal: perturbing later reports leaves earlier outputs unchanged, and a test checks this. Rows are marked `dejittered`. Longitudes are averaged as wrapped offsets, so a mooring on the antimeridian works.
+- The P-paper calibration instead drops reports below 0.5 kn before segmentation (paper-faithful, calibration only).
+
+## Synthetic fixture
+
+`backend/tests/fixtures/SYNTHETIC_tracks.csv` has six vessels with MMSIs `999000001`–`999000006`: moving, turning, stopping/moored, gaps, an antimeridian crossing, and dirty rows. It is for unit tests only (AGENTS.md rule 4). See `backend/tests/fixtures/README.md`.

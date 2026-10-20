@@ -27,6 +27,14 @@ def wrap_lon(lon: ArrayLike) -> Arr:
     return (np.asarray(lon, dtype=float) + 180.0) % 360.0 - 180.0
 
 
+def lon_lerp_sql(lon_a: str, lon_b: str, w: str) -> str:
+    """SQL for interpolating longitude a -> b by fraction w along the shorter way round,
+    wrapped to [-180, 180). Plain a + w*(b-a) goes the long way across the antimeridian."""
+    a, b, w = (f"CAST(({x}) AS DOUBLE)" for x in (lon_a, lon_b, w))
+    dlon = f"(({b} - {a} + 540) % 360 - 180)"
+    return f"(({a} + {w} * {dlon} + 540) % 360 - 180)"
+
+
 def wrap_bearing(deg: ArrayLike) -> Arr:
     return np.asarray(deg, dtype=float) % 360.0
 

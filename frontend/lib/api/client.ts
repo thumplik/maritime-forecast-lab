@@ -10,6 +10,11 @@ export type VesselSummary = S["VesselSummary"];
 export type VesselPage = S["VesselPage"];
 export type Track = S["Track"];
 export type ApiErrorBody = S["ErrorBody"];
+// Milestone 2 contracts (no endpoints yet)
+export type ForecastRequest = S["ForecastRequest"];
+export type ForecastResponse = S["ForecastResponse"];
+export type ForecastEvaluation = S["ForecastEvaluation"];
+export type BenchmarkRun = S["BenchmarkRun"];
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 

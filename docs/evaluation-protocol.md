@@ -21,9 +21,9 @@ Each protocol is a manifest: a rule in `maritime_forecast/evaluation/splits.py` 
 | P-known | Chronological: train [06-01, 06-17), calibration [06-18, 06-22), test [06-23, 07-01). The 24 h purge gaps between periods are unused | Vessels may appear in every split |
 | P-unseen | Same periods **and** vessels assigned by `sha256("p-unseen-v1" + MMSI) mod 1000`: train [0, 700), calibration [700, 800), test [800, 1000). A sample counts only where the time split and the vessel split agree | 1,711 / 164 / 430 vessels seen in the cutoff region for train / calibration / test |
 | P-paper | Vessel-only: `sha256(MMSI) mod 1000` < 200 → test. Preprocessing parameters are recorded in the manifest. Calibration only | 666 test vessels seen in the cutoff region |
-| P-region | Not yet defined | — |
+| P-region | Geographic cut plus the same periods. Test side = Houston–Galveston box (`config/regions.yaml`). A 50 km buffer band around it is excluded. Train side = beyond the buffer. The test side pairs only with the test period, the train side with the train/calibration periods. Membership is decided by the window's *context* positions (all on one side, none in the buffer). Test labels may go anywhere and are scored against truth in the truth region. Train/calibration labels must stay on the train side | test 2,066 vessels / 6.83 M reports; train 6,994 / 31.38 M; calibration 4,610 / 7.87 M |
 
-Membership: `manifest.split_of(vessel, t)` for a point and `manifest.window_split(vessel, start, end)` for a context-plus-label window. A window whose two ends fall in different splits, or in a purge gap, is excluded.
+Membership: `manifest.split_of(vessel, t[, lat, lon])` for a point and `manifest.window_split(vessel, start, end[, positions])` for a context-plus-label window. A window whose ends fall in different splits or in a purge gap is excluded. Under P-region the rule uses context positions: test membership is never decided by where a vessel goes after the cutoff, since that would select on the future. Train/calibration windows also require their label positions on the train side.
 
 The P-unseen calibration split is small: 4 days and 164 vessels in the cutoff region. Per-stratum conformal radii (Milestone 4) may need pooled strata or a longer period.
 

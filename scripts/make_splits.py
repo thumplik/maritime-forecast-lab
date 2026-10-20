@@ -23,25 +23,31 @@ from maritime_forecast.provenance import git_sha
 from maritime_forecast.schemas.manifest import SplitManifest
 
 
-def vessel_spans(dataset_id: str) -> pl.DataFrame:
-    """Per vessel and day: report count, and whether it appears in the Houston cutoff box."""
+def vessel_spans(dataset_id: str, side_sql: str = "NULL") -> pl.DataFrame:
+    """Per vessel, day (and P-region side): report count, and whether it appears in the
+    Houston cutoff box."""
     glob = PROCESSED_DIR / "canonical" / dataset_id / "*" / "*.parquet"
     box = region("houston_galveston")
     con = duckdb.connect()
     con.execute("SET TimeZone='UTC'")
     return con.execute(
-        f"""SELECT vessel_id, date_trunc('day', observed_at) AS day, count(*) AS reports,
-                   bool_or({box.sql_predicate()}) AS in_cutoff_region
-            FROM read_parquet('{glob}') GROUP BY ALL"""
+        f"""SELECT vessel_id, date_trunc('day', observed_at) AS day, {side_sql} AS side,
+                   count(*) AS reports, bool_or({box.sql_predicate()}) AS in_cutoff_region
+            FROM read_parquet('{glob}', hive_partitioning=false) GROUP BY ALL"""
     ).pl()
 
 
 def materialize(m: SplitManifest, spans: pl.DataFrame) -> SplitManifest:
+    if m.region_split is not None:
+        # Classifying by day start equals per-report classification only while every period
+        # boundary is at 00:00 UTC.
+        bounds = [t for p in m.periods or [] for t in (p.start, p.end)]
+        assert all(t.time() == datetime.min.time() for t in bounds), "periods must be day-aligned"
+        rule = lambda r: m.split_for_side(r["day"], r["side"])  # noqa: E731
+    else:
+        rule = lambda r: m.split_of(r["vessel_id"], r["day"] if m.periods else None)  # noqa: E731
     days = spans.with_columns(
-        split=pl.struct("vessel_id", "day").map_elements(
-            lambda r: m.split_of(r["vessel_id"], r["day"] if m.periods else None),
-            return_dtype=pl.Utf8,
-        )
+        split=pl.struct("vessel_id", "day", "side").map_elements(rule, return_dtype=pl.Utf8)
     )
     kept = days.filter(pl.col("split").is_not_null())
     vessels = {
@@ -79,7 +85,11 @@ def main() -> None:
     out_dir = MANIFEST_DIR / "splits"
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, build in BUILDERS.items():
-        m = materialize(build(args.dataset_id), spans)
+        m = build(args.dataset_id)
+        if m.region_split is not None:  # side depends on each report's position
+            m = materialize(m, vessel_spans(args.dataset_id, m.region_split.sql_case()))
+        else:
+            m = materialize(m, spans)
         # Validate the round trip before writing: what we write is what we will read.
         text = m.model_dump_json(indent=2)
         assert SplitManifest.model_validate_json(text) == m

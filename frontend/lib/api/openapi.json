@@ -37,6 +37,325 @@
         "title": "Admission",
         "type": "object"
       },
+      "BenchmarkRun": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_provenance": {
+            "description": "Source and mapping id, e.g. noaa_marinecadastre@v1",
+            "title": "Data Provenance",
+            "type": "string"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error"
+          },
+          "git_sha": {
+            "title": "Git Sha",
+            "type": "string"
+          },
+          "horizons_minutes": {
+            "items": {
+              "type": "number"
+            },
+            "minItems": 1,
+            "title": "Horizons Minutes",
+            "type": "array"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelRef"
+            },
+            "minItems": 1,
+            "title": "Models",
+            "type": "array"
+          },
+          "not_evaluable": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "description": "horizon minutes (as string) -> reason -> count",
+            "title": "Not Evaluable",
+            "type": "object"
+          },
+          "operational": {
+            "const": true,
+            "default": true,
+            "description": "Truth-selected numbers (best-of-N) are never part of a run record",
+            "title": "Operational",
+            "type": "boolean"
+          },
+          "protocol": {
+            "$ref": "#/components/schemas/ProtocolRef"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/CellResult"
+            },
+            "title": "Results",
+            "type": "array"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "sampler": {
+            "additionalProperties": true,
+            "description": "Sampler config incl. seed and version",
+            "title": "Sampler",
+            "type": "object"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "run_id",
+          "created_at",
+          "status",
+          "git_sha",
+          "dataset_id",
+          "data_provenance",
+          "protocol",
+          "sampler",
+          "models",
+          "horizons_minutes"
+        ],
+        "title": "BenchmarkRun",
+        "type": "object"
+      },
+      "CandidateTrajectory": {
+        "description": "One candidate path (e.g. a retrieved route). `similarity` is NOT a probability.",
+        "properties": {
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/TrackPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "reference_segment_ids": {
+            "description": "Provenance: historical segments this path used",
+            "items": {
+              "type": "string"
+            },
+            "title": "Reference Segment Ids",
+            "type": "array"
+          },
+          "similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Model-specific similarity; not a probability unless calibrated",
+            "title": "Similarity"
+          },
+          "trajectory_id": {
+            "title": "Trajectory Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trajectory_id",
+          "points"
+        ],
+        "title": "CandidateTrajectory",
+        "type": "object"
+      },
+      "CellResult": {
+        "description": "One model x horizon x stratum cell, scored on the paired evaluable set.",
+        "properties": {
+          "admission": {
+            "enum": [
+              "first_class",
+              "experimental"
+            ],
+            "title": "Admission",
+            "type": "string"
+          },
+          "failure_rate": {
+            "description": "n_failed / (n_paired + n_failed)",
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Failure Rate",
+            "type": "number"
+          },
+          "headline": {
+            "description": "Eligible for headline tables: admitted horizon and no model failures",
+            "title": "Headline",
+            "type": "boolean"
+          },
+          "horizon_minutes": {
+            "title": "Horizon Minutes",
+            "type": "number"
+          },
+          "mean_error_m": {
+            "$ref": "#/components/schemas/Stat"
+          },
+          "median_abs_along_track_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Median Abs Along Track M"
+          },
+          "median_abs_cross_track_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Median Abs Cross Track M"
+          },
+          "median_error_m": {
+            "$ref": "#/components/schemas/Stat"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "n_failed": {
+            "description": "Samples this model failed; excluded for every model in the cell",
+            "minimum": 0,
+            "title": "N Failed",
+            "type": "integer"
+          },
+          "n_paired": {
+            "title": "N Paired",
+            "type": "integer"
+          },
+          "n_vessels": {
+            "title": "N Vessels",
+            "type": "integer"
+          },
+          "p90_error_m": {
+            "title": "P90 Error M",
+            "type": "number"
+          },
+          "sample_set_sha256": {
+            "description": "SHA-256 of the sorted (cutoff_id, horizon) keys scored in this cell; identical for every model in the cell (paired scoring)",
+            "title": "Sample Set Sha256",
+            "type": "string"
+          },
+          "skill_vs_best_baseline": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "1 - error/best-of(persistence, CV, damped velocity) median error",
+            "title": "Skill Vs Best Baseline"
+          },
+          "stratum": {
+            "title": "Stratum",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_id",
+          "horizon_minutes",
+          "stratum",
+          "admission",
+          "n_paired",
+          "n_vessels",
+          "sample_set_sha256",
+          "n_failed",
+          "failure_rate",
+          "headline",
+          "median_error_m",
+          "mean_error_m",
+          "p90_error_m"
+        ],
+        "title": "CellResult",
+        "type": "object"
+      },
+      "ConformalRegion": {
+        "description": "Calibrated displacement radius per target time (build plan \u00a75 U1).",
+        "properties": {
+          "calibration_set_id": {
+            "title": "Calibration Set Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "conformal_radius",
+            "default": "conformal_radius",
+            "title": "Kind",
+            "type": "string"
+          },
+          "nominal_level": {
+            "exclusiveMaximum": 1,
+            "exclusiveMinimum": 0,
+            "title": "Nominal Level",
+            "type": "number"
+          },
+          "radii_m": {
+            "description": "One radius per target time, metres",
+            "items": {
+              "type": "number"
+            },
+            "title": "Radii M",
+            "type": "array"
+          }
+        },
+        "required": [
+          "nominal_level",
+          "calibration_set_id",
+          "radii_m"
+        ],
+        "title": "ConformalRegion",
+        "type": "object"
+      },
       "DatasetList": {
         "properties": {
           "datasets": {
@@ -221,6 +540,181 @@
         "title": "ErrorDetail",
         "type": "object"
       },
+      "ForecastEvaluation": {
+        "additionalProperties": false,
+        "description": "Truth and errors for one forecast; returned separately and only on request.",
+        "properties": {
+          "forecast_id": {
+            "title": "Forecast Id",
+            "type": "string"
+          },
+          "max_bracket_gap_minutes": {
+            "title": "Max Bracket Gap Minutes",
+            "type": "number"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelEvaluation"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "truth": {
+            "description": "Per target time; null if not evaluable",
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TrackPoint"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Truth",
+            "type": "array"
+          },
+          "truth_region": {
+            "title": "Truth Region",
+            "type": "string"
+          }
+        },
+        "required": [
+          "forecast_id",
+          "truth_region",
+          "max_bracket_gap_minutes",
+          "truth",
+          "models"
+        ],
+        "title": "ForecastEvaluation",
+        "type": "object"
+      },
+      "ForecastRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "description": "Cutoff: only reports at or before this are used",
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "dataset_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "history_hours": {
+            "default": 24,
+            "exclusiveMinimum": 0,
+            "maximum": 168,
+            "title": "History Hours",
+            "type": "number"
+          },
+          "horizon_hours": {
+            "default": 6,
+            "exclusiveMinimum": 0,
+            "maximum": 72,
+            "title": "Horizon Hours",
+            "type": "number"
+          },
+          "model_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "minItems": 1,
+            "title": "Model Ids",
+            "type": "array"
+          },
+          "show_ground_truth": {
+            "default": false,
+            "description": "Request a ForecastEvaluation as well; truth is never in this response",
+            "title": "Show Ground Truth",
+            "type": "boolean"
+          },
+          "step_minutes": {
+            "default": 10,
+            "maximum": 60,
+            "minimum": 1,
+            "title": "Step Minutes",
+            "type": "integer"
+          },
+          "vessel_id": {
+            "pattern": "^[A-Za-z0-9_-]{1,32}$",
+            "title": "Vessel Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "vessel_id",
+          "as_of",
+          "model_ids"
+        ],
+        "title": "ForecastRequest",
+        "type": "object"
+      },
+      "ForecastResponse": {
+        "additionalProperties": false,
+        "description": "Predictions only. Withheld truth and errors live in ForecastEvaluation.",
+        "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "data_version": {
+            "description": "Dataset manifest identity used for the cache key",
+            "title": "Data Version",
+            "type": "string"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "forecast_id": {
+            "title": "Forecast Id",
+            "type": "string"
+          },
+          "forecasts": {
+            "items": {
+              "$ref": "#/components/schemas/ModelForecast"
+            },
+            "title": "Forecasts",
+            "type": "array"
+          },
+          "input_coverage": {
+            "$ref": "#/components/schemas/InputCoverage"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "vessel_id": {
+            "title": "Vessel Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "forecast_id",
+          "dataset_id",
+          "vessel_id",
+          "as_of",
+          "source",
+          "data_version",
+          "input_coverage",
+          "forecasts"
+        ],
+        "title": "ForecastResponse",
+        "type": "object"
+      },
       "Gap": {
         "properties": {
           "duration_s": {
@@ -288,6 +782,81 @@
         "title": "Health",
         "type": "object"
       },
+      "HorizonScore": {
+        "properties": {
+          "along_track_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Along Track M"
+          },
+          "cross_track_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Cross Track M"
+          },
+          "error_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Error M"
+          },
+          "evaluable": {
+            "title": "Evaluable",
+            "type": "boolean"
+          },
+          "horizon_minutes": {
+            "title": "Horizon Minutes",
+            "type": "number"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "enum": [
+                  "no_report_before",
+                  "no_report_after",
+                  "truth_gap",
+                  "insufficient_history",
+                  "model_failed",
+                  "outside_truth_region",
+                  "feed_outage"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "horizon_minutes",
+          "evaluable"
+        ],
+        "title": "HorizonScore",
+        "type": "object"
+      },
       "IngestTotals": {
         "properties": {
           "dropped": {
@@ -327,6 +896,261 @@
         "title": "IngestTotals",
         "type": "object"
       },
+      "InputCoverage": {
+        "properties": {
+          "first_report": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Report"
+          },
+          "last_report": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Report"
+          },
+          "last_report_age_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "as_of minus the last report time",
+            "title": "Last Report Age S"
+          },
+          "n_gaps": {
+            "title": "N Gaps",
+            "type": "integer"
+          },
+          "n_reports": {
+            "title": "N Reports",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n_reports",
+          "first_report",
+          "last_report",
+          "last_report_age_s",
+          "n_gaps"
+        ],
+        "title": "InputCoverage",
+        "type": "object"
+      },
+      "ModelError": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ModelError",
+        "type": "object"
+      },
+      "ModelEvaluation": {
+        "properties": {
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "scores": {
+            "items": {
+              "$ref": "#/components/schemas/HorizonScore"
+            },
+            "title": "Scores",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model_id",
+          "scores"
+        ],
+        "title": "ModelEvaluation",
+        "type": "object"
+      },
+      "ModelForecast": {
+        "additionalProperties": false,
+        "properties": {
+          "config": {
+            "additionalProperties": true,
+            "title": "Config",
+            "type": "object"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelError"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "model_version": {
+            "description": "Pinned version / checkpoint revision",
+            "title": "Model Version",
+            "type": "string"
+          },
+          "points": {
+            "description": "Central prediction; empty unless status=ok",
+            "items": {
+              "$ref": "#/components/schemas/TrackPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "runtime_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Runtime Ms"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unsupported",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "target_times": {
+            "items": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "title": "Target Times",
+            "type": "array"
+          },
+          "trajectories": {
+            "items": {
+              "$ref": "#/components/schemas/CandidateTrajectory"
+            },
+            "title": "Trajectories",
+            "type": "array"
+          },
+          "uncertainty": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConformalRegion"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model_id",
+          "model_version",
+          "status",
+          "target_times",
+          "points"
+        ],
+        "title": "ModelForecast",
+        "type": "object"
+      },
+      "ModelRef": {
+        "properties": {
+          "config": {
+            "additionalProperties": true,
+            "title": "Config",
+            "type": "object"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "model_id",
+          "model_version"
+        ],
+        "title": "ModelRef",
+        "type": "object"
+      },
+      "ProtocolRef": {
+        "properties": {
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "manifest_sha256": {
+            "description": "SHA-256 of the split manifest file used",
+            "title": "Manifest Sha256",
+            "type": "string"
+          },
+          "manifest_version": {
+            "title": "Manifest Version",
+            "type": "string"
+          },
+          "protocol": {
+            "enum": [
+              "P-known",
+              "P-unseen",
+              "P-paper",
+              "P-region"
+            ],
+            "title": "Protocol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocol",
+          "manifest_version",
+          "dataset_id",
+          "manifest_sha256"
+        ],
+        "title": "ProtocolRef",
+        "type": "object"
+      },
       "Segment": {
         "properties": {
           "end": {
@@ -355,6 +1179,30 @@
           "n_points"
         ],
         "title": "Segment",
+        "type": "object"
+      },
+      "Stat": {
+        "description": "Point estimate with a paired vessel-bootstrap 95% CI.",
+        "properties": {
+          "ci_high": {
+            "title": "Ci High",
+            "type": "number"
+          },
+          "ci_low": {
+            "title": "Ci Low",
+            "type": "number"
+          },
+          "estimate": {
+            "title": "Estimate",
+            "type": "number"
+          }
+        },
+        "required": [
+          "estimate",
+          "ci_low",
+          "ci_high"
+        ],
+        "title": "Stat",
         "type": "object"
       },
       "Track": {
@@ -449,6 +1297,34 @@
           "points"
         ],
         "title": "Track",
+        "type": "object"
+      },
+      "TrackPoint": {
+        "properties": {
+          "latitude_deg": {
+            "maximum": 90,
+            "minimum": -90,
+            "title": "Latitude Deg",
+            "type": "number"
+          },
+          "longitude_deg": {
+            "maximum": 180,
+            "minimum": -180,
+            "title": "Longitude Deg",
+            "type": "number"
+          },
+          "timestamp": {
+            "format": "date-time",
+            "title": "Timestamp",
+            "type": "string"
+          }
+        },
+        "required": [
+          "timestamp",
+          "latitude_deg",
+          "longitude_deg"
+        ],
+        "title": "TrackPoint",
         "type": "object"
       },
       "TrackPoints": {

@@ -97,6 +97,170 @@ export interface components {
                 };
             };
         };
+        /** BenchmarkRun */
+        BenchmarkRun: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Data Provenance
+             * @description Source and mapping id, e.g. noaa_marinecadastre@v1
+             */
+            data_provenance: string;
+            /** Dataset Id */
+            dataset_id: string;
+            /**
+             * Error
+             * @default null
+             */
+            error: string | null;
+            /** Git Sha */
+            git_sha: string;
+            /** Horizons Minutes */
+            horizons_minutes: number[];
+            /** Models */
+            models: components["schemas"]["ModelRef"][];
+            /**
+             * Not Evaluable
+             * @description horizon minutes (as string) -> reason -> count
+             */
+            not_evaluable?: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            /**
+             * Operational
+             * @description Truth-selected numbers (best-of-N) are never part of a run record
+             * @default true
+             * @constant
+             */
+            operational: true;
+            protocol: components["schemas"]["ProtocolRef"];
+            /** Results */
+            results?: components["schemas"]["CellResult"][];
+            /** Run Id */
+            run_id: string;
+            /**
+             * Sampler
+             * @description Sampler config incl. seed and version
+             */
+            sampler: {
+                [key: string]: unknown;
+            };
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "queued" | "running" | "succeeded" | "failed";
+            /** Warnings */
+            warnings?: string[];
+        };
+        /**
+         * CandidateTrajectory
+         * @description One candidate path (e.g. a retrieved route). `similarity` is NOT a probability.
+         */
+        CandidateTrajectory: {
+            /** Points */
+            points: components["schemas"]["TrackPoint"][];
+            /**
+             * Reference Segment Ids
+             * @description Provenance: historical segments this path used
+             */
+            reference_segment_ids?: string[];
+            /**
+             * Similarity
+             * @description Model-specific similarity; not a probability unless calibrated
+             * @default null
+             */
+            similarity: number | null;
+            /** Trajectory Id */
+            trajectory_id: string;
+        };
+        /**
+         * CellResult
+         * @description One model x horizon x stratum cell, scored on the paired evaluable set.
+         */
+        CellResult: {
+            /**
+             * Admission
+             * @enum {string}
+             */
+            admission: "first_class" | "experimental";
+            /**
+             * Failure Rate
+             * @description n_failed / (n_paired + n_failed)
+             */
+            failure_rate: number;
+            /**
+             * Headline
+             * @description Eligible for headline tables: admitted horizon and no model failures
+             */
+            headline: boolean;
+            /** Horizon Minutes */
+            horizon_minutes: number;
+            mean_error_m: components["schemas"]["Stat"];
+            /**
+             * Median Abs Along Track M
+             * @default null
+             */
+            median_abs_along_track_m: number | null;
+            /**
+             * Median Abs Cross Track M
+             * @default null
+             */
+            median_abs_cross_track_m: number | null;
+            median_error_m: components["schemas"]["Stat"];
+            /** Model Id */
+            model_id: string;
+            /**
+             * N Failed
+             * @description Samples this model failed; excluded for every model in the cell
+             */
+            n_failed: number;
+            /** N Paired */
+            n_paired: number;
+            /** N Vessels */
+            n_vessels: number;
+            /** P90 Error M */
+            p90_error_m: number;
+            /**
+             * Sample Set Sha256
+             * @description SHA-256 of the sorted (cutoff_id, horizon) keys scored in this cell; identical for every model in the cell (paired scoring)
+             */
+            sample_set_sha256: string;
+            /**
+             * Skill Vs Best Baseline
+             * @description 1 - error/best-of(persistence, CV, damped velocity) median error
+             * @default null
+             */
+            skill_vs_best_baseline: number | null;
+            /** Stratum */
+            stratum: string;
+        };
+        /**
+         * ConformalRegion
+         * @description Calibrated displacement radius per target time (build plan §5 U1).
+         */
+        ConformalRegion: {
+            /** Calibration Set Id */
+            calibration_set_id: string;
+            /**
+             * Kind
+             * @default conformal_radius
+             * @constant
+             */
+            kind: "conformal_radius";
+            /** Nominal Level */
+            nominal_level: number;
+            /**
+             * Radii M
+             * @description One radius per target time, metres
+             */
+            radii_m: number[];
+        };
         /** DatasetList */
         DatasetList: {
             /** Datasets */
@@ -152,6 +316,90 @@ export interface components {
             /** Message */
             message: string;
         };
+        /**
+         * ForecastEvaluation
+         * @description Truth and errors for one forecast; returned separately and only on request.
+         */
+        ForecastEvaluation: {
+            /** Forecast Id */
+            forecast_id: string;
+            /** Max Bracket Gap Minutes */
+            max_bracket_gap_minutes: number;
+            /** Models */
+            models: components["schemas"]["ModelEvaluation"][];
+            /**
+             * Truth
+             * @description Per target time; null if not evaluable
+             */
+            truth: (components["schemas"]["TrackPoint"] | null)[];
+            /** Truth Region */
+            truth_region: string;
+        };
+        /** ForecastRequest */
+        ForecastRequest: {
+            /**
+             * As Of
+             * Format: date-time
+             * @description Cutoff: only reports at or before this are used
+             */
+            as_of: string;
+            /** Dataset Id */
+            dataset_id: string;
+            /**
+             * History Hours
+             * @default 24
+             */
+            history_hours: number;
+            /**
+             * Horizon Hours
+             * @default 6
+             */
+            horizon_hours: number;
+            /** Model Ids */
+            model_ids: string[];
+            /**
+             * Show Ground Truth
+             * @description Request a ForecastEvaluation as well; truth is never in this response
+             * @default false
+             */
+            show_ground_truth: boolean;
+            /**
+             * Step Minutes
+             * @default 10
+             */
+            step_minutes: number;
+            /** Vessel Id */
+            vessel_id: string;
+        };
+        /**
+         * ForecastResponse
+         * @description Predictions only. Withheld truth and errors live in ForecastEvaluation.
+         */
+        ForecastResponse: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /**
+             * Data Version
+             * @description Dataset manifest identity used for the cache key
+             */
+            data_version: string;
+            /** Dataset Id */
+            dataset_id: string;
+            /** Forecast Id */
+            forecast_id: string;
+            /** Forecasts */
+            forecasts: components["schemas"]["ModelForecast"][];
+            input_coverage: components["schemas"]["InputCoverage"];
+            /** Source */
+            source: string;
+            /** Vessel Id */
+            vessel_id: string;
+            /** Warnings */
+            warnings?: string[];
+        };
         /** Gap */
         Gap: {
             /** Duration S */
@@ -189,6 +437,33 @@ export interface components {
             /** Version */
             version: string;
         };
+        /** HorizonScore */
+        HorizonScore: {
+            /**
+             * Along Track M
+             * @default null
+             */
+            along_track_m: number | null;
+            /**
+             * Cross Track M
+             * @default null
+             */
+            cross_track_m: number | null;
+            /**
+             * Error M
+             * @default null
+             */
+            error_m: number | null;
+            /** Evaluable */
+            evaluable: boolean;
+            /** Horizon Minutes */
+            horizon_minutes: number;
+            /**
+             * Reason
+             * @default null
+             */
+            reason: ("no_report_before" | "no_report_after" | "truth_gap" | "insufficient_history" | "model_failed" | "outside_truth_region" | "feed_outage") | null;
+        };
         /** IngestTotals */
         IngestTotals: {
             /** Dropped */
@@ -206,6 +481,103 @@ export interface components {
             /** Rows Out */
             rows_out: number;
         };
+        /** InputCoverage */
+        InputCoverage: {
+            /** First Report */
+            first_report: string | null;
+            /** Last Report */
+            last_report: string | null;
+            /**
+             * Last Report Age S
+             * @description as_of minus the last report time
+             */
+            last_report_age_s: number | null;
+            /** N Gaps */
+            n_gaps: number;
+            /** N Reports */
+            n_reports: number;
+        };
+        /** ModelError */
+        ModelError: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+        };
+        /** ModelEvaluation */
+        ModelEvaluation: {
+            /** Model Id */
+            model_id: string;
+            /** Scores */
+            scores: components["schemas"]["HorizonScore"][];
+        };
+        /** ModelForecast */
+        ModelForecast: {
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            };
+            /** @default null */
+            error: components["schemas"]["ModelError"] | null;
+            /** Model Id */
+            model_id: string;
+            /**
+             * Model Version
+             * @description Pinned version / checkpoint revision
+             */
+            model_version: string;
+            /**
+             * Points
+             * @description Central prediction; empty unless status=ok
+             */
+            points: components["schemas"]["TrackPoint"][];
+            /**
+             * Runtime Ms
+             * @default null
+             */
+            runtime_ms: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unsupported" | "failed";
+            /** Target Times */
+            target_times: string[];
+            /** Trajectories */
+            trajectories?: components["schemas"]["CandidateTrajectory"][];
+            /** @default null */
+            uncertainty: components["schemas"]["ConformalRegion"] | null;
+            /** Warnings */
+            warnings?: string[];
+        };
+        /** ModelRef */
+        ModelRef: {
+            /** Config */
+            config?: {
+                [key: string]: unknown;
+            };
+            /** Model Id */
+            model_id: string;
+            /** Model Version */
+            model_version: string;
+        };
+        /** ProtocolRef */
+        ProtocolRef: {
+            /** Dataset Id */
+            dataset_id: string;
+            /**
+             * Manifest Sha256
+             * @description SHA-256 of the split manifest file used
+             */
+            manifest_sha256: string;
+            /** Manifest Version */
+            manifest_version: string;
+            /**
+             * Protocol
+             * @enum {string}
+             */
+            protocol: "P-known" | "P-unseen" | "P-paper" | "P-region";
+        };
         /** Segment */
         Segment: {
             /**
@@ -222,6 +594,18 @@ export interface components {
              * Format: date-time
              */
             start: string;
+        };
+        /**
+         * Stat
+         * @description Point estimate with a paired vessel-bootstrap 95% CI.
+         */
+        Stat: {
+            /** Ci High */
+            ci_high: number;
+            /** Ci Low */
+            ci_low: number;
+            /** Estimate */
+            estimate: number;
         };
         /** Track */
         Track: {
@@ -260,6 +644,18 @@ export interface components {
             vessel_id: string;
             /** Warnings */
             warnings: string[];
+        };
+        /** TrackPoint */
+        TrackPoint: {
+            /** Latitude Deg */
+            latitude_deg: number;
+            /** Longitude Deg */
+            longitude_deg: number;
+            /**
+             * Timestamp
+             * Format: date-time
+             */
+            timestamp: string;
         };
         /**
          * TrackPoints

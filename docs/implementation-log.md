@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 1 — Repository, contracts and data pipeline** (started 2026-10-19). Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 2 — Baselines and the evaluator** (not started; awaiting go-ahead). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -212,3 +212,84 @@ cd backend && uv sync --locked && uv run pytest   # 111 passed
 - a synthetic fixture covering moving, turning, stopping, gaps and an antimeridian crossing, for unit tests only;
 - a P-region manifest;
 - confirm the "done when" criteria with `/milestone-check`.
+
+## 2026-10-20 — Milestone 1 close-out: fixture, P-region, gaps, milestone check
+
+**Milestone:** 1 → complete
+**Done:**
+- **Synthetic fixture** (`backend/tests/fixtures/`): generator plus committed CSV with six vessels (moving, turning, stopping/moored, gaps, antimeridian, dirty), MMSIs `999…`, unit tests only. It runs through every stage: ingest, store, segmentation, sampler, truth, P-paper grid, baselines, API.
+- **Bugs the fixture found (fixed):**
+  - **Truth interpolation across the antimeridian** returned about 0° longitude (the far side of the globe), and the P-paper grid had the same flaw. Fixed with `geo.geodesic.lon_lerp_sql`.
+  - The spike-filter distance did not wrap longitude, so a lone report across the dateline was dropped as a "spike".
+  - The web map would draw a dateline crossing as a line around the world, and its bounds would span the globe. It now unwraps longitudes.
+  - Gulf data never crosses 180°, so no reported number changes. Calibration was re-run (`calibration_20261020T162749Z`): identical 4.03 / 9.65 / 16.16 km, PASS.
+- **P-region** (`RegionSplit` in the manifest):
+  - Test side is the Houston–Galveston box with a 50 km excluded buffer; train side is the rest of the Gulf. Combined with the periods.
+  - Windows that straddle the cut are dropped. `sql_case()` is verified against `side()` on 3,000 random points.
+  - Materialized: test 2,066 vessels / 6.83 M reports; train 6,994 / 31.38 M; calibration 4,610 / 7.87 M. No train or calibration report lies in the cutoff region.
+- **Milestone check found two unmet tasks, now closed:**
+  1. Pydantic schemas for forecasts and benchmark runs (`schemas/forecast.py`, `schemas/benchmark.py`). They encode: no truth in forecast responses, `similarity` not probability, conformal-only uncertainty, no fake points on failure, paired cells only. They are published to OpenAPI and TypeScript.
+  2. Motion-state label (segment-v3) and causal stationary-jitter handling (`data/dejitter.py`).
+- Tests: 150 backend + 2 golden, 10 frontend.
+
+**Milestone 1 checklist (build plan §7):**
+
+| Task / criterion | Evidence | Status |
+|---|---|---|
+| Monorepo, Makefile, lint, tests, `.env.example`, CI smoke | `Makefile`; ruff clean; `make test` 150 passed; `make web-test` 10 passed; `.env.example` and `frontend/.env.example`; `.github/workflows/ci.yml` green (run 39447357584) | met |
+| `AGENTS.md` per §12 | `AGENTS.md` | met |
+| Pydantic schemas: observations, forecasts, benchmark runs; generated TS types | `schemas/observation.py`, `forecast.py`, `benchmark.py`; `frontend/lib/api/schema.d.ts`; CI drift check | met |
+| Versioned NOAA and generic CSV/Parquet ingestion with column mapping | `data/mapping.py`, `data/ingest.py`, `config/sources/*` (NOAA verified; DMA verified on 2023-06-01) | met |
+| Validation, deduplication | `IngestReport` row accounting; `test_canonical`, `test_ingest`, fixture dirty rows | met |
+| Jitter handling | `data/dejitter.py` (causal), motion_state label | met |
+| Gap-aware segmentation | `data/segment.py`; fixture gap tests | met |
+| Partitioned Parquet with DuckDB queries | `storage/parquet_store.py`; `test_store` | met |
+| Cutoff sampler (§6.3) | `data/cutoffs.py`; `test_cutoffs` | met |
+| Split manifests P-known, P-unseen, P-region, P-paper | `data/manifests/splits/*.json`; `test_splits` (17 + P-region) | met |
+| Synthetic fixture (moving, turning, stopping, gaps, antimeridian), labelled synthetic | `tests/fixtures/`; `test_synthetic_fixture` | met |
+| `GET /health`, `/datasets`, `/vessels`, `/vessels/{id}/track` | `api/app.py`; `test_api` | met |
+| Minimal frontend: real track, gaps distinct | browser check 2026-10-20 (vessel 212314000) | met |
+| **Done when:** one command starts both services | `make dev`, verified 2026-10-20 | met |
+| **Done when:** real NOAA data loads and replays without fabricated segments | Re-ingested data has an identical content hash. API `n_points` equals the raw count (real: 579 for 367138690 on 06-12; fixture test). Gaps are their own layer | met |
+| **Done when:** tests cover bad values, timestamp cutoffs, manifest disjointness | `test_canonical`/`test_ingest`/fixture dirty rows; `history()` causality, half-open windows, dejitter causality; `test_splits` | met |
+
+**Leakage review of this change** (the `leakage-reviewer` subagent, now registered). It found no temporal leakage. It did find these, all fixed before commit:
+
+1. **P-region selected test samples on their future.** `window_split` required every position, including post-cutoff labels, to be inside the box. A tanker leaving Houston after its cutoff would therefore be silently dropped from the test set, biasing it toward harbour traffic. Membership is now decided by context positions only. Train and calibration labels must still stay on the train side. Regression test added.
+2. **`BenchmarkRun` pairing only compared counts.** Cells now also carry `sample_set_sha256`, and `n_vessels`, admission and hash must agree. Undeclared models are rejected. A succeeded run must cover every model × horizon × stratum. `not_evaluable` is now by horizon.
+3. **`ModelForecast`, `HorizonScore` and `ForecastEvaluation` holes closed:**
+   - an "ok" forecast with no prediction;
+   - a failed forecast that still ships trajectories or uncertainty;
+   - negative radii, unordered grids, and trajectories off the grid;
+   - an evaluable score with no error, or a not-evaluable score with no reason;
+   - per-horizon silent drops;
+   - responses with input after `as_of` or targets at or before it.
+4. **Failure rate and headline eligibility:** cells now report `failure_rate`, and only cells with zero failures on an admitted horizon can be `headline`.
+5. **Dejitter is causal only on causally segmented input** (the spike filter uses the next report). This is now documented, with a test of the prescribed path that has a spike right after the cutoff.
+
+Nits fixed:
+- the latitude buffer pad now uses the shortest meridian degree;
+- `sql_case` treats NULL coordinates as excluded;
+- `test_region` is a typed box;
+- P-region forbids vessel assignment;
+- materialization asserts day-aligned periods;
+- stable sort in dejitter;
+- the float-safe step-grid check.
+
+The departure-lag bias of dejitter is documented (not leakage).
+
+**Commands run:**
+```bash
+cd backend && uv run python tests/fixtures/synthetic.py && uv run pytest   # 150 passed after review fixes
+uv run --project backend python scripts/make_splits.py                     # P-region materialized
+uv run --project backend python scripts/calibrate.py && (cd backend && uv run pytest -m golden)  # PASS, 2 passed
+make lint && make web-test && make gen-api
+```
+
+**Results:** All Milestone 1 tasks and acceptance criteria are met (table above).
+
+**Blockers / open questions:** none.
+
+**Next step:** Smallest first slice of Milestone 2, waiting for your go-ahead (AGENTS.md rule 11):
+- the `TrajectoryForecaster` protocol and registry, with persistence and both constant-velocity modes as adapters;
+- the leakage-invariance test harness (perturb or delete post-cutoff rows; every adapter's output must be unchanged), built on `ParquetStore.history()`.

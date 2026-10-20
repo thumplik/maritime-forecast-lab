@@ -59,3 +59,21 @@ def test_along_cross_track_signs():
     along, cross = along_cross_track(lat_p, lon_p, 29.0, -94.0, 0.0)
     assert along == pytest.approx(1000.0, rel=0.01)
     assert cross == pytest.approx(1000.0, rel=0.01)
+
+
+@pytest.mark.parametrize(
+    "a,b,w,expected",
+    [
+        (179.9, -179.9, 0.5, -180.0),  # shorter way round, wrapped
+        (-179.9, 179.9, 0.25, -179.95),
+        (10.0, 20.0, 0.5, 15.0),
+        (-94.0, -94.0, 0.7, -94.0),
+    ],
+)
+def test_lon_lerp_sql(a, b, w, expected):
+    import duckdb
+
+    from maritime_forecast.geo.geodesic import lon_lerp_sql
+
+    got = duckdb.sql(f"SELECT {lon_lerp_sql(str(a), str(b), str(w))}").fetchone()[0]
+    assert got == pytest.approx(expected, abs=1e-9)

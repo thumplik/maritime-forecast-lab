@@ -9,7 +9,7 @@ from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 
-SEGMENT_VERSION = "segment-v2"  # v2: trailing 30-min SOG mean/min
+SEGMENT_VERSION = "segment-v3"  # v3: motion_state label; v2: trailing 30-min SOG
 
 
 @dataclass(frozen=True)
@@ -35,6 +35,9 @@ def segmented_sql(source: str, cfg: SegmentConfig = DEFAULT_SEGMENT_CONFIG) -> s
       2. Start a new segment when the gap to the previous report exceeds `gap_minutes`.
       3. Add trailing 10- and 30-minute SOG statistics (only reports at or before each row —
          no look-ahead).
+      4. Label motion_state from the trailing 10-min mean SOG: 'stationary' (< stationary_sog_kn),
+         'slow', 'underway' (>= underway_sog_kn) or 'unknown'. Stationary periods are kept as
+         rows (build plan §4); dejitter.py smooths their positions causally for model windows.
 
     CAUSALITY: the spike test uses lead(), i.e. the *next* report. Applied to a full archive,
     whether the report at a cutoff survives depends on the first report after the cutoff.
@@ -44,10 +47,11 @@ def segmented_sql(source: str, cfg: SegmentConfig = DEFAULT_SEGMENT_CONFIG) -> s
     """
     gap_s = cfg.gap_minutes * 60
     vmax_mps = cfg.max_implied_speed_kn * 1852 / 3600
-    # Equirectangular distance is adequate for spike detection between consecutive reports.
+    # Equirectangular distance is adequate for spike detection between consecutive reports;
+    # the longitude difference is wrapped so an antimeridian crossing is not a 40,000 km jump.
     dist = (
         "6371008.8 * sqrt(pow(radians({lat2}-{lat1}),2) + "
-        "pow(radians({lon2}-{lon1})*cos(radians(({lat1}+{lat2})/2)),2))"
+        "pow(radians((({lon2}-{lon1})+540)%360-180)*cos(radians(({lat1}+{lat2})/2)),2))"
     )
     d_prev = dist.format(lat1="p_lat", lon1="p_lon", lat2="latitude_deg", lon2="longitude_deg")
     d_next = dist.format(lat1="latitude_deg", lon1="longitude_deg", lat2="n_lat", lon2="n_lon")
@@ -77,6 +81,7 @@ def segmented_sql(source: str, cfg: SegmentConfig = DEFAULT_SEGMENT_CONFIG) -> s
         FROM clean
         WINDOW w AS (PARTITION BY vessel_id ORDER BY observed_at)
     )
+    , features AS (
     SELECT *,
         sum(CASE WHEN dt_prev_s IS NULL OR dt_prev_s > {gap_s} THEN 1 ELSE 0 END)
             OVER (PARTITION BY vessel_id ORDER BY observed_at
@@ -90,6 +95,13 @@ def segmented_sql(source: str, cfg: SegmentConfig = DEFAULT_SEGMENT_CONFIG) -> s
     FROM gaps
     WINDOW w30 AS (PARTITION BY vessel_id ORDER BY observed_at
                    RANGE BETWEEN INTERVAL 30 MINUTES PRECEDING AND CURRENT ROW)
+    )
+    SELECT *,
+        CASE WHEN sog_mean_10m IS NULL THEN 'unknown'
+             WHEN sog_mean_10m < {cfg.stationary_sog_kn} THEN 'stationary'
+             WHEN sog_mean_10m < {cfg.underway_sog_kn} THEN 'slow'
+             ELSE 'underway' END AS motion_state
+    FROM features
     """
 
 

@@ -74,6 +74,17 @@ describe("trackToGeo", () => {
     expect(g.segments.features[0]!.geometry.coordinates).toHaveLength(n);
   });
 
+  it("keeps a dateline crossing short (SYNTHETIC lons)", () => {
+    const t = track([T(0), T(10), T(20), T(30)], [0, 0, 0, 0]);
+    t.points.longitude_deg = [179.98, 179.99, -179.99, -179.98];
+    const g = trackToGeo(t);
+    const lons = g.segments.features[0]!.geometry.coordinates.map((c) => c[0]);
+    expect(lons[2]).toBeCloseTo(180.01, 6);
+    expect(lons[3]).toBeCloseTo(180.02, 6);
+    const [w, , e] = g.bounds!;
+    expect(e - w).toBeLessThan(0.1); // not a 360-degree bounding box
+  });
+
   it("handles an empty track", () => {
     const g = trackToGeo(track([], []));
     expect(g.bounds).toBeNull();

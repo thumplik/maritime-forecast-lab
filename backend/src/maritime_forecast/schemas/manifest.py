@@ -8,6 +8,8 @@ always decided by the rule, so a manifest also answers for vessels not seen at b
 from __future__ import annotations
 
 import hashlib
+import math
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Literal
 
@@ -79,6 +81,69 @@ class VesselAssignment(BaseModel):
         raise AssertionError("unreachable: buckets tile 0..1000")
 
 
+# Shortest meridian degree (at the equator), so the latitude pad is never under buffer_km.
+KM_PER_DEG_LAT = 110.574
+Side = Literal["train", "test"]
+
+
+class Box(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    name: str
+    lat_min: float
+    lat_max: float
+    lon_min: float
+    lon_max: float
+
+    @model_validator(mode="after")
+    def _valid(self) -> Box:
+        ok_lat = -90 <= self.lat_min < self.lat_max <= 90
+        ok_lon = -180 <= self.lon_min < self.lon_max <= 180
+        if not (ok_lat and ok_lon):
+            raise ValueError(f"invalid box {self}")
+        return self
+
+
+class RegionSplit(BaseModel):
+    """Geographic cut for P-region: inside `test_region` is test; beyond a `buffer_km` band
+    around it is train; the band itself is excluded so near-boundary traffic can't leak."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    test_region: Box
+    buffer_km: float = Field(ge=0)
+
+    @property
+    def outer(self) -> tuple[float, float, float, float]:
+        """(lat_min, lat_max, lon_min, lon_max) of the test region grown by the buffer.
+        Both pads are conservative: the shortest degree of latitude, and the longitude degree
+        at the grown box's poleward edge."""
+        r = self.test_region
+        dlat = self.buffer_km / KM_PER_DEG_LAT
+        coslat = math.cos(math.radians(min(89.0, max(abs(r.lat_min), abs(r.lat_max)) + dlat)))
+        dlon = self.buffer_km / (KM_PER_DEG_LAT * coslat)
+        return r.lat_min - dlat, r.lat_max + dlat, r.lon_min - dlon, r.lon_max + dlon
+
+    def side(self, lat: float, lon: float) -> Side | None:
+        r = self.test_region
+        if r.lat_min <= lat <= r.lat_max and r.lon_min <= lon <= r.lon_max:
+            return "test"
+        a, b, c, d = self.outer
+        if a <= lat <= b and c <= lon <= d:
+            return None  # buffer band
+        return "train"
+
+    def sql_case(self, lat: str = "latitude_deg", lon: str = "longitude_deg") -> str:
+        """SQL twin of side(): 'test', 'train' or NULL (buffer, or missing position)."""
+        r = self.test_region
+        a, b, c, d = self.outer
+        return (
+            f"CASE WHEN {lat} IS NULL OR {lon} IS NULL THEN NULL "
+            f"WHEN {lat} BETWEEN {r.lat_min!r} AND {r.lat_max!r} "
+            f"AND {lon} BETWEEN {r.lon_min!r} AND {r.lon_max!r} THEN 'test' "
+            f"WHEN {lat} BETWEEN {a!r} AND {b!r} AND {lon} BETWEEN {c!r} AND {d!r} THEN NULL "
+            "ELSE 'train' END"
+        )
+
+
 class SplitManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -89,6 +154,7 @@ class SplitManifest(BaseModel):
     periods: list[Period] | None = None
     purge_hours: float = Field(default=0.0, ge=0)
     vessel_assignment: VesselAssignment | None = None
+    region_split: RegionSplit | None = None
     preprocessing: dict = Field(default_factory=dict)
     vessels: dict[SplitName, list[str]] = Field(
         default_factory=dict,
@@ -101,8 +167,12 @@ class SplitManifest(BaseModel):
 
     @model_validator(mode="after")
     def _consistent(self) -> SplitManifest:
-        if self.periods is None and self.vessel_assignment is None:
-            raise ValueError("a manifest needs time periods, a vessel assignment, or both")
+        if self.periods is None and self.vessel_assignment is None and self.region_split is None:
+            raise ValueError("a manifest needs time periods, a vessel assignment or a region split")
+        if (self.protocol == "P-region") != (self.region_split is not None):
+            raise ValueError("region_split is required for P-region and only allowed there")
+        if self.region_split is not None and self.vessel_assignment is not None:
+            raise ValueError("P-region splits by place and time only; no vessel assignment")
         if self.periods:
             ps = sorted(self.periods, key=lambda p: p.start)
             purge = timedelta(hours=self.purge_hours)
@@ -127,8 +197,19 @@ class SplitManifest(BaseModel):
             return None
         return next((p.split for p in self.periods if p.contains(t)), None)
 
-    def split_of(self, vessel_id: str, t: datetime | None = None) -> SplitName | None:
-        """The split a (vessel, time) point belongs to, or None if it is purged/excluded."""
+    def split_of(
+        self,
+        vessel_id: str,
+        t: datetime | None = None,
+        lat: float | None = None,
+        lon: float | None = None,
+    ) -> SplitName | None:
+        """The split a (vessel, time[, position]) point belongs to, or None if it is excluded
+        (purge gap, disagreeing vessel bucket, or the P-region buffer band).
+
+        P-region: the test side pairs only with the test period; the train side pairs with
+        the train and calibration periods.
+        """
         v = self.vessel_assignment.assign(vessel_id) if self.vessel_assignment else None
         if self.periods is None:
             return v
@@ -137,11 +218,55 @@ class SplitManifest(BaseModel):
         ts = self.time_split(t)
         if ts is None or (v is not None and v != ts):
             return None
+        if self.region_split is not None:
+            if lat is None or lon is None:
+                raise ValueError("P-region needs the point's lat/lon")
+            return self._pair(ts, self.region_split.side(lat, lon))
         return ts
 
-    def window_split(self, vessel_id: str, start: datetime, end: datetime) -> SplitName | None:
-        """Split for a whole context+label window; None if its ends fall in different splits
-        or in a purge gap (build plan §6.2: purge windows that overlap split boundaries)."""
+    @staticmethod
+    def _pair(time_split: SplitName | None, side: Side | None) -> SplitName | None:
+        if time_split is None or side is None or (side == "test") != (time_split == "test"):
+            return None
+        return time_split
+
+    def split_for_side(self, t: datetime, side: Side | None) -> SplitName | None:
+        """P-region membership when the side was already classified (e.g. by sql_case())."""
+        if self.region_split is None:
+            raise ValueError("split_for_side is only for P-region")
+        return self._pair(self.time_split(t), side)
+
+    def window_split(
+        self,
+        vessel_id: str,
+        start: datetime,
+        end: datetime,
+        context_positions: Sequence[tuple[float, float]] | None = None,
+        label_positions: Sequence[tuple[float, float]] = (),
+    ) -> SplitName | None:
+        """Split for a context+label window, or None if excluded: its ends fall in different
+        splits or in a purge gap (build plan §6.2).
+
+        P-region: membership is decided by the CONTEXT positions (reports at or before the
+        cutoff), which must all lie on one side and outside the buffer. Label positions never
+        decide test membership, because that would select test samples on their future
+        (whether the vessel stays in the box); truth is scored anywhere in the truth region.
+        For train and calibration windows the label positions must also stay on the train
+        side, so no training label comes from the test waters or the buffer.
+        """
+        if self.region_split is not None:
+            if not context_positions:
+                raise ValueError("P-region needs the window's context positions")
+            sides = {self.region_split.side(la, lo) for la, lo in context_positions}
+            if len(sides) != 1 or None in sides:
+                return None
+            (side,) = sides
+            if side == "train" and any(
+                self.region_split.side(la, lo) != "train" for la, lo in label_positions
+            ):
+                return None
+            a, b = self.split_for_side(start, side), self.split_for_side(end, side)
+            return a if a == b else None
         a = self.split_of(vessel_id, start if self.periods else None)
         b = self.split_of(vessel_id, end if self.periods else None)
         return a if a == b else None

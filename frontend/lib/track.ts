@@ -55,8 +55,19 @@ export function formatDuration(seconds: number): string {
 export function trackToGeo(track: Track): TrackGeo {
   const p = track.points;
   const n = p.observed_at.length;
+  // Unwrap longitude along the track (e.g. 179.9 -> 180.1 instead of -179.9) so a dateline
+  // crossing is a short step, not a line around the world. MapLibre renders lon beyond ±180.
   const coords: Position[] = [];
-  for (let i = 0; i < n; i++) coords.push([p.longitude_deg[i]!, p.latitude_deg[i]!]);
+  for (let i = 0; i < n; i++) {
+    let lon = p.longitude_deg[i]!;
+    if (i > 0) {
+      const prev = coords[i - 1]![0];
+      // Shift by whole turns only when needed, so ordinary coordinates stay bit-identical.
+      while (lon - prev > 180) lon -= 360;
+      while (lon - prev < -180) lon += 360;
+    }
+    coords.push([lon, p.latitude_deg[i]!]);
+  }
 
   const segments: Feature<LineString, SegmentProps>[] = [];
   const gaps: Feature<LineString, GapProps>[] = [];

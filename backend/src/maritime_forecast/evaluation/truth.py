@@ -8,6 +8,8 @@ a coverage gap.
 
 from __future__ import annotations
 
+from maritime_forecast.geo.geodesic import lon_lerp_sql
+
 NOT_EVALUABLE_REASONS = (
     "no_report_before",  # vessel has no report at/before target in the truth source (rare)
     "no_report_after",  # vessel never reappears in the truth source after target
@@ -43,7 +45,7 @@ def truth_sql(targets: str, observations: str, max_bracket_gap_minutes: float = 
     )
     SELECT * EXCLUDE (w),
         p_lat + w * (n_lat - p_lat) AS truth_lat,
-        p_lon + w * (n_lon - p_lon) AS truth_lon,
+        {lon_lerp_sql("p_lon", "n_lon", "w")} AS truth_lon,
         CASE WHEN p_t IS NULL THEN 'no_report_before'
              WHEN n_t IS NULL THEN 'no_report_after'
              WHEN bracket_gap_s > {gap_s} THEN 'truth_gap'

@@ -49,6 +49,7 @@ select = ["E", "F", "I", "B", "UP", "SIM", "NPY"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["tests"]
 markers = [
     "golden: requires local NOAA data; run via `make calibrate`, never in CI",
     "network: requires network access; never run in ordinary unit tests",

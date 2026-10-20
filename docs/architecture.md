@@ -24,15 +24,16 @@ Other providers: CSV/Parquet ── scripts/import_ais.py --mapping <config/sour
 | `maritime_forecast.data.canonical` | Mapping-driven canonical SQL: parsing, sentinels, drop reasons, dedup, flags |
 | `maritime_forecast.data.ingest` | Files → store, with row-accounting report and dataset manifest |
 | `maritime_forecast.storage.parquet_store` | Daily-partitioned store: date pruning, scan, track, causal `history`, vessel summaries, atomic per-day writes |
-| `maritime_forecast.data.segment` | Gap- and motion-aware track segmentation, resampling |
+| `maritime_forecast.data.segment` | Gap-aware segmentation, spike removal, trailing SOG features, `motion_state` label, display segments/gaps |
 | `maritime_forecast.geo.geodesic` | WGS84 direct/inverse problems, along/cross-track |
 | `maritime_forecast.models.baselines` | Persistence, constant velocity (standard + paper-compatible) |
 | `maritime_forecast.evaluation.windows` | Paper-style fixed windows for §6.6 calibration |
 | `maritime_forecast.evaluation.truth` | Bracketed ground truth that never bridges gaps |
 | `maritime_forecast.evaluation.admission` | Per-stratum horizon admission (plan v0.3 §6.4) |
-| `maritime_forecast.evaluation.splits` | Protocol rules: P-known, P-unseen, P-paper |
+| `maritime_forecast.evaluation.splits` | Protocol rules: P-known, P-unseen, P-region, P-paper |
 | `maritime_forecast.data.cutoffs` | Cutoff sampler, transiting stratum |
-| `maritime_forecast.schemas` | Pydantic contracts: `Observation`, `SplitManifest`, `DatasetManifest`/`IngestReport` |
+| `maritime_forecast.data.dejitter` | Causal stationary-jitter smoothing for model windows (running mean within stationary runs) |
+| `maritime_forecast.schemas` | Pydantic contracts: `Observation`, `SplitManifest` (+`RegionSplit`), `DatasetManifest`/`IngestReport`, `ForecastRequest`/`ForecastResponse`/`ForecastEvaluation`, `BenchmarkRun` |
 
 | `maritime_forecast.api` | FastAPI read API: app factory, typed errors, response models |
 
@@ -82,4 +83,21 @@ Measured on the June NOAA data:
 
 No data or model weights are used.
 
-Not yet built: run store, model registry, the Milestone 1 synthetic fixture and manifest-replay checks (see the implementation log).
+## Contracts for Milestone 2
+
+`schemas/forecast.py` and `schemas/benchmark.py` fix the request and response shapes before any endpoint exists. They are published in the OpenAPI components, so they are already TypeScript types. The type system enforces these rules:
+
+- A forecast response has no truth fields. Truth lives in `ForecastEvaluation`.
+- Candidate scores are `similarity`.
+- Uncertainty can only be a `conformal_radius` with a nominal level and calibration-set id.
+- A non-ok model result has an error and no points.
+- `BenchmarkRun` rejects unpaired cells and truth-selected (non-operational) records.
+
+## Antimeridian
+
+Fixed in Milestone 1, found with the synthetic fixture:
+
+- Longitude interpolation (`geo.geodesic.lon_lerp_sql`, used by truth and by the P-paper grid) and the spike-filter distance take the short way round.
+- The web map unwraps longitudes along a track.
+
+Not yet built: run store, model registry (Milestone 2).

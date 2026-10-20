@@ -4,7 +4,7 @@ Research workbench for forecasting where an AIS-tracked vessel will be 1 h – 3
 
 ## Where we are
 
-**Current milestone: 1 — repository, contracts and data pipeline** (Milestone 0 done; build plan v0.3). Read API (`make api`), minimal web explorer and CI exist; `make dev` runs both.
+**Milestone 1 complete (2026-10-20); Milestone 2 — baselines and the evaluator — not started, awaiting go-ahead.** Read API (`make api`), minimal web explorer, CI; `make dev` runs both. Forecast/benchmark contracts exist in `schemas/` (no endpoints yet).
 Status, blockers and next step live in [docs/implementation-log.md](docs/implementation-log.md) — read it first, append to it last.
 
 ## Commands

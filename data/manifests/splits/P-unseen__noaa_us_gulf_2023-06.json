@@ -39,6 +39,7 @@
       ]
     }
   },
+  "region_split": null,
   "preprocessing": {},
   "vessels": {
     "calibration": [
@@ -7745,6 +7746,6 @@
     },
     "reports_excluded": 49079186
   },
-  "created_at": "2026-10-20T12:38:04Z",
-  "git_sha": "257accd910e244f41c0c13925348c36b45332099-dirty"
+  "created_at": "2026-10-20T16:35:27Z",
+  "git_sha": "fc075d27f7549277f03a84a25daf04f0dc95e179-dirty"
 }

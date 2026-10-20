@@ -18,6 +18,8 @@ from dataclasses import dataclass
 import numpy as np
 import polars as pl
 
+from maritime_forecast.geo.geodesic import lon_lerp_sql
+
 
 def grid_sql(observations: str, step_minutes: int = 10) -> str:
     """Resample each (vessel_id, segment_no) onto a clock-aligned regular grid.
@@ -28,6 +30,7 @@ def grid_sql(observations: str, step_minutes: int = 10) -> str:
     time (the "anchor report" used by paper-compatible constant velocity).
     """
     step = f"INTERVAL {step_minutes} MINUTE"
+    frac = "epoch(grid_t - p_t) / epoch(n_t - p_t)"
     return f"""
     WITH bounds AS (
         SELECT vessel_id, segment_no, min(observed_at) AS t0, max(observed_at) AS t1
@@ -58,7 +61,7 @@ def grid_sql(observations: str, step_minutes: int = 10) -> str:
         CASE WHEN n_t = p_t THEN p_lat
              ELSE p_lat + epoch(grid_t - p_t) / epoch(n_t - p_t) * (n_lat - p_lat) END AS lat,
         CASE WHEN n_t = p_t THEN p_lon
-             ELSE p_lon + epoch(grid_t - p_t) / epoch(n_t - p_t) * (n_lon - p_lon) END AS lon,
+             ELSE {lon_lerp_sql("p_lon", "n_lon", frac)} END AS lon,
         anchor_sog, anchor_cog
     FROM both_
     ORDER BY vessel_id, segment_no, grid_t
