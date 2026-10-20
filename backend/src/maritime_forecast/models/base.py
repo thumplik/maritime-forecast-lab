@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import math
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Protocol, runtime_checkable
@@ -82,6 +83,38 @@ def history_from_store(
     """The causal context for a forecast: ParquetStore.history() wrapped in AISHistory."""
     df = store.history(dataset_id, vessel_id, as_of, hours).sort("observed_at", maintain_order=True)
     return AISHistory(vessel_id, as_of, hours, df, dataset_id)
+
+
+def histories_for_cutoffs(
+    store: ParquetStore,
+    dataset_id: str,
+    cutoffs: pl.DataFrame,
+    hours: float,
+) -> Iterator[tuple[int, AISHistory]]:
+    """Batched equivalent of history_from_store for many cutoffs (benchmarks).
+
+    `cutoffs` has cutoff_id, vessel_id, observed_at (= as_of). Reads each vessel's reports
+    once and slices (as_of - hours, as_of] per cutoff, the same half-open window as
+    ParquetStore.history(); a unit test asserts the two agree. Yields (cutoff_id, history).
+    """
+    if cutoffs.height == 0:
+        return
+    lo = cutoffs["observed_at"].min() - timedelta(hours=hours)
+    hi = cutoffs["observed_at"].max() + timedelta(microseconds=1)
+    vessels = cutoffs["vessel_id"].unique().to_list()
+    rows = store.scan(dataset_id, lo, hi, vessel_ids=vessels)
+    by_vessel = {v[0]: g for v, g in rows.group_by("vessel_id", maintain_order=True)}
+    empty = rows.head(0)
+    window = timedelta(hours=hours)
+    for c in cutoffs.sort("vessel_id", "observed_at").iter_rows(named=True):
+        g = by_vessel.get(c["vessel_id"], empty)
+        t = g["observed_at"]
+        a = t.search_sorted(c["observed_at"] - window, side="right")
+        b = t.search_sorted(c["observed_at"], side="right")
+        yield (
+            c["cutoff_id"],
+            AISHistory(c["vessel_id"], c["observed_at"], hours, g.slice(a, b - a), dataset_id),
+        )
 
 
 @dataclass(frozen=True)

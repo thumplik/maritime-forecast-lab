@@ -54,6 +54,14 @@
             "title": "Dataset Id",
             "type": "string"
           },
+          "dropped_cells": {
+            "description": "Never silent: every unscored (stratum, horizon)",
+            "items": {
+              "$ref": "#/components/schemas/DroppedCell"
+            },
+            "title": "Dropped Cells",
+            "type": "array"
+          },
           "error": {
             "anyOf": [
               {
@@ -211,6 +219,19 @@
             "title": "Admission",
             "type": "string"
           },
+          "best_baseline_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Baseline with the lowest median error in this cell",
+            "title": "Best Baseline Id"
+          },
           "failure_rate": {
             "description": "n_failed / (n_paired + n_failed)",
             "maximum": 1,
@@ -219,7 +240,7 @@
             "type": "number"
           },
           "headline": {
-            "description": "Eligible for headline tables: admitted horizon and no model failures",
+            "description": "Eligible for headline tables: admitted horizon and failure_rate <= 0.01",
             "title": "Headline",
             "type": "boolean"
           },
@@ -254,12 +275,36 @@
             "default": null,
             "title": "Median Abs Cross Track M"
           },
+          "median_ade_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Median of per-sample ADE over paired grid points up to the horizon",
+            "title": "Median Ade M"
+          },
           "median_error_m": {
             "$ref": "#/components/schemas/Stat"
           },
           "model_id": {
             "title": "Model Id",
             "type": "string"
+          },
+          "n_decomposed": {
+            "default": 0,
+            "description": "Paired samples with a defined true course (along/cross medians use these; samples where the vessel is stationary at the target have no along/cross split)",
+            "title": "N Decomposed",
+            "type": "integer"
+          },
+          "n_evaluable": {
+            "description": "Cutoffs in the cell with evaluable truth",
+            "title": "N Evaluable",
+            "type": "integer"
           },
           "n_failed": {
             "description": "Samples this model failed; excluded for every model in the cell",
@@ -268,6 +313,7 @@
             "type": "integer"
           },
           "n_paired": {
+            "description": "Evaluable cutoffs where every model delivered",
             "title": "N Paired",
             "type": "integer"
           },
@@ -280,22 +326,21 @@
             "type": "number"
           },
           "sample_set_sha256": {
-            "description": "SHA-256 of the sorted (cutoff_id, horizon) keys scored in this cell; identical for every model in the cell (paired scoring)",
+            "description": "SHA-256 of the sorted 'vessel_id|as_of|horizon' keys scored in this cell; identical for every model in the cell and comparable across runs",
             "title": "Sample Set Sha256",
             "type": "string"
           },
           "skill_vs_best_baseline": {
             "anyOf": [
               {
-                "type": "number"
+                "$ref": "#/components/schemas/Stat"
               },
               {
                 "type": "null"
               }
             ],
             "default": null,
-            "description": "1 - error/best-of(persistence, CV, damped velocity) median error",
-            "title": "Skill Vs Best Baseline"
+            "description": "1 - median error / best baseline's median error, with a PAIRED bootstrap CI (same vessel resamples). Null unless every registered baseline is in the run, or when the best baseline's error is ~0 (undefined)"
           },
           "stratum": {
             "title": "Stratum",
@@ -307,6 +352,7 @@
           "horizon_minutes",
           "stratum",
           "admission",
+          "n_evaluable",
           "n_paired",
           "n_vessels",
           "sample_set_sha256",
@@ -492,6 +538,49 @@
           "days"
         ],
         "title": "DatasetSummary",
+        "type": "object"
+      },
+      "DroppedCell": {
+        "description": "A (stratum, horizon) that had cutoffs but too few evaluable samples to score.",
+        "properties": {
+          "horizon_minutes": {
+            "title": "Horizon Minutes",
+            "type": "number"
+          },
+          "n_cutoffs": {
+            "title": "N Cutoffs",
+            "type": "integer"
+          },
+          "n_evaluable": {
+            "title": "N Evaluable",
+            "type": "integer"
+          },
+          "n_failed": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "description": "model_id -> failures among evaluable samples",
+            "title": "N Failed",
+            "type": "object"
+          },
+          "n_paired": {
+            "title": "N Paired",
+            "type": "integer"
+          },
+          "stratum": {
+            "title": "Stratum",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stratum",
+          "horizon_minutes",
+          "n_cutoffs",
+          "n_evaluable",
+          "n_paired",
+          "n_failed"
+        ],
+        "title": "DroppedCell",
         "type": "object"
       },
       "ErrorBody": {

@@ -90,3 +90,31 @@ def sample_cutoffs(candidates: pl.DataFrame, cfg: SamplerConfig) -> pl.DataFrame
         times.append(t_us[i])
         per_day[key] = per_day.get(key, 0) + 1
     return elig.filter(pl.Series(keep)).drop("_day", "_r").sort("vessel_id", "observed_at")
+
+
+def cutoff_candidates_sql(source: str, region_predicate: str, start: str, end: str) -> str:
+    """Candidate cutoff rows with CAUSAL features only (build plan §6.3).
+
+    Unlike segment.segmented_sql, there is no spike filter here: that filter looks at the next
+    report, which would make cutoff selection depend on post-cutoff data. Features use only
+    reports at or before each row. `source` holds canonical rows from at least 3 h before
+    `start`; candidates are rows with start <= observed_at < end inside the region.
+    """
+    return f"""
+    WITH f AS (
+        SELECT vessel_id, observed_at, latitude_deg, longitude_deg, sog_knots, cog_deg,
+               vessel_class, transceiver_class,
+               avg(sog_knots) OVER (PARTITION BY vessel_id ORDER BY observed_at
+                   RANGE BETWEEN INTERVAL 10 MINUTES PRECEDING AND CURRENT ROW) AS sog_mean_10m,
+               avg(sog_knots) OVER w30 AS sog_mean_30m,
+               min(sog_knots) OVER w30 AS sog_min_30m,
+               count(*) OVER (PARTITION BY vessel_id ORDER BY observed_at
+                   RANGE BETWEEN INTERVAL 3 HOURS PRECEDING AND CURRENT ROW) AS n_reports_3h
+        FROM {source}
+        WINDOW w30 AS (PARTITION BY vessel_id ORDER BY observed_at
+                       RANGE BETWEEN INTERVAL 30 MINUTES PRECEDING AND CURRENT ROW)
+    )
+    SELECT * FROM f
+    WHERE observed_at >= {start} AND observed_at < {end}
+      AND {region_predicate} AND transceiver_class IN ('A', 'B')
+    """

@@ -80,7 +80,7 @@ def test_forecast_response_never_carries_truth():
 def cell(model, n=100, **kw):
     s = Stat(estimate=1, ci_low=0.5, ci_high=1.5)
     base = dict(model_id=model, horizon_minutes=60, stratum="underway:ALL",
-                admission="first_class", n_paired=n, n_vessels=10, sample_set_sha256="a" * 64,
+                admission="first_class", n_evaluable=n, n_paired=n, n_vessels=10, sample_set_sha256="a" * 64,
                 n_failed=0, failure_rate=0.0, headline=True,
                 median_error_m=s, mean_error_m=s, p90_error_m=2)  # fmt: skip
     return CellResult(**(base | kw))
@@ -106,9 +106,9 @@ def test_benchmark_run_enforces_pairing_and_operational_only():
             run(results=[cell("cv"), cell("persistence", **other)])
     with pytest.raises(ValidationError, match="undeclared"):
         run(results=[cell("cv"), cell("persistence"), cell("oracle")])
-    with pytest.raises(ValidationError, match="covers every"):  # silent drop of a model
+    with pytest.raises(ValidationError, match="every model in every cell"):  # silent drop
         run(results=[cell("cv")])
-    with pytest.raises(ValidationError, match="covers every"):  # declared horizon never scored
+    with pytest.raises(ValidationError, match="every declared horizon"):  # never scored
         run(horizons_minutes=[60, 120], results=[cell("cv"), cell("persistence")])
     with pytest.raises(ValidationError):
         run(operational=False)  # best-of-N runs cannot be recorded as runs
@@ -119,8 +119,9 @@ def test_benchmark_run_enforces_pairing_and_operational_only():
 def test_cell_failures_are_reported_and_not_headline():
     c = cell("cv", n_failed=5, failure_rate=5 / 105, headline=False)
     assert c.failure_rate == pytest.approx(0.0476, abs=1e-4)
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError):  # 4.8% failures: not headline
         cell("cv", n_failed=5, failure_rate=5 / 105, headline=True)
+    assert cell("cv", n=999, n_failed=1, failure_rate=1 / 1000, headline=True).headline  # 0.1%
     with pytest.raises(ValidationError):
         cell("cv", n_failed=5, failure_rate=0.0, headline=False)
     with pytest.raises(ValidationError):

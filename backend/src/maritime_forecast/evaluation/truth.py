@@ -17,17 +17,25 @@ NOT_EVALUABLE_REASONS = (
 )
 
 
-def truth_sql(targets: str, observations: str, max_bracket_gap_minutes: float = 30.0) -> str:
+def truth_sql(
+    targets: str,
+    observations: str,
+    max_bracket_gap_minutes: float = 30.0,
+    prev_cols: tuple[str, ...] = (),
+) -> str:
     """SQL joining `targets(cutoff_id, vessel_id, target_t, ...)` to bracketed truth.
 
     `observations` must have vessel_id, observed_at, latitude_deg, longitude_deg and may
-    already be restricted to a truth region. Output adds truth_lat, truth_lon, truth_course_deg
-    (bearing prev->next, NULL if stationary), bracket_gap_s, evaluable, reason.
+    already be restricted to a truth region. Output adds p_t/p_lat/p_lon and n_t/n_lat/n_lon
+    (the bracketing reports), truth_lat, truth_lon, bracket_gap_s, evaluable, reason.
+    `prev_cols` copies further columns of the preceding report as p_<col> (e.g. cog_deg, for
+    the true course when a report falls exactly on the target time).
     """
     gap_s = max_bracket_gap_minutes * 60
+    extra = "".join(f", o.{c} AS p_{c}" for c in prev_cols)
     return f"""
     WITH prev AS (
-        SELECT t.*, o.observed_at AS p_t, o.latitude_deg AS p_lat, o.longitude_deg AS p_lon
+        SELECT t.*, o.observed_at AS p_t, o.latitude_deg AS p_lat, o.longitude_deg AS p_lon{extra}
         FROM {targets} t ASOF LEFT JOIN {observations} o
           ON t.vessel_id = o.vessel_id AND t.target_t >= o.observed_at
     ),

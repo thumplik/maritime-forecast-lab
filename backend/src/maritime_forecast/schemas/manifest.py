@@ -269,4 +269,10 @@ class SplitManifest(BaseModel):
             return a if a == b else None
         a = self.split_of(vessel_id, start if self.periods else None)
         b = self.split_of(vessel_id, end if self.periods else None)
-        return a if a == b else None
+        if a != b:
+            return None
+        if self.periods and any(  # no other period may lie inside the window
+            p.split != a and p.start < end and p.end > start for p in self.periods
+        ):
+            return None
+        return a

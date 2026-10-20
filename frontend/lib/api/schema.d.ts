@@ -112,6 +112,11 @@ export interface components {
             /** Dataset Id */
             dataset_id: string;
             /**
+             * Dropped Cells
+             * @description Never silent: every unscored (stratum, horizon)
+             */
+            dropped_cells?: components["schemas"]["DroppedCell"][];
+            /**
              * Error
              * @default null
              */
@@ -190,13 +195,19 @@ export interface components {
              */
             admission: "first_class" | "experimental";
             /**
+             * Best Baseline Id
+             * @description Baseline with the lowest median error in this cell
+             * @default null
+             */
+            best_baseline_id: string | null;
+            /**
              * Failure Rate
              * @description n_failed / (n_paired + n_failed)
              */
             failure_rate: number;
             /**
              * Headline
-             * @description Eligible for headline tables: admitted horizon and no model failures
+             * @description Eligible for headline tables: admitted horizon and failure_rate <= 0.01
              */
             headline: boolean;
             /** Horizon Minutes */
@@ -212,15 +223,35 @@ export interface components {
              * @default null
              */
             median_abs_cross_track_m: number | null;
+            /**
+             * Median Ade M
+             * @description Median of per-sample ADE over paired grid points up to the horizon
+             * @default null
+             */
+            median_ade_m: number | null;
             median_error_m: components["schemas"]["Stat"];
             /** Model Id */
             model_id: string;
+            /**
+             * N Decomposed
+             * @description Paired samples with a defined true course (along/cross medians use these; samples where the vessel is stationary at the target have no along/cross split)
+             * @default 0
+             */
+            n_decomposed: number;
+            /**
+             * N Evaluable
+             * @description Cutoffs in the cell with evaluable truth
+             */
+            n_evaluable: number;
             /**
              * N Failed
              * @description Samples this model failed; excluded for every model in the cell
              */
             n_failed: number;
-            /** N Paired */
+            /**
+             * N Paired
+             * @description Evaluable cutoffs where every model delivered
+             */
             n_paired: number;
             /** N Vessels */
             n_vessels: number;
@@ -228,15 +259,14 @@ export interface components {
             p90_error_m: number;
             /**
              * Sample Set Sha256
-             * @description SHA-256 of the sorted (cutoff_id, horizon) keys scored in this cell; identical for every model in the cell (paired scoring)
+             * @description SHA-256 of the sorted 'vessel_id|as_of|horizon' keys scored in this cell; identical for every model in the cell and comparable across runs
              */
             sample_set_sha256: string;
             /**
-             * Skill Vs Best Baseline
-             * @description 1 - error/best-of(persistence, CV, damped velocity) median error
+             * @description 1 - median error / best baseline's median error, with a PAIRED bootstrap CI (same vessel resamples). Null unless every registered baseline is in the run, or when the best baseline's error is ~0 (undefined)
              * @default null
              */
-            skill_vs_best_baseline: number | null;
+            skill_vs_best_baseline: components["schemas"]["Stat"] | null;
             /** Stratum */
             stratum: string;
         };
@@ -300,6 +330,29 @@ export interface components {
             source_id?: string | null;
             /** Static Fields Provenance */
             static_fields_provenance?: string | null;
+        };
+        /**
+         * DroppedCell
+         * @description A (stratum, horizon) that had cutoffs but too few evaluable samples to score.
+         */
+        DroppedCell: {
+            /** Horizon Minutes */
+            horizon_minutes: number;
+            /** N Cutoffs */
+            n_cutoffs: number;
+            /** N Evaluable */
+            n_evaluable: number;
+            /**
+             * N Failed
+             * @description model_id -> failures among evaluable samples
+             */
+            n_failed: {
+                [key: string]: number;
+            };
+            /** N Paired */
+            n_paired: number;
+            /** Stratum */
+            stratum: string;
         };
         /** ErrorBody */
         ErrorBody: {
