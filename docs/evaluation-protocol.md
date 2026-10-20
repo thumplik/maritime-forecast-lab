@@ -27,6 +27,36 @@ Membership: `manifest.split_of(vessel, t[, lat, lon])` for a point and `manifest
 
 The P-unseen calibration split is small: 4 days and 164 vessels in the cutoff region. Per-stratum conformal radii (Milestone 4) may need pooled strata or a longer period.
 
+## Leakage invariance (§10, Milestone 2 done-when)
+
+`evaluation/invariance.py` runs every registered model on each cutoff, both on scoped data and on copies where every report after `as_of`, **for every vessel**, has been perturbed. The perturbations are:
+
+- `delete_future`;
+- `shift_future` (positions, SOG and COG altered);
+- spikes at `as_of` + 1 µs, + 1 ms and + 1 s (boundary probes);
+- `flood_future`.
+
+Forecasts must be identical (ignoring `runtime_ms`) and deterministic across repeat calls and fresh instances. Each check runs at horizon/step grids (1 h, 1 min), (6 h, 10 min) and (24 h, 60 min).
+
+Safeguards in the harness itself:
+- Models are built by `factory(store, dataset_id)` with the scoped store. While models run, opening the real archive or the store under test is blocked (`parquet_store.BLOCKED_ROOTS`).
+- Perturbed runs execute first, each on a fresh instance.
+- Self-checks: a perturbation may not alter rows at or before `as_of`, and it must change the target's future. Otherwise the case is reported as `vacuous`, never counted as a pass. The report counts how many comparisons were against `ok` forecasts.
+- Models that declare `reads_beyond_own_history` get the whole dataset as scope.
+
+Controls in the unit tests:
+- a model that peeks at the store past `as_of` is caught;
+- a model that opens the archive by path is blocked;
+- a perturbation that edits the past is rejected.
+
+**Known limitations:**
+- A *process-global* cache keyed without the data version would hide a leak. It needs process isolation; a strict `xfail` test documents this, and the new-forecaster checklist forbids such caches.
+- The harness does not detect protocol leakage (P-unseen exclusion, index period, parameters fitted on test). Those need their own tests when the models that could commit them arrive.
+
+Runs:
+- Unit: 7 synthetic cutoffs.
+- Golden (`make calibrate`): 6 real NOAA cutoffs (underway, stationary, transiting) × 3 grids × 3 models = 378 checks. No violations, no vacuous cases, at least 80% `ok` comparisons, 2 min 42 s.
+
 ## Metrics (§6.5)
 
 Geodesic displacement error (km, nmi) per horizon; ADE/FDE; along/cross-track; median, p90, mean with paired bootstrap 95% CI resampling vessels. Paired: identical (cutoff, horizon) set for every model in a comparison.

@@ -21,6 +21,9 @@ import polars as pl
 from maritime_forecast.config import PROCESSED_DIR, BBox
 
 CANONICAL_ROOT = PROCESSED_DIR / "canonical"
+# Roots no ParquetStore may open (used by the leakage-invariance harness so a model cannot
+# bypass the scoped, perturbed store it is handed by opening the real archive).
+BLOCKED_ROOTS: set[Path] = set()
 _DATASET_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$")
 _PART = re.compile(r"^date=(\d{4}-\d{2}-\d{2})$")
 
@@ -47,6 +50,8 @@ def _utc(t: datetime) -> datetime:
 class ParquetStore:
     def __init__(self, root: Path = CANONICAL_ROOT, con: duckdb.DuckDBPyConnection | None = None):
         self.root = Path(root)
+        if self.root.resolve() in BLOCKED_ROOTS:
+            raise PermissionError(f"opening {self.root} is blocked (invariance check running)")
         self.con = con or connect()
         # Session settings are per connection (cursors do not inherit them). Times must come
         # back in UTC and day partitions are UTC days.

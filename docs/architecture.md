@@ -26,7 +26,11 @@ Other providers: CSV/Parquet ── scripts/import_ais.py --mapping <config/sour
 | `maritime_forecast.storage.parquet_store` | Daily-partitioned store: date pruning, scan, track, causal `history`, vessel summaries, atomic per-day writes |
 | `maritime_forecast.data.segment` | Gap-aware segmentation, spike removal, trailing SOG features, `motion_state` label, display segments/gaps |
 | `maritime_forecast.geo.geodesic` | WGS84 direct/inverse problems, along/cross-track |
-| `maritime_forecast.models.baselines` | Persistence, constant velocity (standard + paper-compatible) |
+| `maritime_forecast.models.baselines` | Pure array functions: persistence, constant velocity, last-two-point velocity |
+| `maritime_forecast.models.base` | Forecaster contract: `AISHistory` (rejects rows after as_of), `ForecastHorizon`, `ModelCapabilities`, `BaseForecaster` (typed failures) |
+| `maritime_forecast.models.{persistence,constant_velocity}` | B0 adapters: `persistence_v1`, `constant_velocity_v1`, `constant_velocity_paper_v1` |
+| `maritime_forecast.models.registry` | model_id -> factory, capabilities |
+| `maritime_forecast.evaluation.invariance` | Leakage-invariance harness |
 | `maritime_forecast.evaluation.windows` | Paper-style fixed windows for §6.6 calibration |
 | `maritime_forecast.evaluation.truth` | Bracketed ground truth that never bridges gaps |
 | `maritime_forecast.evaluation.admission` | Per-stratum horizon admission (plan v0.3 §6.4) |
@@ -100,4 +104,4 @@ Fixed in Milestone 1, found with the synthetic fixture:
 - Longitude interpolation (`geo.geodesic.lon_lerp_sql`, used by truth and by the P-paper grid) and the spike-filter distance take the short way round.
 - The web map unwraps longitudes along a track.
 
-Not yet built: run store, model registry (Milestone 2).
+Not yet built: run store, evaluator runner, damped velocity, constant turn rate, `/models` and `/forecasts` endpoints (Milestone 2 continues).

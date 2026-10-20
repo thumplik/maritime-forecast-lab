@@ -293,3 +293,53 @@ make lint && make web-test && make gen-api
 **Next step:** Smallest first slice of Milestone 2, waiting for your go-ahead (AGENTS.md rule 11):
 - the `TrajectoryForecaster` protocol and registry, with persistence and both constant-velocity modes as adapters;
 - the leakage-invariance test harness (perturb or delete post-cutoff rows; every adapter's output must be unchanged), built on `ParquetStore.history()`.
+
+## 2026-10-20 — Milestone 2 slice 1: forecaster contract, B0 adapters, leakage-invariance harness
+
+**Milestone:** 2 — Baselines and the evaluator
+**Done:**
+- `models/base.py`: `TrajectoryForecaster` protocol.
+  - `AISHistory` raises `LeakageError` on any row after `as_of`; `history_from_store()` builds it over `ParquetStore.history()`.
+  - Also defines `ForecastHorizon` and `ModelCapabilities` (`reads_beyond_own_history` is required).
+  - `BaseForecaster` checks requests against capabilities and turns unsupported cases, exceptions and non-finite outputs into typed `ModelForecast` failures.
+- Adapters:
+  - `persistence_v1`;
+  - `constant_velocity_v1` (standard: anchor on the latest usable SOG/COG report, lead from its own time, skips `sog_implausible`, stale and fallback warnings);
+  - `constant_velocity_paper_v1` (last report extrapolated from `as_of`, no fallback; the causal counterpart of the §6.6 reconstruction, documented).
+- `models/registry.py`: factories have the shape `(store, dataset_id)`.
+- `evaluation/invariance.py`: the leakage-invariance harness (see `docs/evaluation-protocol.md`).
+- Tests:
+  - 169 unit tests plus 1 strict xfail. The xfail documents that a process-global cache would hide a leak.
+  - 3 golden tests.
+  - Controls: the peeking model is caught, the archive bypass is blocked, a perturbation that edits the past is rejected, and vacuous cases are reported.
+  - `history()` boundary is tested to the microsecond.
+
+**Leakage review** (`leakage-reviewer`): no live leak in the models or `history()`. Eight harness and contract weaknesses were fixed before commit:
+
+1. Store-bypassing models could skip the harness (fix: factories take the store; the real archive is blocked during checks).
+2. Checks could be vacuous (fix: must-change self-check, `vacuous` and `ok_comparisons` reporting).
+3. Boundary probed only at +1 s (fix: +1 µs and +1 ms spikes, plus a µs boundary test).
+4. One horizon/step and a narrow scope (fix: 3 grids; whole-dataset scope for models that read beyond their own history).
+5. Run order (fix: perturbed first, fresh instances). A process-global cache remains a documented limitation.
+6. Exceptions were not typed (fix: typed `exception` / `non_finite_output` failures).
+7. The paper adapter vs `calibrate.py` difference was undocumented (fix: documented).
+8. `reads_beyond_own_history` defaulted to False (fix: now required).
+
+Nits fixed: paper-mode stale warning; standard mode skips `sog_implausible` anchors.
+
+**Commands run:**
+```bash
+cd backend && uv run pytest                 # 169 passed, 1 xfailed
+uv run pytest -m golden                     # 3 passed (calibration, real-data invariance) in 2 min 42 s
+```
+
+**Results:** Real-data invariance: 6 NOAA cutoffs × 3 grids × 3 models = 378 checks. No violations, no vacuous cases.
+
+**Blockers / open questions:** none.
+
+**Next step:** Milestone 2 slice 2:
+- the evaluator runner (paired scoring over the sampler, P-known/P-unseen manifests and `truth_sql`, with `not_evaluable` reasons by horizon, vessel-bootstrap CIs and stratification);
+- a `BenchmarkRun` record written to an immutable run store;
+- a first unattended baseline benchmark on June 2023 (P-known and P-unseen).
+
+Then damped velocity (τ fit on train only) and constant turn rate.

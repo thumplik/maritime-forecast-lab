@@ -4,7 +4,7 @@ Research workbench for forecasting where an AIS-tracked vessel will be 1 h – 3
 
 ## Where we are
 
-**Milestone 1 complete (2026-10-20); Milestone 2 — baselines and the evaluator — not started, awaiting go-ahead.** Read API (`make api`), minimal web explorer, CI; `make dev` runs both. Forecast/benchmark contracts exist in `schemas/` (no endpoints yet).
+**Current milestone: 2 — baselines and the evaluator** (started 2026-10-20; Milestone 1 complete). Read API (`make api`), minimal web explorer, CI; `make dev` runs both. Forecast/benchmark contracts exist in `schemas/` (no endpoints yet).
 Status, blockers and next step live in [docs/implementation-log.md](docs/implementation-log.md) — read it first, append to it last.
 
 ## Commands
@@ -67,5 +67,5 @@ Ad-hoc data questions: `uv run --project backend python -c "import duckdb; print
 - `/log-progress` — append a dated entry to the implementation log.
 - `/calibrate` — run and interpret the §6.6 golden-number check.
 - `/milestone-check` — verify a milestone's "done when" criteria before moving on.
-- `/new-forecaster` — checklist for adding a model behind the forecaster contract.
+- `/new-forecaster` — checklist for adding a model behind the forecaster contract (`models/base.py`; register in `models/registry.py`; must pass `evaluation/invariance.py`).
 - `leakage-reviewer` subagent — review a diff for temporal/protocol leakage. Use it before committing evaluator, sampler, retrieval or model changes.
