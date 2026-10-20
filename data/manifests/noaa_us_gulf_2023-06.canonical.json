@@ -1,130 +1,130 @@
 {
-  "built_at": "2026-10-20T02:23:53+00:00",
+  "built_at": "2026-10-20T12:34:29+00:00",
   "canonical_version": "canonical-v1",
   "dataset_id": "noaa_us_gulf_2023-06",
   "days": {
     "2023-06-01": {
-      "rows_out": 3082077,
-      "skipped": true
+      "rows_in": 3082135,
+      "rows_out": 3082077
     },
     "2023-06-02": {
-      "rows_out": 3100647,
-      "skipped": true
+      "rows_in": 3100713,
+      "rows_out": 3100647
     },
     "2023-06-03": {
-      "rows_out": 2633795,
-      "skipped": true
+      "rows_in": 2633828,
+      "rows_out": 2633795
     },
     "2023-06-04": {
-      "rows_out": 2991470,
-      "skipped": true
+      "rows_in": 2991549,
+      "rows_out": 2991470
     },
     "2023-06-05": {
-      "rows_out": 3031862,
-      "skipped": true
+      "rows_in": 3031979,
+      "rows_out": 3031862
     },
     "2023-06-06": {
-      "rows_out": 2866082,
-      "skipped": true
+      "rows_in": 2866142,
+      "rows_out": 2866082
     },
     "2023-06-07": {
-      "rows_out": 3079467,
-      "skipped": true
+      "rows_in": 3079529,
+      "rows_out": 3079467
     },
     "2023-06-08": {
-      "rows_out": 3120865,
-      "skipped": true
+      "rows_in": 3120928,
+      "rows_out": 3120865
     },
     "2023-06-09": {
-      "rows_out": 2935327,
-      "skipped": true
+      "rows_in": 2935395,
+      "rows_out": 2935327
     },
     "2023-06-10": {
       "rows_in": 2090845,
       "rows_out": 2090789
     },
     "2023-06-11": {
-      "rows_out": 2610961,
-      "skipped": true
+      "rows_in": 2611043,
+      "rows_out": 2610961
     },
     "2023-06-12": {
-      "rows_out": 3178305,
-      "skipped": true
+      "rows_in": 3178397,
+      "rows_out": 3178305
     },
     "2023-06-13": {
       "rows_in": 2952789,
       "rows_out": 2952713
     },
     "2023-06-14": {
-      "rows_out": 3159344,
-      "skipped": true
+      "rows_in": 3159403,
+      "rows_out": 3159344
     },
     "2023-06-15": {
-      "rows_out": 2818685,
-      "skipped": true
+      "rows_in": 2818797,
+      "rows_out": 2818685
     },
     "2023-06-16": {
-      "rows_out": 2927579,
-      "skipped": true
+      "rows_in": 2927652,
+      "rows_out": 2927579
     },
     "2023-06-17": {
-      "rows_out": 3080707,
-      "skipped": true
+      "rows_in": 3080749,
+      "rows_out": 3080707
     },
     "2023-06-18": {
-      "rows_out": 2761420,
-      "skipped": true
+      "rows_in": 2761469,
+      "rows_out": 2761420
     },
     "2023-06-19": {
-      "rows_out": 2782239,
-      "skipped": true
+      "rows_in": 2782304,
+      "rows_out": 2782239
     },
     "2023-06-20": {
-      "rows_out": 2955986,
-      "skipped": true
+      "rows_in": 2956024,
+      "rows_out": 2955986
     },
     "2023-06-21": {
-      "rows_out": 3029879,
-      "skipped": true
+      "rows_in": 3029950,
+      "rows_out": 3029879
     },
     "2023-06-22": {
-      "rows_out": 3157232,
-      "skipped": true
+      "rows_in": 3157284,
+      "rows_out": 3157232
     },
     "2023-06-23": {
-      "rows_out": 3078933,
-      "skipped": true
+      "rows_in": 3078987,
+      "rows_out": 3078933
     },
     "2023-06-24": {
-      "rows_out": 2292377,
-      "skipped": true
+      "rows_in": 2292406,
+      "rows_out": 2292377
     },
     "2023-06-25": {
-      "rows_out": 2449992,
-      "skipped": true
+      "rows_in": 2450054,
+      "rows_out": 2449992
     },
     "2023-06-26": {
-      "rows_out": 3108478,
-      "skipped": true
+      "rows_in": 3108554,
+      "rows_out": 3108478
     },
     "2023-06-27": {
-      "rows_out": 3132425,
-      "skipped": true
+      "rows_in": 3132497,
+      "rows_out": 3132425
     },
     "2023-06-28": {
-      "rows_out": 2967451,
-      "skipped": true
+      "rows_in": 2967518,
+      "rows_out": 2967451
     },
     "2023-06-29": {
-      "rows_out": 2832458,
-      "skipped": true
+      "rows_in": 2832512,
+      "rows_out": 2832458
     },
     "2023-06-30": {
-      "rows_out": 3168084,
-      "skipped": true
+      "rows_in": 3168179,
+      "rows_out": 3168084
     }
   },
-  "git_sha": "d11558a042f23851184300e9021eaf8468aa5744-dirty",
+  "git_sha": "257accd910e244f41c0c13925348c36b45332099-dirty",
   "missing_days": [],
   "source_raw": "data/raw/noaa_us_gulf"
 }

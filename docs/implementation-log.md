@@ -56,3 +56,31 @@ cd backend && uv run pytest && uv run ruff check src tests ../scripts
 **Blockers / open questions:** The P-unseen calibration split is small (4 days, 164 cutoff-region vessels). Revisit when Milestone 4 needs per-stratum conformal radii.
 
 **Next step:** Milestone 1 slice 2: promote ingestion into a versioned package API (generic CSV/Parquet column mapping and validation), and partition processed data by date and region with DuckDB query helpers.
+
+## 2026-10-20 — Leakage review of the evaluator, sampler and splits
+
+**Milestone:** 1
+**Done:**
+- Ran the `leakage-reviewer` instructions as a general-purpose subagent. The project agent was created mid-session, so it is not registered until a new session starts. Scope: segment, cutoffs, canonical, truth, windows, admission, splits/manifest, baselines, and the audit/calibrate/make_splits scripts.
+- **Real issue (fixed):** the coverage audit silently dropped constant-velocity failures (missing COG/SOG produced NaN, nan-aware statistics skipped them, and `cv_failed` was always 0). Persistence and CV were therefore scored on different samples, against AGENTS.md rule 8. I confirmed 8,067 such evaluable rows in `coverage_audit_20261020T025237Z`. Fix: `evaluation/paired.py` (with a test). Failures are recorded per model and excluded for all models. The report adds a `CV failed` column.
+- Deterministic dedup tie-break in `canonical.py`. Canonical row counts are unchanged.
+- Latent risks are documented in code, not yet fixed:
+  - The spike filter uses `lead()` (segment.py docstring), so model context must be segmented on data at or before `as_of`.
+  - `evaluation/windows.py` is non-causal and P-paper-only: its last context point is interpolated toward a later report, and windows require full target coverage.
+  - Materialized manifest vessel lists are audit-only and carry no time bound (`SplitManifest.vessels` description).
+- `make_splits.py` output order is now deterministic. Manifest contents are unchanged apart from timestamps.
+
+**Commands run:**
+```bash
+uv run --project backend python scripts/canonicalize.py --force
+uv run --project backend python scripts/calibrate.py          # calibration_20261020T123430Z: PASS, unchanged 4.03/9.65/16.16 km
+uv run --project backend python scripts/coverage_audit.py --rebuild-segments  # coverage_audit_20261020T123532Z
+uv run --project backend python scripts/make_splits.py
+cd backend && uv run pytest   # 58 passed
+```
+
+**Results:** Under paired scoring, underway persistence medians rise slightly (1 h 5.40 → 5.44 km; 24 h 12.93 → 13.05 km) and CV is unchanged. Every conclusion in coverage-audit.md stands. The audit now reports CV failures: 95–123 per underway horizon, 1 per horizon in the transiting stratum.
+
+**Blockers / open questions:** none.
+
+**Next step:** Milestone 1 slice 2: versioned ingestion API (generic CSV/Parquet column mapping and validation) and the partitioned store with DuckDB helpers. Milestone 2 must make context building causal: segment on data at or before `as_of`, and add the leakage invariance test the reviewer's B1 and B2 call for.

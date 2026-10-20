@@ -1,6 +1,6 @@
 # Coverage audit — Milestone 0
 
-**Runs:** `coverage_audit_20261020T024624Z` and `calibration_20261020T024511Z` (commit `725d401`). Per-stratum admission and the transiting stratum: `coverage_audit_20261020T025237Z` (build plan v0.3; same sampler and seed).
+**Runs:** `coverage_audit_20261020T024624Z` and `calibration_20261020T024511Z` (commit `725d401`). Per-stratum admission and the transiting stratum: `coverage_audit_20261020T025237Z` (build plan v0.3; same sampler and seed). **Baseline errors in §4 are from `coverage_audit_20261020T123532Z` (commit `257accd`), which uses paired scoring.** The earlier runs scored CV on fewer samples than persistence; see the 2026-10-20 log entry.
 **Dataset:** `noaa_us_gulf_2023-06`: NOAA MarineCadastre, 2023-06-01 to 2023-06-30, filtered to the U.S. Gulf truth region (manifest `data/manifests/noaa_us_gulf_2023-06-01_2023-06-30.json`).
 **Reproduce:** `make fetch && make canonical && make audit && make calibrate`. The full per-class tables are in each run's `report.md`. This page summarises them.
 
@@ -61,27 +61,29 @@ Stationary strata are first-class at every horizon. The exceptions are hsc_wig (
 
 **Decision:** 1, 2, 3, 6, 12 and 24 h are first-class for every stratum except pleasure_sail at ≥ 6 h and hsc_wig at all horizons. 48 and 72 h are not assessed and need data beyond terrestrial coverage (Milestone 8). Under the v0.2 pooled rule every horizon passed, and that result is superseded.
 
-## 4. Baseline errors (underway; median km, 95% vessel-bootstrap CI)
+## 4. Baseline errors (underway; median km, 95% vessel-bootstrap CI; paired)
+
+Both models are scored on identical samples. CV cannot predict when the anchor report lacks COG (or SOG). Those samples are counted as CV failures and excluded for both models: 95–123 per underway horizon, 1 in the transiting stratum, and about 1,050–1,360 per stationary horizon.
 
 | Horizon | Persistence | Constant velocity | CV mean |
 |---|---|---|---|
-| 1 h | 5.40 [4.99, 5.82] | 5.24 [5.07, 5.41] | 6.72 |
-| 2 h | 6.81 [6.24, 7.45] | 12.83 [12.49, 13.16] | 15.25 |
-| 3 h | 7.52 [6.84, 8.27] | 21.47 [20.95, 22.06] | 24.44 |
-| 6 h | 9.00 [8.18, 9.94] | 49.21 [48.19, 50.29] | 53.74 |
-| 12 h | 10.75 [9.83, 12.05] | 109.0 [107.0, 111.1] | 115.9 |
-| 24 h | 12.93 [11.52, 14.45] | 230.2 [225.8, 235.0] | 246.9 |
+| 1 h | 5.44 [5.02, 5.84] | 5.24 [5.07, 5.41] | 6.72 |
+| 2 h | 6.87 [6.26, 7.53] | 12.83 [12.49, 13.16] | 15.25 |
+| 3 h | 7.57 [6.84, 8.36] | 21.47 [20.95, 22.06] | 24.44 |
+| 6 h | 9.08 [8.27, 10.02] | 49.21 [48.19, 50.29] | 53.74 |
+| 12 h | 10.82 [9.78, 12.11] | 109.0 [107.0, 111.1] | 115.9 |
+| 24 h | 13.05 [11.69, 14.55] | 230.2 [225.8, 235.0] | 246.9 |
 
 **Persistence beats constant velocity from 2 h onwards on the pooled underway set.** Most underway cutoffs in the port are short harbour moves: tugs, ferries and service boats that soon stop or turn around. CV wins only for vessels that keep going:
 
 | Class, median km | 1 h persistence / CV | 3 h persistence / CV | 6 h persistence / CV |
 |---|---|---|---|
-| cargo | 19.0 / **3.9** | 53.1 / **21.7** | 86.0 / **57.2** |
+| cargo | 19.1 / **3.9** | 53.1 / **21.7** | 86.2 / **57.2** |
 | tanker | 17.7 / **4.4** | 46.0 / **23.9** | 62.8 / 61.8 (tie) |
-| tug_tow | **3.4** / 5.3 | **4.5** / 20.5 | **5.7** / 46.1 |
-| passenger | **3.6** / 10.1 | **4.0** / 40.7 | **4.1** / 92.4 |
+| tug_tow | **3.4** / 5.3 | **4.6** / 20.5 | **5.7** / 46.1 |
+| passenger | **3.6** / 10.1 | **4.0** / 40.7 | **4.2** / 92.4 |
 
-**Transiting stratum** (cargo, tanker and passenger ships underway for the last 30 minutes; 6,744 cutoffs from about 1,060 vessels). Median km:
+**Transiting stratum** (cargo, tanker and passenger ships underway for the last 30 minutes; 6,744 cutoffs from about 1,060 vessels; persistence values unchanged under pairing to 0.1 km). Median km:
 
 | Horizon | 1 h | 2 h | 3 h | 6 h | 12 h | 24 h |
 |---|---|---|---|---|---|---|
@@ -114,7 +116,7 @@ The paper's manifests were not obtained. These choices were declared in `scripts
 2. **Class A/B filter:** `TransceiverClass ∈ {A, B}`.
 3. **Stationary jitter removal:** drop reports with SOG < 0.5 kn (or missing SOG) *before* segmentation.
 4. **Segmentation:** a new segment after a gap of more than 30 min, plus single-point spike removal (> 50 kn implied both ways).
-5. **Grid:** 10-min, clock-aligned, linear interpolation inside segments only.
+5. **Grid:** 10-min, clock-aligned, linear interpolation inside segments only. As in the paper's preprocessing, a segment is interpolated whole before windows are cut. The last context grid point (the CV origin) is therefore interpolated toward the first report after it, up to 30 min later. This is faithful to the paper, but it is not causal, so `evaluation/windows.py` is restricted to P-paper calibration. Windows also exist only where the segment continues through all 18 target steps.
 6. **Windows:** 18 context + 18 target steps, stride 18 (3 h spacing), full windows only.
 7. **Vessel-disjoint split:** 20% of MMSIs as test, by SHA-256 hash.
 8. **CV anchor:** SOG and COG of the latest raw report at or before the last context step, extrapolated on the WGS84 geodesic.

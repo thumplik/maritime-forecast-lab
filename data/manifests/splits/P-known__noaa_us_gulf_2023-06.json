@@ -26,11 +26,6 @@
   "vessels": {},
   "counts": {
     "by_split": {
-      "train": {
-        "vessels": 8152,
-        "vessels_in_cutoff_region": 2498,
-        "reports": 46579968
-      },
       "calibration": {
         "vessels": 5800,
         "vessels_in_cutoff_region": 1622,
@@ -40,10 +35,15 @@
         "vessels": 6879,
         "vessels_in_cutoff_region": 2066,
         "reports": 23030198
+      },
+      "train": {
+        "vessels": 8152,
+        "vessels_in_cutoff_region": 2498,
+        "reports": 46579968
       }
     },
     "reports_excluded": 6237939
   },
-  "created_at": "2026-10-20T02:55:24Z",
-  "git_sha": "5fc600df8cb8526b1471236dd65fa1f04a992108-dirty"
+  "created_at": "2026-10-20T12:38:04Z",
+  "git_sha": "257accd910e244f41c0c13925348c36b45332099-dirty"
 }

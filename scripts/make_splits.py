@@ -46,7 +46,7 @@ def materialize(m: SplitManifest, spans: pl.DataFrame) -> SplitManifest:
     kept = days.filter(pl.col("split").is_not_null())
     vessels = {
         s: sorted(g["vessel_id"].unique().to_list())
-        for (s,), g in kept.group_by("split")
+        for (s,), g in kept.sort("split").group_by("split", maintain_order=True)
         if m.vessel_assignment is not None  # lists are only meaningful when vessel-disjoint
     }
     counts = {
@@ -56,7 +56,7 @@ def materialize(m: SplitManifest, spans: pl.DataFrame) -> SplitManifest:
                 "vessels_in_cutoff_region": g.filter("in_cutoff_region")["vessel_id"].n_unique(),
                 "reports": int(g["reports"].sum()),
             }
-            for (s,), g in kept.group_by("split")
+            for (s,), g in kept.sort("split").group_by("split", maintain_order=True)
         },
         "reports_excluded": int(days.filter(pl.col("split").is_null())["reports"].sum()),
     }
