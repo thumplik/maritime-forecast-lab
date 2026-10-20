@@ -2,6 +2,32 @@
 
 Canonical observation schema: build plan §4. The executable contract is `maritime_forecast.schemas.Observation`. A unit test asserts that canonical Parquet columns match its fields in order, and that a canonical row validates. This file records the concrete mapping and decisions.
 
+## Source mappings (any provider → canonical)
+
+Each provider is described by a versioned **source mapping** in `config/sources/<source_id>.yaml`, validated by `maritime_forecast.data.mapping.SourceMapping`. Ingestion (`data/ingest.py`) applies one rule set to every source, so adding a provider means writing YAML, not code.
+
+| Mapping key | Meaning |
+|---|---|
+| `columns` | canonical field → source column. Required: `vessel_id`, `observed_at`, `latitude_deg`, `longitude_deg`. Optional: `sog`, `cog_deg`, `heading_deg`, `nav_status`, `vessel_type`, `length_m`, `width_m`, `draft_m`, `transceiver_class`, `destination`, `eta` |
+| `file_format`, `csv_delimiter` | `csv` (read as text, so parsing follows the mapping) or `parquet` |
+| `timestamp` | `timezone` for naive values (an explicit offset in the value always wins), or a strptime `format`, or `epoch_unit` `s`/`ms` |
+| `sog_unit`, `sog_invalid_at_or_above` | `knots`/`mps`/`kmh`. Speeds at or above the threshold (in source units) are "not available" |
+| `null_values` | per-field strings meaning "not available" (AIS default: nav_status `15`, vessel_type `0`) |
+| `value_maps` | per-field value translation, e.g. `Class A` → `A` |
+| `vessel_class_from` | `ais_code` (numeric ship type, table below) or `text_map` with `vessel_class_text_map` |
+| `static_fields_provenance` | `broadcast` / `backfilled` / `unknown`, stamped on every row |
+| `verified` | true only after the mapping was checked against a real provider file |
+
+Presets: `noaa_marinecadastre` (verified on June 2023) and `dma_denmark` (Danish Maritime Authority, **unverified**). Import any mapped file with `scripts/import_ais.py`.
+
+### Row accounting
+
+Every ingest produces an `IngestReport` in which `rows_in = dropped (by reason) + duplicates_removed + outside_region + rows_out`. Ingestion fails if the counts do not balance.
+
+- Drop reasons, first match wins: `missing_vessel_id`, `bad_timestamp`, `bad_coordinates`, `null_island` (0, 0).
+- A CSV line with the wrong field count is an error. A value that cannot be parsed becomes NULL and the row is dropped or the field nulled, and either way it is counted.
+- Quality flags: `bad_mmsi`, `sog_implausible` (> 60 kn), `sog_sentinel`, `bad_transceiver_class`.
+
 ## NOAA MarineCadastre → canonical
 
 | Canonical | NOAA column | Rule |

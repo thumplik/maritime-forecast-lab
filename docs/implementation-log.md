@@ -84,3 +84,27 @@ cd backend && uv run pytest   # 58 passed
 **Blockers / open questions:** none.
 
 **Next step:** Milestone 1 slice 2: versioned ingestion API (generic CSV/Parquet column mapping and validation) and the partitioned store with DuckDB helpers. Milestone 2 must make context building causal: segment on data at or before `as_of`, and add the leakage invariance test the reviewer's B1 and B2 call for.
+
+## 2026-10-20 — Milestone 1 slice 2: mapped ingestion and partitioned store
+
+**Milestone:** 1
+**Done:**
+- `data/mapping.py`: versioned `SourceMapping` covering columns, timestamp parsing (timezone / format / epoch; explicit offsets win), SOG units, sentinels, value maps, vessel class from AIS code or text, and static-field provenance. Presets are `config/sources/noaa_marinecadastre.yaml` (verified) and `dma_denmark.yaml` (unverified, written from the published layout).
+- `data/canonical.py` (canonical-v2) is now mapping-driven. `staged_sql`, `DROP_REASON_SQL` and `canonical_sql` are shared. `noaa_to_canonical_sql` is a thin wrapper. A new `bad_transceiver_class` flag nulls non-A/B values.
+- `data/ingest.py`: files → store, with a balancing row-accounting `IngestReport`, and a `DatasetManifest` (`schemas/dataset.py`) holding inputs with SHA-256, the per-input report and rows per day. Ingest refuses to mix mappings in one dataset.
+- `storage/parquet_store.py`: daily UTC partitions with date pruning; `scan` (half-open window, bbox, vessels, columns), `track`, causal `history(as_of, hours)`, paginated `vessels`, and atomic per-day `write` with an `expect_days` guard. Dataset ids, columns and timestamps are validated, and values are bound as parameters.
+- `scripts/canonicalize.py` rewritten on the ingest API (one day per call, `expect_days`). New `scripts/import_ais.py` and `make import`.
+- Tests: 87 unit tests (29 new: ingest and store, including injection and path-traversal guards).
+
+**Commands run:**
+```bash
+cd backend && uv run pytest                           # 87 passed
+uv run --project backend python scripts/canonicalize.py   # full June re-ingest via the new API (2 min 53 s)
+python fingerprint.py data/processed/canonical/noaa_us_gulf_2023-06   # order-independent content hash
+```
+
+**Results:** The re-ingested June dataset is **identical** to the pre-refactor data: 87,377,629 rows, same content hash. Ingest report: 87,379,611 rows in, 0 dropped (the raw data was already bbox-filtered), 1,982 duplicates; flags bad_mmsi 43,541, sog_sentinel 99,146, sog_implausible 475. Store on real data: a 24 h causal history query takes 0.02 s, and a one-day bbox vessel summary takes 2.1 s.
+
+**Blockers / open questions:** The DMA mapping is unverified. Verify it against one real DMA day before any Danish benchmark (the paper also reports Danish numbers).
+
+**Next step:** Milestone 1 slice 3: `GET /health`, `/datasets`, `/vessels`, `/vessels/{id}/track` in FastAPI over `ParquetStore` and dataset manifests, with typed errors and input limits.

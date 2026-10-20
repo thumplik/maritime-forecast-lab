@@ -20,6 +20,7 @@ make canonical    # raw NOAA parquet -> canonical §4 schema in data/processed/
 make audit        # Milestone 0 coverage audit -> data/runs/coverage_audit/
 make calibrate    # §6.6 golden-number check against the calibration paper
 make splits       # materialize P-known / P-unseen / P-paper manifests
+make import MAPPING=<preset|yaml> DATASET=<id> FILES="..."   # any provider via config/sources/
 ```
 
 Run one script directly: `uv run --project backend python scripts/<name>.py --help`.
@@ -31,6 +32,7 @@ Ad-hoc data questions: `uv run --project backend python -c "import duckdb; print
 - `scripts/` — thin CLIs over the package (fetch, canonicalize, audit, calibrate).
 - `research/notebooks/` — spike notebooks (jupytext `.py` percent format, so they diff cleanly).
 - `config/regions.yaml` — cutoff and truth regions. Never hardcode coordinates.
+- `config/sources/*.yaml` — provider column mappings. Read data through `storage.ParquetStore`; build model context only with `ParquetStore.history()` (causal).
 - `data/` — gitignored except manifests. See `data/README.md`.
 - `docs/` — specs and findings. Each doc has a single purpose; see `docs/README.md`.
 

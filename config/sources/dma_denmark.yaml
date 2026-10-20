@@ -1,0 +1,58 @@
+# Danish Maritime Authority historical AIS CSV (http://aisdata.ais.dk/), the Danish corpus
+# used by TrAISformer and the calibration paper.
+# UNVERIFIED: written from the published column layout, not yet checked against a real file.
+# Check the header, timestamp format and ship-type labels before using it for a benchmark.
+source_id: dma_denmark
+version: 1
+description: Danish Maritime Authority terrestrial AIS, daily CSV.
+file_format: csv
+columns:
+  vessel_id: MMSI
+  observed_at: "# Timestamp"          # e.g. 01/06/2023 00:00:00, UTC
+  latitude_deg: Latitude
+  longitude_deg: Longitude
+  sog: SOG
+  cog_deg: COG
+  heading_deg: Heading
+  nav_status: Navigational status     # text, e.g. "Under way using engine"
+  vessel_type: Ship type              # text, e.g. "Cargo"
+  length_m: Length
+  width_m: Width
+  draft_m: Draught
+  transceiver_class: Type of mobile   # "Class A" / "Class B" / "Base Station" ...
+  destination: Destination
+timestamp:
+  timezone: UTC
+  format: "%d/%m/%Y %H:%M:%S"
+sog_unit: knots
+null_values:
+  nav_status: ["Unknown value"]
+  vessel_type: ["Undefined"]
+value_maps:
+  transceiver_class: {"Class A": "A", "Class B": "B"}
+vessel_class_from: text_map
+vessel_class_text_map:
+  Cargo: cargo
+  Tanker: tanker
+  Fishing: fishing
+  Passenger: passenger
+  Tug: tug_tow
+  Towing: tug_tow
+  Towing long/wide: tug_tow
+  Pleasure: pleasure_sail
+  Sailing: pleasure_sail
+  HSC: hsc_wig
+  WIG: hsc_wig
+  Pilot: service
+  SAR: service
+  Port tender: service
+  Anti-pollution: service
+  Law enforcement: service
+  Medical: service
+  Dredging: service
+  Diving: service
+  Military: other
+  Other: other
+  Reserved: other
+static_fields_provenance: broadcast
+verified: false

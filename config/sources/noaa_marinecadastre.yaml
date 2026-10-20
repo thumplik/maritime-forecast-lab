@@ -1,0 +1,31 @@
+# NOAA MarineCadastre AccessAIS national daily point files (2015+ CSV layout).
+# Data dictionary: https://www.fisheries.noaa.gov/inport/item/77594
+source_id: noaa_marinecadastre
+version: 1
+description: U.S. Coast Guard terrestrial AIS, one-minute down-sampled, via NOAA MarineCadastre.
+file_format: csv
+columns:
+  vessel_id: MMSI
+  observed_at: BaseDateTime   # UTC, ISO-like without offset
+  latitude_deg: LAT
+  longitude_deg: LON
+  sog: SOG
+  cog_deg: COG
+  heading_deg: Heading
+  nav_status: Status
+  vessel_type: VesselType
+  length_m: Length
+  width_m: Width
+  draft_m: Draft
+  transceiver_class: TransceiverClass
+timestamp:
+  timezone: UTC
+sog_unit: knots
+sog_invalid_at_or_above: 102.2
+null_values:
+  nav_status: ["15"]     # undefined
+  vessel_type: ["0"]     # not available
+vessel_class_from: ais_code
+# NOAA back-fills name, IMO, type and dimensions from the AIS Vessel Identification Database.
+static_fields_provenance: backfilled
+verified: true   # June 2023 files, Milestone 0
