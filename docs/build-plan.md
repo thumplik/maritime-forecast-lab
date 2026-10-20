@@ -1,10 +1,19 @@
 # Maritime Forecast Lab — Codex Build Plan
 
-**Version:** 0.2  
+**Version:** 0.3  
 **Date:** 2026-10-19  
 **Purpose:** Build a reproducible, extensible system for forecasting a vessel's geographic trajectory over the next hours to days from AIS history.
 
-## 0. What changed from v0.1
+## 0. What changed
+
+### v0.3 (2026-10-19, from the Milestone 0 findings in `docs/coverage-audit.md`)
+
+1. **Horizon admission is decided per stratum** (vessel class × motion state), not pooled. Tugs, which stay inside coverage, make up about 60% of underway cutoffs and were enough on their own to pass the pooled rule at every horizon (§6.4).
+2. **Damped-velocity baseline** added to B0. Persistence beats constant velocity from 2 h onward on the pooled Houston underway set, so a baseline whose speed decays over time is the honest bar (§5 B0, Milestone 2).
+3. **Transiting stratum** is reported as a headline stratum alongside the pooled numbers: cargo, tanker and passenger-ship cutoffs that have been underway for the last 30 minutes. This is where route knowledge should matter (§6.3).
+
+### v0.2 (changes from v0.1)
+
 
 v0.1's evaluation guardrails are kept intact. The changes are about sequencing, scope, and closing gaps the review found.
 
@@ -86,6 +95,7 @@ model registry              evaluation engine <+
 +-- Persistence                 +-- paired scoring on identical evaluable set
 +-- Constant velocity           +-- along/cross-track decomposition
 +-- Constant turn rate          +-- bootstrap CIs, stratification
++-- Damped velocity             |
 +-- Route retrieval             +-- conformal radii
 +-- Timestral (3 variants)      +-- golden-number calibration
 +-- TrAISformer (paper reimpl.) +-- immutable runs
@@ -234,6 +244,7 @@ class TrajectoryForecaster(Protocol):
 - **Persistence:** stays at the last position. Strong for stationary vessels.
 - **Constant velocity:** travels `SOG × elapsed` along `COG` on the WGS84 geodesic from the last valid observation. Implement a "paper-compatible" mode that uses the anchor report's speed and course exactly as the calibration paper describes.
 - **Constant turn rate:** estimates turn rate from recent COG history and holds it, with a configurable cap and decay.
+- **Damped velocity:** travels along COG with speed decaying exponentially from the anchor SOG, `v(t) = SOG · exp(−t/τ)`. Distance therefore saturates at `SOG · τ`. τ is fit per vessel class on protocol-permitted training data only (it must never be tuned on test). τ → ∞ recovers constant velocity, and τ → 0 recovers persistence.
 - Respect stale observation timestamps and surface warnings.
 - Never silently constrain paths to water; feasibility is scored separately.
 - Tests: bearing wrap, longitude wrap, high latitudes, zero speed, knot conversion, missing COG, irregular timestamps.
@@ -321,11 +332,18 @@ Uniform sampling over observations would be dominated by moored and anchored ves
 - **Spacing:** cutoffs within one track at least 3 hours apart so evaluated contexts don't share reports.
 - **Caps:** at most K cutoffs per vessel per day (default 2) to stop a few high-volume vessels dominating.
 - **Stratification:** every metric is reported by vessel class and motion state, with sample counts.
+- **Transiting stratum (headline):** underway cutoffs from cargo, tanker and passenger classes (AIS types 60–89) whose trailing 30-minute mean SOG is ≥ 2 kn **and** that had no report below 0.5 kn in those 30 minutes. It is reported alongside the pooled underway set in every headline table, because pooled port metrics are dominated by short harbour moves.
 - Sampler configuration and seed are part of the manifest.
 
 ### 6.4 Horizon admission rule
 
-A horizon becomes first-class only when, in the underway set, at least a configured fraction of cutoffs (default 50%) have valid truth at that horizon **and** the evaluable cutoffs are not dominated by stationary or slow vessels relative to the underway population. Otherwise the horizon is marked experimental in the UI and API. The coverage audit (Milestone 0) applies this rule and records the result in `docs/coverage-audit.md`.
+The rule is applied **per stratum** (vessel class × motion state, plus the transiting stratum). A horizon is first-class for a stratum only when, within that stratum, all three conditions hold:
+
+- at least a configured fraction of its cutoffs (default 50%) have valid truth at that horizon;
+- the evaluable cutoffs are not slower than the stratum's population (default: their mean cutoff SOG is no more than 25% below the stratum's mean);
+- a minimum number of evaluable cutoffs and vessels exist (default 100 cutoffs from 20 vessels).
+
+Strata that fail are marked experimental at that horizon in the UI and API. Results for experimental strata may be shown but are excluded from headline tables. A pooled admission is reported only for information. The coverage audit applies the rule and records the result in `docs/coverage-audit.md`.
 
 ### 6.5 Metrics
 
@@ -334,13 +352,13 @@ A horizon becomes first-class only when, in the underway set, at least a configu
 - **Along-track and cross-track error** relative to the true path, separating "wrong speed" from "wrong route."
 - Median, p90 and mean, with **paired bootstrap 95% CIs** (resampling by vessel, not by sample).
 - **Paired scoring:** all models in a comparison are scored on the identical set of evaluable (cutoff, horizon) pairs. A model that fails on a sample gets a recorded failure, not a silent drop.
-- Skill relative to persistence and constant velocity.
+- Skill relative to persistence, constant velocity and damped velocity (the best of the three per stratum is the reference to beat).
 - Feasibility: implausible speed or acceleration, navigable-mask violations, impossible jumps.
 - Ground-truth availability, evaluable counts and `not_evaluable` reasons by horizon.
 - Runtime and approximate memory.
 - Uncertainty (once added): empirical coverage versus nominal level, and region area.
 
-No accuracy target is advertised before analysis. The basic success condition is **reliably outperforming constant velocity and persistence on an untouched held-out set under P-known and P-unseen**. If that doesn't happen, surface it clearly.
+No accuracy target is advertised before analysis. The basic success condition is **reliably outperforming the best of persistence, constant velocity and damped velocity, per admitted stratum, on an untouched held-out set under P-known and P-unseen**, with the transiting stratum reported separately. If that doesn't happen, surface it clearly.
 
 ### 6.6 Evaluator calibration (golden numbers)
 
@@ -391,7 +409,7 @@ Goal: learn what the data can support before building product.
 ### Milestone 2 — Baselines and the evaluator
 
 **Tasks**
-- Persistence, constant velocity (standard and paper-compatible) and constant turn rate.
+- Persistence, constant velocity (standard and paper-compatible), constant turn rate and damped velocity (τ fit per class on training data).
 - Evaluator: paired scoring, `not_evaluable` handling, ADE/FDE, along/cross-track decomposition, bootstrap CIs by vessel, stratification, feasibility flags against the navigable-water mask.
 - Navigable-water mask from OSM or ENC polygons; optional training-only AIS density mask.
 - `make calibrate` and the golden test (§6.6).

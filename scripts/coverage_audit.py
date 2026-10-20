@@ -27,8 +27,9 @@ import numpy as np
 import polars as pl
 
 from maritime_forecast.config import PROCESSED_DIR, RUNS_DIR, default_region
-from maritime_forecast.data.cutoffs import SamplerConfig, sample_cutoffs
+from maritime_forecast.data.cutoffs import SamplerConfig, sample_cutoffs, transiting_expr
 from maritime_forecast.data.segment import SEGMENT_VERSION, SegmentConfig, segmented_sql
+from maritime_forecast.evaluation.admission import DEFAULT_ADMISSION, admit_by_stratum
 from maritime_forecast.evaluation.bootstrap import vessel_bootstrap_ci
 from maritime_forecast.evaluation.truth import truth_sql
 from maritime_forecast.geo.geodesic import along_cross_track, distance_m, inverse
@@ -154,7 +155,8 @@ def main() -> None:
     last_cutoff = t_max - timedelta(hours=max(HORIZONS_H))
     cand = q(
         f"""SELECT vessel_id, observed_at, latitude_deg, longitude_deg, sog_knots, cog_deg,
-                   vessel_class, transceiver_class, segment_no, sog_mean_10m, n_reports_3h
+                   vessel_class, transceiver_class, segment_no, sog_mean_10m, n_reports_3h,
+                   sog_mean_30m, sog_min_30m
             FROM seg
             WHERE {in_cut} AND observed_at <= TIMESTAMPTZ '{last_cutoff.isoformat()}'
               AND transceiver_class IN ('A', 'B')"""
@@ -168,7 +170,11 @@ def main() -> None:
         s = sample_cutoffs(cand, cfg).with_columns(motion_set=pl.lit(name))
         cut_frames.append(s)
         print(f"{name}: {s.height} cutoffs, {s['vessel_id'].n_unique()} vessels", flush=True)
-    cutoffs = pl.concat(cut_frames).with_row_index("cutoff_id")
+    cutoffs = (
+        pl.concat(cut_frames)
+        .with_row_index("cutoff_id")
+        .with_columns(transiting=(pl.col("motion_set") == "underway") & transiting_expr())
+    )
     summary["sampler"] = {k: v.as_dict() for k, v in samplers.items()}
     summary["last_cutoff"] = str(last_cutoff)
     cutoffs.write_parquet(run_dir / "cutoffs.parquet")
@@ -314,12 +320,32 @@ def main() -> None:
         "max_median_sog_drop": ADMIT_MAX_SOG_DROP,
         "max_class_shift_pp": ADMIT_MAX_CLASS_SHIFT_PP,
     }
-    summary["admission"] = admission
+    summary["admission_pooled"] = admission
+
+    # Per-stratum admission (build plan v0.3 §6.4): motion set x class, plus the transiting
+    # stratum and the pooled underway set for reference.
+    strat = pl.concat(
+        [
+            recs.with_columns(stratum=pl.col("motion_set") + ":" + pl.col("vessel_class")),
+            recs.filter(pl.col("motion_set") == "underway").with_columns(
+                stratum=pl.lit("underway:ALL")
+            ),
+            recs.filter(pl.col("transiting")).with_columns(stratum=pl.lit("underway:TRANSITING")),
+        ]
+    )
+    summary["admission_config"] = DEFAULT_ADMISSION.as_dict()
+    summary["admission"] = admit_by_stratum(strat).to_dicts()
 
     # ---- 6. Baseline error tables -----------------------------------------------------
     err_rows = []
     for (ms, h, cls), g in (
-        pl.concat([recs, recs.with_columns(vessel_class=pl.lit("ALL"))])
+        pl.concat(
+            [
+                recs,
+                recs.with_columns(vessel_class=pl.lit("ALL")),
+                recs.filter(pl.col("transiting")).with_columns(vessel_class=pl.lit("TRANSITING")),
+            ]
+        )
         .filter(pl.col("evaluable"))
         .group_by("motion_set", "horizon_h", "vessel_class")
     ):
@@ -347,6 +373,7 @@ def main() -> None:
         key=lambda r: (
             r["motion_set"],
             r["vessel_class"] != "ALL",
+            r["vessel_class"] != "TRANSITING",
             r["vessel_class"],
             r["horizon_h"],
         )
@@ -461,17 +488,45 @@ def render_report(s: dict, run_id: str) -> str:
         )
     L += [
         "",
-        "## Horizon admission (§6.4)",
+        "## Horizon admission per stratum (build plan v0.3 §6.4)",
         "",
-        "| h | status | coverage | speed | class mix |",
-        "|---|---|---|---|---|",
+        "`first` = first-class. Otherwise experimental, with the failing checks: "
+        "`cov` coverage < 50%, `spd` evaluable mean SOG > 25% below the stratum's, "
+        "`n` fewer than 100 evaluable cutoffs or 20 vessels. Cells show the valid-truth share.",
+        "",
+        "| stratum | cutoffs | " + " | ".join(f"{h} h" for h in s["horizons_h"]) + " |",
+        "|---|---|" + "---|" * len(s["horizons_h"]),
     ]
+    by_stratum: dict = {}
     for r in s["admission"]:
-        f = lambda b: "ok" if b else "FAIL"  # noqa: E731
+        by_stratum.setdefault(r["stratum"], {})[r["horizon_h"]] = r
+
+    def adm_cell(r: dict) -> str:
+        if r["status"] == "first_class":
+            return f"first {pct(r['frac'])}"
+        fails = [
+            k
+            for k, ok in [("cov", r["coverage_ok"]), ("spd", r["speed_ok"]), ("n", r["size_ok"])]
+            if not ok
+        ]
+        return f"exp ({','.join(fails)}) {pct(r['frac'])}"
+
+    order = sorted(
+        by_stratum, key=lambda k: (not k.endswith(":ALL"), not k.endswith(":TRANSITING"), k)
+    )
+    for k in order:
+        hs = by_stratum[k]
+        n = next(iter(hs.values()))["n_cutoffs"]
         L.append(
-            f"| {r['horizon_h']} | **{r['status']}** | {f(r['coverage_ok'])} | "
-            f"{f(r['speed_ok'])} | {f(r['class_mix_ok'])} |"
+            f"| {k} | {n:,} | "
+            + " | ".join(adm_cell(hs[h]) if h in hs else "–" for h in s["horizons_h"])
+            + " |"
         )
+    L += [
+        "",
+        "Pooled rule (v0.2, for reference only): "
+        + ", ".join(f"{r['horizon_h']} h {r['status']}" for r in s["admission_pooled"]),
+    ]
     L += [
         "",
         "## Baseline errors (km; mean/median with 95% vessel-bootstrap CI)",
@@ -482,7 +537,7 @@ def render_report(s: dict, run_id: str) -> str:
     ]
     ci = lambda x: f"{x[0]:.2f} [{x[1]:.2f}, {x[2]:.2f}]"  # noqa: E731
     for r in s["baseline_errors"]:
-        if r["vessel_class"] != "ALL" and r["horizon_h"] not in (1, 3, 6):
+        if r["vessel_class"] not in ("ALL", "TRANSITING") and r["horizon_h"] not in (1, 3, 6):
             continue
         L.append(
             f"| {r['motion_set']} | {r['vessel_class']} | {r['horizon_h']} | {r['n']:,} | "

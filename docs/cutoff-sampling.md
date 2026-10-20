@@ -14,4 +14,8 @@ Normative source: build plan §6.3.
 
 Algorithm (per vessel, per UTC day): list eligible observations in time order, shuffle with the seeded RNG, accept greedily while respecting spacing and the daily cap. Stationary set: same procedure with mean SOG < 0.5 kn; never pooled with underway in headline metrics.
 
+## Transiting stratum (build plan v0.3, §6.3)
+
+A subset of the underway set, not a separate sample. It contains cutoffs whose `vessel_class` is `cargo`, `tanker` or `passenger`, whose trailing 30-minute mean SOG is ≥ 2 kn, and whose trailing 30-minute minimum SOG is ≥ 0.5 kn. It is reported alongside the pooled underway set in headline tables.
+
 Sampler config and seed are written to every run's sidecar.

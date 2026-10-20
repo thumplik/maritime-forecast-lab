@@ -24,6 +24,21 @@ class SamplerConfig:
         return asdict(self) | {"version": SAMPLER_VERSION}
 
 
+TRANSITING_CLASSES = ("cargo", "tanker", "passenger")
+
+
+def transiting_expr(min_mean_sog_kn: float = 2.0, min_sog_kn: float = 0.5) -> pl.Expr:
+    """Build plan v0.3 §6.3 transiting stratum: large-ship classes underway for the last 30 min.
+
+    Needs columns vessel_class, sog_mean_30m, sog_min_30m (trailing windows, no look-ahead).
+    """
+    return (
+        pl.col("vessel_class").is_in(TRANSITING_CLASSES)
+        & (pl.col("sog_mean_30m") >= min_mean_sog_kn)
+        & (pl.col("sog_min_30m") >= min_sog_kn)
+    ).fill_null(False)
+
+
 def eligible(candidates: pl.DataFrame, cfg: SamplerConfig) -> pl.DataFrame:
     """Filter candidate rows (already restricted to the cutoff region) by motion set and history.
 

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 
-SEGMENT_VERSION = "segment-v1"
+SEGMENT_VERSION = "segment-v2"  # v2: trailing 30-min SOG mean/min
 
 
 @dataclass(frozen=True)
@@ -31,7 +31,8 @@ def segmented_sql(source: str, cfg: SegmentConfig = DEFAULT_SEGMENT_CONFIG) -> s
       1. Drop single-point position spikes: a row whose implied speed from both its previous
          and next neighbour exceeds `max_implied_speed_kn` (a glitch, not a fast vessel).
       2. Start a new segment when the gap to the previous report exceeds `gap_minutes`.
-      3. Add trailing 10-minute mean SOG (only reports at or before each row — no look-ahead).
+      3. Add trailing 10- and 30-minute SOG statistics (only reports at or before each row —
+         no look-ahead).
     """
     gap_s = cfg.gap_minutes * 60
     vmax_mps = cfg.max_implied_speed_kn * 1852 / 3600
@@ -74,7 +75,11 @@ def segmented_sql(source: str, cfg: SegmentConfig = DEFAULT_SEGMENT_CONFIG) -> s
                   ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS segment_no,
         avg(sog_knots) OVER (PARTITION BY vessel_id ORDER BY observed_at
                   RANGE BETWEEN INTERVAL 10 MINUTES PRECEDING AND CURRENT ROW) AS sog_mean_10m,
+        avg(sog_knots) OVER w30 AS sog_mean_30m,
+        min(sog_knots) OVER w30 AS sog_min_30m,
         count(*) OVER (PARTITION BY vessel_id ORDER BY observed_at
                   RANGE BETWEEN INTERVAL 3 HOURS PRECEDING AND CURRENT ROW) AS n_reports_3h
     FROM gaps
+    WINDOW w30 AS (PARTITION BY vessel_id ORDER BY observed_at
+                   RANGE BETWEEN INTERVAL 30 MINUTES PRECEDING AND CURRENT ROW)
     """
