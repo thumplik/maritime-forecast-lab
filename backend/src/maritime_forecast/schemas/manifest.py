@@ -91,7 +91,9 @@ class SplitManifest(BaseModel):
     vessel_assignment: VesselAssignment | None = None
     preprocessing: dict = Field(default_factory=dict)
     vessels: dict[SplitName, list[str]] = Field(
-        default_factory=dict, description="Materialized vessel lists observed in the dataset"
+        default_factory=dict,
+        description="AUDIT ONLY. Vessels observed in each split; carries no time bound, so "
+        "never filter data by these lists. Membership is always split_of()/window_split().",
     )
     counts: dict = Field(default_factory=dict)
     created_at: datetime | None = None

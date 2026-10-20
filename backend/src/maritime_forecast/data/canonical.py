@@ -70,7 +70,12 @@ def noaa_to_canonical_sql(source: str) -> str:
     ),
     dedup AS (
         SELECT * FROM typed
-        QUALIFY row_number() OVER (PARTITION BY vessel_id, observed_at ORDER BY _ord) = 1
+        -- Deterministic tie-break on content (scan order is not stable under parallel reads).
+        QUALIFY row_number() OVER (
+            PARTITION BY vessel_id, observed_at
+            ORDER BY latitude_deg, longitude_deg, sog_knots NULLS LAST, cog_deg NULLS LAST,
+                     heading_deg NULLS LAST, _ord
+        ) = 1
     )
     SELECT
         vessel_id, observed_at, latitude_deg, longitude_deg, sog_knots, cog_deg, heading_deg,

@@ -31,6 +31,7 @@ from maritime_forecast.data.cutoffs import SamplerConfig, sample_cutoffs, transi
 from maritime_forecast.data.segment import SEGMENT_VERSION, SegmentConfig, segmented_sql
 from maritime_forecast.evaluation.admission import DEFAULT_ADMISSION, admit_by_stratum
 from maritime_forecast.evaluation.bootstrap import vessel_bootstrap_ci
+from maritime_forecast.evaluation.paired import paired
 from maritime_forecast.evaluation.truth import truth_sql
 from maritime_forecast.geo.geodesic import along_cross_track, distance_m, inverse
 from maritime_forecast.models.baselines import constant_velocity, persistence
@@ -242,9 +243,11 @@ def main() -> None:
         cv_along_m=pl.Series(along),
         cv_cross_m=pl.Series(cross),
     ).with_columns(
-        pl.when(pl.col("evaluable")).then(pl.col(c)).otherwise(None).alias(c)
+        pl.when(pl.col("evaluable")).then(pl.col(c)).otherwise(None).fill_nan(None).alias(c)
         for c in ["err_persistence_m", "err_cv_m", "cv_along_m", "cv_cross_m"]
     )
+    # Paired scoring: a sample where any model failed is dropped for all models and counted.
+    recs = paired(recs, ["err_persistence_m", "err_cv_m"])
     recs.write_parquet(run_dir / "records.parquet")
 
     # ---- 5. Coverage, survivorship, admission -----------------------------------------
@@ -349,25 +352,32 @@ def main() -> None:
         .filter(pl.col("evaluable"))
         .group_by("motion_set", "horizon_h", "vessel_class")
     ):
-        if g.height < 20:
+        pg = g.filter(pl.col("paired"))
+        if pg.height < 20:
             continue
         row = {
             "motion_set": ms,
             "horizon_h": h,
             "vessel_class": cls,
-            "n": g.height,
-            "vessels": g["vessel_id"].n_unique(),
+            "n_evaluable": g.height,
+            "n": pg.height,  # paired: identical samples for every model
+            "vessels": pg["vessel_id"].n_unique(),
+            "failed": {
+                "persistence": int(g["err_persistence_m_failed"].sum()),
+                "cv": int(g["err_cv_m_failed"].sum()),
+            },
         }
+        ids = pg["vessel_id"].to_numpy()
         for col, name in [("err_persistence_m", "persistence"), ("err_cv_m", "cv")]:
-            v = g[col].to_numpy().astype(float) / 1000
-            ids = g["vessel_id"].to_numpy()
-            for stat_name, fn in [("mean", np.nanmean), ("median", np.nanmedian)]:
+            v = pg[col].to_numpy().astype(float) / 1000
+            assert not np.isnan(v).any(), "paired set must contain no failures"
+            for stat_name, fn in [("mean", np.mean), ("median", np.median)]:
                 est, lo, hi = vessel_bootstrap_ci(v, ids, fn, n_boot=args.n_boot)
                 row[f"{name}_{stat_name}_km"] = [est, lo, hi]
-            row[f"{name}_p90_km"] = float(np.nanquantile(v, 0.9))
-        row["cv_abs_along_median_km"] = float(np.nanmedian(np.abs(g["cv_along_m"])) / 1000)
-        row["cv_abs_cross_median_km"] = float(np.nanmedian(np.abs(g["cv_cross_m"])) / 1000)
-        row["cv_failed"] = int(g["err_cv_m"].is_null().sum())
+            row[f"{name}_p90_km"] = float(np.quantile(v, 0.9))
+        # Along/cross-track is undefined where the true course is (truth stationary): nan-aware.
+        row["cv_abs_along_median_km"] = float(np.nanmedian(np.abs(pg["cv_along_m"])) / 1000)
+        row["cv_abs_cross_median_km"] = float(np.nanmedian(np.abs(pg["cv_cross_m"])) / 1000)
         err_rows.append(row)
     err_rows.sort(
         key=lambda r: (
@@ -531,9 +541,12 @@ def render_report(s: dict, run_id: str) -> str:
         "",
         "## Baseline errors (km; mean/median with 95% vessel-bootstrap CI)",
         "",
-        "| set | class | h | n | vessels | persistence median | CV median | CV mean | "
-        "CV p90 | CV |along| med | CV |cross| med |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "Paired: every model is scored on the same samples. `CV failed` = evaluable samples "
+        "where CV could not predict (missing COG/SOG); they are excluded for all models.",
+        "",
+        "| set | class | h | n paired | CV failed | vessels | persistence median | CV median | "
+        "CV mean | CV p90 | CV |along| med | CV |cross| med |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     ci = lambda x: f"{x[0]:.2f} [{x[1]:.2f}, {x[2]:.2f}]"  # noqa: E731
     for r in s["baseline_errors"]:
@@ -541,7 +554,8 @@ def render_report(s: dict, run_id: str) -> str:
             continue
         L.append(
             f"| {r['motion_set']} | {r['vessel_class']} | {r['horizon_h']} | {r['n']:,} | "
-            f"{r['vessels']} | {ci(r['persistence_median_km'])} | {ci(r['cv_median_km'])} | "
+            f"{r['failed']['cv']:,} | {r['vessels']} | {ci(r['persistence_median_km'])} | "
+            f"{ci(r['cv_median_km'])} | "
             f"{ci(r['cv_mean_km'])} | {r['cv_p90_km']:.2f} | {r['cv_abs_along_median_km']:.2f}"
             f" | {r['cv_abs_cross_median_km']:.2f} |"
         )

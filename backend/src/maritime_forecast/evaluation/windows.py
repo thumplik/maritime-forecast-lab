@@ -2,6 +2,13 @@
 
 Each segment (no gap > threshold) is resampled onto a regular grid by linear interpolation
 *within* the segment, then cut into windows of n_ctx context + n_tgt target steps.
+
+CALIBRATION ONLY (P-paper). This mirrors the paper's preprocessing and is not causal:
+  * the last context grid point is interpolated toward the first report *after* it;
+  * a window exists only if the segment continues through all target steps, so vessels
+    that stop or leave coverage drop out instead of being recorded as not evaluable.
+Product evaluation uses the cutoff sampler + evaluation.truth, with context built only from
+observations at or before `as_of`.
 """
 
 from __future__ import annotations

@@ -33,6 +33,12 @@ def segmented_sql(source: str, cfg: SegmentConfig = DEFAULT_SEGMENT_CONFIG) -> s
       2. Start a new segment when the gap to the previous report exceeds `gap_minutes`.
       3. Add trailing 10- and 30-minute SOG statistics (only reports at or before each row —
          no look-ahead).
+
+    CAUSALITY: the spike test uses lead(), i.e. the *next* report. Applied to a full archive,
+    whether the report at a cutoff survives depends on the first report after the cutoff.
+    That is acceptable for truth and for the Milestone 0 audit (affects ~5e-6 of rows), but
+    model context must be built by running this on observations already filtered to
+    `observed_at <= as_of` (Milestone 2 leakage invariance test enforces it).
     """
     gap_s = cfg.gap_minutes * 60
     vmax_mps = cfg.max_implied_speed_kn * 1852 / 3600
