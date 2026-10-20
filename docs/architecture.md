@@ -63,4 +63,23 @@ Measured on the June NOAA data:
 | 32 k-point month track | 0.21 s (2.2 MB) |
 | DMA 8 k-point day track | 0.016 s |
 
-Not yet built: frontend, run store, model registry, CI (Milestone 1 continues).
+## Web explorer (Milestone 1)
+
+`frontend/` is Next.js 16 with a single client page and MapLibre GL 6.
+
+- The browser calls the read API directly (`NEXT_PUBLIC_API_URL`, CORS allows localhost:3000). Nothing is fetched at build time.
+- API types are generated from the backend's OpenAPI schema by `make gen-api` (`lib/api/openapi.json` → `lib/api/schema.d.ts`). CI fails if either drifts.
+- `lib/track.ts` turns a track into separate layers: observed segment lines, gap connectors, gap midpoint labels and report points. A gap of more than 30 min is never part of an observed line. It is drawn amber and dashed with a duration label that is always visible (a gap must always look like a gap).
+- Basemap: OpenFreeMap positron (OSM, no key).
+- Tailwind (listed in the build plan stack) is deferred to Milestone 5. One small stylesheet is enough for this slice.
+
+## CI
+
+`.github/workflows/ci.yml` runs on push to main and on PRs.
+
+- **Backend job:** `uv sync --locked`, ruff, pytest (golden/data tests excluded), and an OpenAPI drift check.
+- **Frontend job:** `npm ci`, a TS-types drift check, typecheck, vitest and `next build`.
+
+No data or model weights are used.
+
+Not yet built: run store, model registry, the Milestone 1 synthetic fixture and manifest-replay checks (see the implementation log).

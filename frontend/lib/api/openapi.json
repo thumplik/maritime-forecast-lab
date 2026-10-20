@@ -1,0 +1,983 @@
+{
+  "components": {
+    "schemas": {
+      "Admission": {
+        "description": "Per-stratum horizon admission (build plan \u00a76.4) from the latest coverage audit.",
+        "properties": {
+          "rule": {
+            "additionalProperties": true,
+            "title": "Rule",
+            "type": "object"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "strata": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "enum": [
+                  "first_class",
+                  "experimental"
+                ],
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "description": "stratum -> horizon hours (as string) -> status",
+            "title": "Strata",
+            "type": "object"
+          }
+        },
+        "required": [
+          "run_id",
+          "rule",
+          "strata"
+        ],
+        "title": "Admission",
+        "type": "object"
+      },
+      "DatasetList": {
+        "properties": {
+          "datasets": {
+            "items": {
+              "$ref": "#/components/schemas/DatasetSummary"
+            },
+            "title": "Datasets",
+            "type": "array"
+          }
+        },
+        "required": [
+          "datasets"
+        ],
+        "title": "DatasetList",
+        "type": "object"
+      },
+      "DatasetSummary": {
+        "properties": {
+          "admission": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Admission"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "canonical_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Version"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "days": {
+            "title": "Days",
+            "type": "integer"
+          },
+          "first_day": {
+            "format": "date",
+            "title": "First Day",
+            "type": "string"
+          },
+          "has_manifest": {
+            "title": "Has Manifest",
+            "type": "boolean"
+          },
+          "ingest": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IngestTotals"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_day": {
+            "format": "date",
+            "title": "Last Day",
+            "type": "string"
+          },
+          "mapping_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mapping Id"
+          },
+          "region": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Region"
+          },
+          "rows": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rows"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "static_fields_provenance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Static Fields Provenance"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "has_manifest",
+          "first_day",
+          "last_day",
+          "days"
+        ],
+        "title": "DatasetSummary",
+        "type": "object"
+      },
+      "ErrorBody": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ErrorBody",
+        "type": "object"
+      },
+      "ErrorDetail": {
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "items": {},
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "ErrorDetail",
+        "type": "object"
+      },
+      "Gap": {
+        "properties": {
+          "duration_s": {
+            "title": "Duration S",
+            "type": "number"
+          },
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "start",
+          "end",
+          "duration_s"
+        ],
+        "title": "Gap",
+        "type": "object"
+      },
+      "Health": {
+        "properties": {
+          "data_root_exists": {
+            "title": "Data Root Exists",
+            "type": "boolean"
+          },
+          "datasets": {
+            "title": "Datasets",
+            "type": "integer"
+          },
+          "git_sha": {
+            "title": "Git Sha",
+            "type": "string"
+          },
+          "models": {
+            "description": "Installed forecasters (none yet)",
+            "items": {
+              "type": "string"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "status": {
+            "const": "ok",
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version",
+          "git_sha",
+          "data_root_exists",
+          "datasets"
+        ],
+        "title": "Health",
+        "type": "object"
+      },
+      "IngestTotals": {
+        "properties": {
+          "dropped": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Dropped",
+            "type": "object"
+          },
+          "duplicates_removed": {
+            "title": "Duplicates Removed",
+            "type": "integer"
+          },
+          "flags": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Flags",
+            "type": "object"
+          },
+          "rows_in": {
+            "title": "Rows In",
+            "type": "integer"
+          },
+          "rows_out": {
+            "title": "Rows Out",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rows_in",
+          "rows_out",
+          "dropped",
+          "duplicates_removed",
+          "flags"
+        ],
+        "title": "IngestTotals",
+        "type": "object"
+      },
+      "Segment": {
+        "properties": {
+          "end": {
+            "format": "date-time",
+            "title": "End",
+            "type": "string"
+          },
+          "n_points": {
+            "title": "N Points",
+            "type": "integer"
+          },
+          "segment": {
+            "title": "Segment",
+            "type": "integer"
+          },
+          "start": {
+            "format": "date-time",
+            "title": "Start",
+            "type": "string"
+          }
+        },
+        "required": [
+          "segment",
+          "start",
+          "end",
+          "n_points"
+        ],
+        "title": "Segment",
+        "type": "object"
+      },
+      "Track": {
+        "properties": {
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "from": {
+            "format": "date-time",
+            "title": "From",
+            "type": "string"
+          },
+          "gap_minutes": {
+            "description": "A gap longer than this starts a new segment",
+            "title": "Gap Minutes",
+            "type": "number"
+          },
+          "gaps": {
+            "description": "Never draw a line across these",
+            "items": {
+              "$ref": "#/components/schemas/Gap"
+            },
+            "title": "Gaps",
+            "type": "array"
+          },
+          "n_points": {
+            "title": "N Points",
+            "type": "integer"
+          },
+          "points": {
+            "$ref": "#/components/schemas/TrackPoints"
+          },
+          "segments": {
+            "items": {
+              "$ref": "#/components/schemas/Segment"
+            },
+            "title": "Segments",
+            "type": "array"
+          },
+          "static_fields_provenance": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Static Fields Provenance"
+          },
+          "to": {
+            "format": "date-time",
+            "title": "To",
+            "type": "string"
+          },
+          "vessel_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vessel Class"
+          },
+          "vessel_id": {
+            "title": "Vessel Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "vessel_id",
+          "from",
+          "to",
+          "gap_minutes",
+          "n_points",
+          "vessel_class",
+          "static_fields_provenance",
+          "warnings",
+          "segments",
+          "gaps",
+          "points"
+        ],
+        "title": "Track",
+        "type": "object"
+      },
+      "TrackPoints": {
+        "description": "Columnar points; index i across all lists is one report.",
+        "properties": {
+          "cog_deg": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Cog Deg",
+            "type": "array"
+          },
+          "heading_deg": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Heading Deg",
+            "type": "array"
+          },
+          "latitude_deg": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Latitude Deg",
+            "type": "array"
+          },
+          "longitude_deg": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Longitude Deg",
+            "type": "array"
+          },
+          "nav_status": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Nav Status",
+            "type": "array"
+          },
+          "observed_at": {
+            "items": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "title": "Observed At",
+            "type": "array"
+          },
+          "quality_flags": {
+            "items": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "title": "Quality Flags",
+            "type": "array"
+          },
+          "segment": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Segment",
+            "type": "array"
+          },
+          "sog_knots": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Sog Knots",
+            "type": "array"
+          }
+        },
+        "required": [
+          "observed_at",
+          "latitude_deg",
+          "longitude_deg",
+          "sog_knots",
+          "cog_deg",
+          "heading_deg",
+          "nav_status",
+          "segment",
+          "quality_flags"
+        ],
+        "title": "TrackPoints",
+        "type": "object"
+      },
+      "VesselPage": {
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "[lon_min, lat_min, lon_max, lat_max]",
+            "title": "Bbox"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "from": {
+            "format": "date-time",
+            "title": "From",
+            "type": "string"
+          },
+          "limit": {
+            "title": "Limit",
+            "type": "integer"
+          },
+          "offset": {
+            "title": "Offset",
+            "type": "integer"
+          },
+          "to": {
+            "format": "date-time",
+            "title": "To",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "vessels": {
+            "items": {
+              "$ref": "#/components/schemas/VesselSummary"
+            },
+            "title": "Vessels",
+            "type": "array"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "from",
+          "to",
+          "total",
+          "limit",
+          "offset",
+          "vessels"
+        ],
+        "title": "VesselPage",
+        "type": "object"
+      },
+      "VesselSummary": {
+        "properties": {
+          "first_seen": {
+            "format": "date-time",
+            "title": "First Seen",
+            "type": "string"
+          },
+          "last_seen": {
+            "format": "date-time",
+            "title": "Last Seen",
+            "type": "string"
+          },
+          "reports": {
+            "title": "Reports",
+            "type": "integer"
+          },
+          "vessel_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vessel Class"
+          },
+          "vessel_id": {
+            "title": "Vessel Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "vessel_id",
+          "vessel_class",
+          "reports",
+          "first_seen",
+          "last_seen"
+        ],
+        "title": "VesselSummary",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Read-only access to canonical AIS datasets. Errors are always `{\"error\": {\"code\", \"message\", \"details\"}}`. Times are UTC; query times must carry an offset.",
+    "title": "Maritime Forecast Lab API",
+    "version": "0.0.1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/datasets": {
+      "get": {
+        "operationId": "datasets_datasets_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatasetList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Datasets",
+        "tags": [
+          "data"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Health"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/vessels": {
+      "get": {
+        "operationId": "vessels_vessels_get",
+        "parameters": [
+          {
+            "description": "Dataset id",
+            "in": "query",
+            "name": "dataset_id",
+            "required": true,
+            "schema": {
+              "description": "Dataset id",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+              "title": "Dataset Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Inclusive, UTC offset required",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive, UTC offset required",
+              "title": "From"
+            }
+          },
+          {
+            "description": "Exclusive, UTC offset required",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exclusive, UTC offset required",
+              "title": "To"
+            }
+          },
+          {
+            "description": "lon_min,lat_min,lon_max,lat_max",
+            "in": "query",
+            "name": "bbox",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 100,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "lon_min,lat_min,lon_max,lat_max",
+              "title": "Bbox"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 1000000,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VesselPage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "dataset_not_found / vessel_not_found"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "too_many_points"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "invalid_parameter / window_too_large"
+          }
+        },
+        "summary": "Vessels",
+        "tags": [
+          "data"
+        ]
+      }
+    },
+    "/vessels/{vessel_id}/track": {
+      "get": {
+        "operationId": "track_vessels__vessel_id__track_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "vessel_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9_-]{1,32}$",
+              "title": "Vessel Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Dataset id",
+            "in": "query",
+            "name": "dataset_id",
+            "required": true,
+            "schema": {
+              "description": "Dataset id",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+              "title": "Dataset Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Inclusive, UTC offset required",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Inclusive, UTC offset required",
+              "title": "From"
+            }
+          },
+          {
+            "description": "Exclusive, UTC offset required",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Exclusive, UTC offset required",
+              "title": "To"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Track"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "dataset_not_found / vessel_not_found"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "too_many_points"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "invalid_parameter / window_too_large"
+          }
+        },
+        "summary": "Track",
+        "tags": [
+          "data"
+        ]
+      }
+    }
+  }
+}

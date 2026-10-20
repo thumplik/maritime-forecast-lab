@@ -4,15 +4,18 @@ Research workbench for forecasting where an AIS-tracked vessel will be 1 h – 3
 
 ## Where we are
 
-**Current milestone: 1 — repository, contracts and data pipeline** (Milestone 0 done; build plan v0.3). Read API exists (`make api`); no frontend or CI yet.
+**Current milestone: 1 — repository, contracts and data pipeline** (Milestone 0 done; build plan v0.3). Read API (`make api`), minimal web explorer and CI exist; `make dev` runs both.
 Status, blockers and next step live in [docs/implementation-log.md](docs/implementation-log.md) — read it first, append to it last.
 
 ## Commands
 
-All Python runs through `uv` against the `backend/` project (Python 3.11+). If `uv` is not on PATH: `export PATH=$HOME/Library/Python/3.9/bin:$PATH`.
+All Python runs through `uv` against the `backend/` project (Python 3.12). Node 24 lives in `~/.local/node/bin` on this machine. If tools are not on PATH: `export PATH=$HOME/.local/node/bin:$HOME/Library/Python/3.9/bin:$PATH` (the Makefile does this).
 
 ```bash
-make setup        # uv sync the backend env
+make setup        # uv sync the backend env + npm ci the frontend
+make dev          # API :8000 + web :3000 (Ctrl-C stops both)
+make web-test     # frontend typecheck + vitest
+make gen-api      # after any API change: regenerate openapi.json + TS types (CI checks drift)
 make test         # unit tests (no network, no local data)
 make lint         # ruff check + format check
 make fetch        # download June 2023 NOAA AIS, filtered to the Gulf truth region (~10 GB transfer, resumable)
@@ -31,7 +34,9 @@ Ad-hoc data questions: `uv run --project backend python -c "import duckdb; print
 ## Layout
 
 - `backend/src/maritime_forecast/` — the package. `config/` (paths, regions), `data/` (ingest, canonicalize, segment, cutoffs), `geo/` (geodesic math), `models/` (forecasters), `evaluation/` (truth, admission, splits, metrics), `schemas/` (Pydantic contracts).
-- `scripts/` — thin CLIs over the package (fetch, canonicalize, audit, calibrate).
+- `scripts/` — thin CLIs over the package (fetch, canonicalize, audit, calibrate), plus `dev.sh`.
+- `frontend/` — Next.js + MapLibre explorer. See `frontend/CLAUDE.md`.
+- `.github/workflows/ci.yml` — smoke CI: ruff, pytest (no data), OpenAPI/TS drift, typecheck, vitest, build.
 - `research/notebooks/` — spike notebooks (jupytext `.py` percent format, so they diff cleanly).
 - `config/regions.yaml` — cutoff and truth regions. Never hardcode coordinates.
 - `config/sources/*.yaml` — provider column mappings. Read data through `storage.ParquetStore`; build model context only with `ParquetStore.history()` (causal).

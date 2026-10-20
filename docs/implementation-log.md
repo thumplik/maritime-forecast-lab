@@ -174,3 +174,41 @@ A 404 on 2023-06-10 for that vessel was confirmed against raw counts: it has no 
 - Build a minimal Next.js + MapLibre frontend that shows a real vessel's track with gaps visibly distinct.
 - Add `make dev` to start both services.
 - Add the CI smoke workflow.
+
+## 2026-10-20 — Milestone 1 slice 4: web explorer, make dev, CI
+
+**Milestone:** 1
+**Done:**
+- Installed Node 24.21.0 LTS in `~/.local/node`, checked against nodejs.org SHASUMS256. There is no Homebrew on this machine.
+- `frontend/`: Next 16.3.8, React 19.3.0, MapLibre GL 6.12.0, TypeScript 5.9.3 and Vitest 5.0.3, all pinned exactly and all at least two weeks old. TypeScript 6 conflicts with openapi-typescript's peer range, so it stays on 5.9.
+- Typed client generated from OpenAPI (`scripts/export_openapi.py` + openapi-typescript).
+- Explorer page features:
+  - dataset and UTC day/span pickers;
+  - a paged vessel list with an MMSI filter and an "only vessels in the current map view" bbox;
+  - a track summary with provenance warnings;
+  - a legend.
+- `lib/track.ts` is pure and tested (9 Vitest tests, including the 200 k-point API maximum).
+- `make dev` (`scripts/dev.sh`, bash 3.2-safe), plus `make setup` / `web-test` / `gen-api`. `.python-version` is now 3.12 to match the env.
+- `.github/workflows/ci.yml`: backend (ruff, pytest, OpenAPI drift) and frontend (TS drift, typecheck, vitest, build).
+
+**Issues found during browser verification (fixed):**
+- MapLibre 6 loads its web worker as a separate ES module that the bundler doesn't emit, so the map stayed blank. Fix: `scripts/copy-maplibre-worker.mjs` copies it to `public/maplibre/` and `setWorkerUrl` points there.
+- Gap labels with `line-center` placement silently vanished on short gaps. They are now midpoint symbols with overlap allowed.
+- Bounds used `Math.min(...xs)`, which overflows on large tracks. It is now a loop.
+- Changing the map-view bbox now resets the vessel paging.
+
+**Commands run:**
+```bash
+cd frontend && npm install && npm run gen:api && npm run typecheck && npm test && npm run build
+./scripts/dev.sh   # then browser verification on real NOAA + DMA data
+cd backend && uv sync --locked && uv run pytest   # 111 passed
+```
+
+**Results:** Verified in the browser on real data. Vessel 212314000 (cargo, NOAA, 2023-06-01 + 3 days) runs Houston Ship Channel → Galveston → Gulf → Sabine Pass → Port Arthur/Beaumont: 1,879 reports, 4 segments, 3 gaps (longest 53 min), with each gap amber and dashed and labelled. The DMA dataset lists 5,826 vessels. The map-view filter gave 1,396 vessels for the Houston view over 3 days.
+
+**Blockers / open questions:** The Claude preview runner cannot execute from `/Volumes/Code` (macOS permission), so the dev servers were started from the shell. This doesn't affect `make dev`.
+
+**Next step:** Close out Milestone 1:
+- a synthetic fixture covering moving, turning, stopping, gaps and an antimeridian crossing, for unit tests only;
+- a P-region manifest;
+- confirm the "done when" criteria with `/milestone-check`.

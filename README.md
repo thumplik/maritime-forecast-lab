@@ -4,7 +4,7 @@ A research workbench for **forecasting where a ship will be** hours to days afte
 
 Pick a vessel and a past moment; the system shows only what was known at that time, runs one or more forecasters, then reveals the real track and scores every model on the same samples.
 
-> **Status:** Milestone 0 — data spike and coverage audit. No app yet. See [docs/implementation-log.md](docs/implementation-log.md).
+> **Status:** Milestone 1 — contracts, data pipeline, read API and a minimal track explorer. See [docs/implementation-log.md](docs/implementation-log.md).
 
 ## Why another AIS forecaster?
 
@@ -18,14 +18,18 @@ Published AIS trajectory-prediction results are often inflated by best-of-N deco
 
 ## Data
 
+Basemap tiles in the web app: [OpenFreeMap](https://openfreemap.org) (OpenStreetMap data, © OpenStreetMap contributors).
+
+
 NOAA MarineCadastre AccessAIS (U.S. Coast Guard terrestrial AIS, public domain). Forecast cutoffs in Houston–Galveston; ground truth anywhere along the U.S. Gulf coast. Calibration period June 2023. Details: [data/README.md](data/README.md).
 
 ## Quick start
 
-Requires [uv](https://docs.astral.sh/uv/) (it installs Python 3.11+ itself).
+Requires [uv](https://docs.astral.sh/uv/) (it installs Python itself) and Node 24 for the web app.
 
 ```bash
-make setup      # create the Python env
+make setup      # Python env + frontend node_modules
+make dev        # API on :8000 and web app on http://localhost:3000
 make test       # unit tests
 make fetch      # ~10 GB download, filtered on the fly to ~1 GB of Gulf data
 make canonical  # canonical observations
@@ -38,8 +42,8 @@ make api        # read API on http://localhost:8000/docs
 
 | # | Milestone |
 |---|---|
-| 0 | Data spike & coverage audit ← *now* |
-| 1 | Repository, contracts, data pipeline |
+| 0 | Data spike & coverage audit ✓ |
+| 1 | Repository, contracts, data pipeline ← *now* |
 | 2 | Baselines & evaluator |
 | 3 | Historical-route retrieval |
 | 4 | Conformal uncertainty |

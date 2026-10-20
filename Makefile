@@ -1,18 +1,30 @@
 # Maritime Forecast Lab. Run `make help` for targets.
 SHELL := /bin/bash
-export PATH := $(HOME)/Library/Python/3.9/bin:$(HOME)/.local/bin:$(PATH)
+export PATH := $(HOME)/.local/node/bin:$(HOME)/Library/Python/3.9/bin:$(HOME)/.local/bin:$(PATH)
 UV  := uv
 PY  := $(UV) run --project backend python
 START ?= 2023-06-01
 END   ?= 2023-06-30
 
-.PHONY: help setup test lint format fetch fetch-list canonical audit calibrate splits import fetch-dma api notebook
+NPM := npm --prefix frontend
+
+.PHONY: help setup dev web-test gen-api test lint format fetch fetch-list canonical audit calibrate splits import fetch-dma api notebook
 
 help:  ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
 
-setup:  ## Create/refresh the backend Python env
+setup:  ## Create/refresh the backend Python env and frontend node_modules
 	cd backend && $(UV) sync
+	$(NPM) ci --no-audit --no-fund
+
+dev:  ## Start API (:8000) and web app (:3000) together
+	./scripts/dev.sh
+
+web-test:  ## Frontend typecheck + unit tests
+	$(NPM) run typecheck && $(NPM) test
+
+gen-api:  ## Regenerate OpenAPI JSON and TypeScript types after API changes
+	$(PY) scripts/export_openapi.py && $(NPM) run gen:api
 
 test:  ## Unit tests (no network, no local data)
 	cd backend && $(UV) run pytest
