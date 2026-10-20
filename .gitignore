@@ -1,0 +1,44 @@
+# Data — never committed (see data/README.md)
+data/raw/*
+data/processed/*
+data/runs/*
+data/manifests/*
+!data/**/.gitkeep
+!data/README.md
+# Dataset manifests are small and are the provenance record; commit them.
+!data/manifests/*.json
+
+# Models, checkpoints, caches
+*.ckpt
+*.pt
+*.safetensors
+.cache/
+hf_cache/
+research/adapters/*/checkpoints/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+.ipynb_checkpoints/
+
+# Node (Milestone 1+)
+node_modules/
+.next/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS / editors
+.DS_Store
+.idea/
+.vscode/
+
+# Claude Code local-only settings
+.claude/settings.local.json

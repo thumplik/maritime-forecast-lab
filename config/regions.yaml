@@ -1,0 +1,25 @@
+# Geographic regions used by the data pipeline and evaluator.
+# Never hardcode these in code — load them via maritime_forecast.config.
+# Bounds are inclusive, in WGS84 degrees.
+
+regions:
+  # Cutoff region: forecasts start here. Matches the calibration paper
+  # (arXiv 2609.25827, NOAA Houston–Galveston, June 2023).
+  houston_galveston:
+    lat_min: 28.0
+    lat_max: 30.5
+    lon_min: -96.0
+    lon_max: -93.3
+
+  # Truth region: withheld ground truth may be drawn from anywhere in here.
+  # U.S. Gulf coast terrestrial AIS coverage, Brownsville TX to the Florida Keys
+  # (Gulf side; stops at -81.0 to exclude the Atlantic coast of Florida).
+  us_gulf:
+    lat_min: 23.5
+    lat_max: 31.0
+    lon_min: -98.0
+    lon_max: -81.0
+
+defaults:
+  cutoff_region: houston_galveston
+  truth_region: us_gulf
