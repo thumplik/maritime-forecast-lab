@@ -10,7 +10,7 @@ Benchmark runs live in `data/runs/benchmarks/<run_id>/` and are immutable: files
 | files.json SHA-256 | `1c8e7b47ba9f04e972ddcfcbc108200a33c7e61f42867982491b9803ac99c962` | `ac7b8dc5464f8f7ec059a53199e026994bd50b2c19d703a16e7e269655e361a3` |
 | Cutoffs (underway + stationary) | 22,639 | 4,977 |
 | Cells scored / dropped (too few evaluable) | 381 / 11 | 375 / 1 |
-| Wall time | 50 min (model time 82 s; the rest is bootstrap) | 3.5 min |
+| Wall time (as run) | 50 min | 3.5 min |
 
 Setup:
 - **Test period:** the manifest's test period (2023-06-23 → 07-01). A cutoff's whole 24 h history and 24 h horizon must lie inside it, so cutoffs fall on 06-24 → 06-30.
@@ -18,6 +18,18 @@ Setup:
 - **Forecasts:** 10-min grid. Truth comes from the U.S. Gulf truth region and is never bridged across gaps longer than 30 min.
 - **Scoring:** paired. A sample counts only if truth is evaluable and every model delivered.
 - **Uncertainty:** 1,000 vessel-bootstrap resamples, shared across models.
+
+### Reproduction check (2026-10-21, runner speed-up in commit 55a1b1d)
+
+Both runs were repeated after the runner speed-up and came out **identical**: every cell, dropped cell and not-evaluable count, and every row of `cutoffs.parquet` and `records.parquet` (407,502 rows for P-known). Only run id, timestamp, git SHA and timings differ.
+
+| | P-known | P-unseen |
+|---|---|---|
+| Re-run id | `P-known_noaa_us_gulf_2023-06_20261021T010233Z` | `P-unseen_noaa_us_gulf_2023-06_20261021T010354Z` |
+| files.json SHA-256 | `4e10a20ce107a15f58e789d5572f847d3186d4fc7173cae3123b2211010f10bb` | `d57d8f8313e73200db002c4eb7d0ac95a2900ec87609db2dc0e50186c8621fd9` |
+| Wall time | **66 s** (was 50 min) | **21 s** (was 3.5 min) |
+
+The slowdown was not the bootstrap, as first assumed. It was an ASOF join over a registered Arrow object; see the implementation log.
 
 ### Headline: underway (pooled), median error km [95% CI]
 

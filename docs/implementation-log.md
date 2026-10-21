@@ -388,7 +388,7 @@ make benchmark PROTOCOL=P-unseen                # 4,977 cutoffs, 3.5 min
 - P-known and P-unseen agree.
 
 **Blockers / open questions:**
-- The P-known run is bootstrap-bound (about 48 of its 50 min). Vectorize `paired_vessel_bootstrap`, or bootstrap only headline strata.
+- The P-known run took 50 min. _(Resolved 2026-10-21: the cause was not the bootstrap; see the next entry.)_
 - Recommendation: drop `constant_velocity_paper_v1` from product benchmarks; its stationary failures make every stationary cell non-headline.
 
 **Next step:** Milestone 2 slice 3:
@@ -397,3 +397,32 @@ make benchmark PROTOCOL=P-unseen                # 4,977 cutoffs, 3.5 min
 - `GET /models`, `POST /forecasts` and `/benchmarks` endpoints;
 - feasibility flags (navigable-water mask);
 - the GeoJSON export.
+
+## 2026-10-21 — Benchmark runner speed-up (50 min → 66 s), results reproduced
+
+**Milestone:** 2
+**Done:**
+- Profiled before optimizing. The planned fix (vectorize the bootstrap) was based on a wrong guess: the bootstrap takes 0.14 s per cell, about 30 s per run.
+- Stage timing on a 4,000-cutoff run: `truth_grid` 387 s, `select_cutoffs` 33 s, predictions 12 s, bootstrap 1.8 s.
+- **Fix 1:** the ASOF join in `truth_grid` read the targets from a registered Arrow object. The same query against a materialized temp table is about 1,800× faster (382 s → 0.21 s for 576 k targets). The targets are now materialized; results are unchanged by construction. `coverage_audit.py` already materialized its targets.
+- **Fix 2:** cutoff selection called `window_split` in Python for 6.8 M candidate rows. `SplitManifest.window_splits` does the same in polars. A test checks it row for row against the scalar rule on 4,000 random windows for P-known, P-unseen, P-paper and a manifest with an interior period.
+- Gotcha for CLAUDE.md: never run ASOF joins (or other heavy joins) against a registered Arrow or polars object; materialize first.
+
+**Commands run:**
+```bash
+cProfile + per-stage timing on a 4,000-cutoff P-known run
+cd backend && uv run pytest                       # 187 passed, 1 xfailed
+make benchmark PROTOCOL=P-known                   # 66 s (was 50 min)
+make benchmark PROTOCOL=P-unseen                  # 21 s (was 3.5 min)
+RunStore.load() on old and new runs, then compared run.json, cutoffs and records
+```
+
+**Results:** Both re-runs are **identical** to the kept runs: run.json fields (except id, time, SHA, timings), all 381 / 375 cells, dropped cells, not-evaluable counts, `cutoffs.parquet`, and `records.parquet` (407,502 rows for P-known). New digests are in `docs/benchmarks.md`.
+
+**Blockers / open questions:** none.
+
+**Next step:** Milestone 2 slice 3:
+- damped velocity (τ per class fit on the train split only, with a protocol-leakage test);
+- constant turn rate;
+- `GET /models` and `POST /forecasts`;
+- drop paper-mode CV from product benchmarks.

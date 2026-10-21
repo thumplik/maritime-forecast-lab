@@ -55,7 +55,8 @@ Ad-hoc data questions: `uv run --project backend python -c "import duckdb; print
 
 ## Gotchas
 
-- DuckDB: run store queries as ONE bound statement (`con.execute(sql, params)`). Chaining `.aggregate()`/`.order()` on a relation built with `params=` re-materializes and was ~2000x slower. Cursors don't inherit `SET TimeZone` — `ParquetStore` sets it per connection.
+- DuckDB: run store queries as ONE bound statement (`con.execute(sql, params)`). Chaining `.aggregate()`/`.order()` on a relation built with `params=` re-materializes and was ~2000x slower. Never ASOF-join (or heavily join) against a registered Arrow/polars object — `CREATE TEMP TABLE ... AS SELECT * FROM <registered>` first (measured ~1800x faster). Cursors don't inherit `SET TimeZone` — `ParquetStore` sets it per connection.
+- Profile before optimizing: the benchmark's 50-min runtime looked like bootstrap cost but was the ASOF join above.
 - FastAPI: no `from __future__ import annotations` in `api/app.py` (routes use `Annotated` limits that reference `settings`).
 
 - NOAA files are ~340 MB zipped / ~1.5 GB CSV per day nationally. `fetch_noaa.py` streams, filters, and deletes them.
