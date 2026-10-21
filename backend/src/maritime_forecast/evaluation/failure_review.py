@@ -98,10 +98,14 @@ def step_diagnostics(forecast, step: int, anchor_lat: float, anchor_lon: float) 
     """Diagnostics at grid index `step` of an ok retrieval forecast."""
     t = forecast.target_times[step]
     p = forecast.points[step]
-    central = next(
-        c for c in forecast.trajectories if c.trajectory_id == forecast.central_trajectory_id
+    central = next((c for c in forecast.trajectories
+                    if c.trajectory_id == forecast.central_trajectory_id), None)  # fmt: skip
+    # No central reference (e.g. v2 holding a stationary target): nothing was held from one.
+    held = (
+        central is not None
+        and central.reference_ends_at is not None
+        and (central.reference_ends_at < t)
     )
-    held = central.reference_ends_at is not None and central.reference_ends_at < t
     cov = [
         c for c in forecast.trajectories if c.reference_ends_at is None or c.reference_ends_at >= t
     ]

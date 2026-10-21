@@ -337,3 +337,22 @@ def test_v2_holds_a_moored_target_where_references_stay(store):
     u2 = v2.predict(hu, ForecastHorizon(AS_OF, 2, 10))
     assert not rr.is_stationary(hu, 0.5)
     assert u1.points == u2.points and u1.trajectories == u2.trajectories
+
+
+def test_gate_releases_where_enough_reference_weight_left_and_v2_is_labelled(store):
+    """With depart_share 0.3 the hold is released once LEAVE_REF (about half the weight) has
+    gone; v2 (depart_share 1.0) holds everywhere and says it is persistence."""
+    as_of = TRAIN_END + timedelta(hours=11)
+    h = history_from_store(store, "lanes", MOORED, as_of, 3)
+    gated = _model(store, stationary_gate=True, depart_share=0.3)
+    f = gated.predict(h, ForecastHorizon(as_of, 6, 10))
+    (note,) = [w for w in f.warnings if w.startswith("stationary target")]
+    held = int(note.split(" at the last position at ")[1].split(" of ")[0])
+    assert 0 < held < len(f.points)  # held early, released after the departure
+    assert gated.config["stationary_policy"] == "hold_unless_references_left"
+    v2 = get_model("route_retrieval_v2", ModelContext(store, "lanes",
+                                                       params={"manifest": _manifest()}))  # fmt: skip
+    assert v2.config["stationary_policy"] == "hold_last_position"
+    assert "persistence" in v2.capabilities().description
+    f2 = v2.predict(h, ForecastHorizon(as_of, 6, 10))
+    assert any("(persistence)" in w for w in f2.warnings)

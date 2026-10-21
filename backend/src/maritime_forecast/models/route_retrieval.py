@@ -341,6 +341,10 @@ class RouteRetrieval(BaseForecaster):
         ):
             why = f"{manifest.protocol} has no train period; the frozen pool needs one"
         config = cfg.as_dict()
+        if cfg.stationary_gate:
+            config["stationary_policy"] = (
+                "hold_last_position" if cfg.depart_share >= 1.0 else "hold_unless_references_left"
+            )
         if manifest is not None and not why:
             config |= {
                 "protocol": manifest.protocol,
@@ -367,7 +371,14 @@ class RouteRetrieval(BaseForecaster):
             installed=not self.unavailable_reason,
             description="Nearest historical segments (protocol-eligible, completed before the "
             "cutoff's pool bound) aligned at the current position and followed forward; "
-            "central path is the similarity-weighted medoid. Similarity is not a probability.",
+            "central path is the similarity-weighted medoid. Similarity is not a probability."
+            + (
+                " Targets stationary at the cutoff (10-min mean SOG < "
+                f"{self.cfg.stationary_max_sog_kn} kn) hold their last position: persistence, "
+                "not retrieval."
+                if self.cfg.stationary_gate and self.cfg.depart_share >= 1.0
+                else ""
+            ),  # fmt: skip
         )
 
     # -- prediction ----------------------------------------------------------------------
@@ -462,16 +473,22 @@ class RouteRetrieval(BaseForecaster):
             warnings.append(f"last report is {age_min:.0f} min older than as_of")
         out_lat, out_lon, central_id = lat[central], lon[central], f"ref{central + 1}"
         if cfg.stationary_gate and is_stationary(history, cfg.stationary_max_sog_kn):
-            moved = np.hypot(px, py) > cfg.depart_m  # held positions; anchor at the origin
-            share = (sim[:, None] * moved).sum(axis=0) / sim.sum()
-            stay = share <= cfg.depart_share
+            if cfg.depart_share >= 1.0:  # unconditional: persistence, references unused
+                stay = np.ones(len(tt), dtype=bool)
+                note = ("stationary target: held at the last position (persistence); the "
+                        "references are not used for the central path")  # fmt: skip
+            else:
+                moved = np.hypot(px, py) > cfg.depart_m  # held positions; anchor at the origin
+                w = np.exp(-(dist - dist.min()) / 2.0)  # relative weights; never all zero
+                stay = (w[:, None] * moved).sum(axis=0) / w.sum() <= cfg.depart_share
+                note = (f"stationary target: held at the last position at {int(stay.sum())} "
+                        f"of {len(tt)} target times where at most {cfg.depart_share:.0%} of the "
+                        "references' weight had moved")  # fmt: skip
             if stay.any():
                 out_lat = np.where(stay, last["latitude_deg"], out_lat)
                 out_lon = np.where(stay, last["longitude_deg"], out_lon)
                 central_id = None  # the path is no longer one candidate's
-                warnings.append(f"stationary target: held at the last position at "
-                                f"{int(stay.sum())} of {len(tt)} target times where most "
-                                "references stayed")  # fmt: skip
+                warnings.append(note)
         extra = {"trajectories": trajectories, "central_trajectory_id": central_id}
         return out_lat.tolist(), out_lon.tolist(), warnings, extra
 
