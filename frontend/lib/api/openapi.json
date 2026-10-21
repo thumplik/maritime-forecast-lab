@@ -192,7 +192,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "description": "Model-specific similarity; not a probability unless calibrated",
             "title": "Similarity"
           },
@@ -380,8 +379,8 @@
             "type": "string"
           },
           "nominal_level": {
-            "exclusiveMaximum": 1,
-            "exclusiveMinimum": 0,
+            "exclusiveMaximum": 1.0,
+            "exclusiveMinimum": 0.0,
             "title": "Nominal Level",
             "type": "number"
           },
@@ -694,15 +693,15 @@
           },
           "history_hours": {
             "default": 24,
-            "exclusiveMinimum": 0,
-            "maximum": 168,
+            "exclusiveMinimum": 0.0,
+            "maximum": 168.0,
             "title": "History Hours",
             "type": "number"
           },
           "horizon_hours": {
             "default": 6,
-            "exclusiveMinimum": 0,
-            "maximum": 72,
+            "exclusiveMinimum": 0.0,
+            "maximum": 72.0,
             "title": "Horizon Hours",
             "type": "number"
           },
@@ -723,8 +722,8 @@
           },
           "step_minutes": {
             "default": 10,
-            "maximum": 60,
-            "minimum": 1,
+            "maximum": 60.0,
+            "minimum": 1.0,
             "title": "Step Minutes",
             "type": "integer"
           },
@@ -829,6 +828,19 @@
         "title": "Gap",
         "type": "object"
       },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
       "Health": {
         "properties": {
           "data_root_exists": {
@@ -844,7 +856,7 @@
             "type": "string"
           },
           "models": {
-            "description": "Installed forecasters (none yet)",
+            "description": "Registered forecasters",
             "items": {
               "type": "string"
             },
@@ -1097,8 +1109,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "model_id": {
             "title": "Model Id",
@@ -1126,7 +1137,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Runtime Ms"
           },
           "status": {
@@ -1161,8 +1171,7 @@
               {
                 "type": "null"
               }
-            ],
-            "default": null
+            ]
           },
           "warnings": {
             "items": {
@@ -1180,6 +1189,115 @@
           "points"
         ],
         "title": "ModelForecast",
+        "type": "object"
+      },
+      "ModelInfo": {
+        "properties": {
+          "calibration_only": {
+            "title": "Calibration Only",
+            "type": "boolean"
+          },
+          "config": {
+            "additionalProperties": true,
+            "description": "Parameters in use (e.g. fitted tau)",
+            "title": "Config",
+            "type": "object"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "installed": {
+            "title": "Installed",
+            "type": "boolean"
+          },
+          "max_horizon_hours": {
+            "title": "Max Horizon Hours",
+            "type": "number"
+          },
+          "min_history_reports": {
+            "title": "Min History Reports",
+            "type": "integer"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "model_version": {
+            "title": "Model Version",
+            "type": "string"
+          },
+          "reads_beyond_own_history": {
+            "title": "Reads Beyond Own History",
+            "type": "boolean"
+          },
+          "step_minutes": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Step Minutes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "model_id",
+          "model_version",
+          "description",
+          "installed",
+          "calibration_only",
+          "reads_beyond_own_history",
+          "max_horizon_hours",
+          "step_minutes",
+          "min_history_reports"
+        ],
+        "title": "ModelInfo",
+        "type": "object"
+      },
+      "ModelList": {
+        "properties": {
+          "dataset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Id"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelInfo"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "parameters_from": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Protocol whose TRAIN-split fit supplies fitted parameters",
+            "title": "Parameters From"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "models"
+        ],
+        "title": "ModelList",
         "type": "object"
       },
       "ModelRef": {
@@ -1529,6 +1647,46 @@
         "title": "TrackPoints",
         "type": "object"
       },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
       "VesselPage": {
         "properties": {
           "bbox": {
@@ -1664,6 +1822,67 @@
         ]
       }
     },
+    "/forecasts": {
+      "post": {
+        "operationId": "forecasts_forecasts_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForecastRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForecastResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "dataset_not_found / vessel_not_found"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "too_many_points"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "invalid_parameter / window_too_large"
+          }
+        },
+        "summary": "Forecasts",
+        "tags": [
+          "models"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "operationId": "health_health_get",
@@ -1682,6 +1901,56 @@
         "summary": "Health",
         "tags": [
           "meta"
+        ]
+      }
+    },
+    "/models": {
+      "get": {
+        "operationId": "models_models_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "dataset_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Dataset Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Models",
+        "tags": [
+          "models"
         ]
       }
     },

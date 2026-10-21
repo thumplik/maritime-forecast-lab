@@ -17,15 +17,14 @@ from pydantic.json_schema import models_json_schema
 from maritime_forecast.api.app import create_app
 from maritime_forecast.config import REPO_ROOT
 from maritime_forecast.schemas.benchmark import BenchmarkRun
-from maritime_forecast.schemas.forecast import ForecastEvaluation, ForecastRequest, ForecastResponse
+from maritime_forecast.schemas.forecast import ForecastEvaluation
 
 OUT = REPO_ROOT / "frontend" / "lib" / "api" / "openapi.json"
 
 
-# Contracts not yet served by an endpoint (Milestone 2), published so the frontend types exist.
+# Contracts not yet served by an endpoint, published so the frontend types exist.
+# ForecastRequest/ForecastResponse are served by POST /forecasts and come from FastAPI.
 CONTRACTS = [
-    (ForecastRequest, "validation"),
-    (ForecastResponse, "serialization"),
     (ForecastEvaluation, "serialization"),
     (BenchmarkRun, "serialization"),
 ]

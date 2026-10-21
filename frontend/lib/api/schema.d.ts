@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/forecasts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Forecasts */
+        post: operations["forecasts_forecasts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -30,6 +47,23 @@ export interface paths {
         };
         /** Health */
         get: operations["health_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Models */
+        get: operations["models_models_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -178,9 +212,8 @@ export interface components {
             /**
              * Similarity
              * @description Model-specific similarity; not a probability unless calibrated
-             * @default null
              */
-            similarity: number | null;
+            similarity?: number | null;
             /** Trajectory Id */
             trajectory_id: string;
         };
@@ -468,6 +501,11 @@ export interface components {
              */
             start: string;
         };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
         /** Health */
         Health: {
             /** Data Root Exists */
@@ -478,7 +516,7 @@ export interface components {
             git_sha: string;
             /**
              * Models
-             * @description Installed forecasters (none yet)
+             * @description Registered forecasters
              */
             models?: string[];
             /**
@@ -570,8 +608,7 @@ export interface components {
             config?: {
                 [key: string]: unknown;
             };
-            /** @default null */
-            error: components["schemas"]["ModelError"] | null;
+            error?: components["schemas"]["ModelError"] | null;
             /** Model Id */
             model_id: string;
             /**
@@ -584,11 +621,8 @@ export interface components {
              * @description Central prediction; empty unless status=ok
              */
             points: components["schemas"]["TrackPoint"][];
-            /**
-             * Runtime Ms
-             * @default null
-             */
-            runtime_ms: number | null;
+            /** Runtime Ms */
+            runtime_ms?: number | null;
             /**
              * Status
              * @enum {string}
@@ -598,10 +632,52 @@ export interface components {
             target_times: string[];
             /** Trajectories */
             trajectories?: components["schemas"]["CandidateTrajectory"][];
-            /** @default null */
-            uncertainty: components["schemas"]["ConformalRegion"] | null;
+            uncertainty?: components["schemas"]["ConformalRegion"] | null;
             /** Warnings */
             warnings?: string[];
+        };
+        /** ModelInfo */
+        ModelInfo: {
+            /** Calibration Only */
+            calibration_only: boolean;
+            /**
+             * Config
+             * @description Parameters in use (e.g. fitted tau)
+             */
+            config?: {
+                [key: string]: unknown;
+            };
+            /** Description */
+            description: string;
+            /** Installed */
+            installed: boolean;
+            /** Max Horizon Hours */
+            max_horizon_hours: number;
+            /** Min History Reports */
+            min_history_reports: number;
+            /** Model Id */
+            model_id: string;
+            /** Model Version */
+            model_version: string;
+            /** Reads Beyond Own History */
+            reads_beyond_own_history: boolean;
+            /** Step Minutes */
+            step_minutes: [
+                number,
+                number
+            ];
+        };
+        /** ModelList */
+        ModelList: {
+            /** Dataset Id */
+            dataset_id: string | null;
+            /** Models */
+            models: components["schemas"]["ModelInfo"][];
+            /**
+             * Parameters From
+             * @description Protocol whose TRAIN-split fit supplies fitted parameters
+             */
+            parameters_from?: string | null;
         };
         /** ModelRef */
         ModelRef: {
@@ -734,6 +810,19 @@ export interface components {
             /** Sog Knots */
             sog_knots: (number | null)[];
         };
+        /** ValidationError */
+        ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
+            /** Location */
+            loc: (string | number)[];
+            /** Message */
+            msg: string;
+            /** Error Type */
+            type: string;
+        };
         /** VesselPage */
         VesselPage: {
             /**
@@ -810,6 +899,57 @@ export interface operations {
             };
         };
     };
+    forecasts_forecasts_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForecastRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForecastResponse"];
+                };
+            };
+            /** @description dataset_not_found / vessel_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description too_many_points */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description invalid_parameter / window_too_large */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     health_health_get: {
         parameters: {
             query?: never;
@@ -826,6 +966,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Health"];
+                };
+            };
+        };
+    };
+    models_models_get: {
+        parameters: {
+            query?: {
+                dataset_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

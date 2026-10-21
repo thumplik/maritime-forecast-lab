@@ -23,13 +23,7 @@ dev:  ## Start API (:8000) and web app (:3000) together
 web-test:  ## Frontend typecheck + unit tests
 	$(NPM) run typecheck && $(NPM) test
 
-gen-fit:  ## Fit damped-velocity tau on a protocol's train split: make fit PROTOCOL=P-known
-	$(PY) scripts/fit_damped_velocity.py --protocol $(PROTOCOL)
-
-benchmark:  ## Paired baseline benchmark: make benchmark PROTOCOL=P-known (or P-unseen)
-	$(PY) scripts/run_benchmark.py --protocol $(PROTOCOL)
-
-api:  ## Regenerate OpenAPI JSON and TypeScript types after API changes
+gen-api:  ## Regenerate OpenAPI JSON and TypeScript types after API changes
 	$(PY) scripts/export_openapi.py && $(NPM) run gen:api
 
 test:  ## Unit tests (no network, no local data)
