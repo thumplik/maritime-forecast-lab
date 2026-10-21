@@ -76,6 +76,7 @@ Limitation of both CV modes: no turns, channel geometry or land.
   - **Moored and anchored vessels:** a nearby reference that later departed drags the forecast away. Persistence is better for the stationary set (see the benchmark).
   - **Long horizons:** most references end within hours (they leave coverage), and holding their last position makes 24 h forecasts persistence-like.
   - The antimeridian is not handled in the cell lookup (Gulf data only).
+  - **P-region:** references must lie wholly beyond the 50 km buffer, so retrieval has no reference near any test-side cutoff and fails (`no_references`) on all of them. Measured: 19,843 of 19,843 June P-region cutoffs (`docs/benchmarks.md`). It does not transfer to new waters.
   - Under P-known with the API's deployment protocol, an `as_of` inside the train period rebuilds the pool for that `as_of`, which takes about 1 min.
 
 _Conformal, Timestral and TrAISformer sections are added in Milestones 4–7._

@@ -23,6 +23,14 @@ Each protocol is a manifest: a rule in `maritime_forecast/evaluation/splits.py` 
 | P-paper | Vessel-only: `sha256(MMSI) mod 1000` < 200 → test. Preprocessing parameters are recorded in the manifest. Calibration only | 666 test vessels seen in the cutoff region |
 | P-region | Geographic cut plus the same periods. Test side = Houston–Galveston box (`config/regions.yaml`). A 50 km buffer band around it is excluded. Train side = beyond the buffer. The test side pairs only with the test period, the train side with the train/calibration periods. Membership is decided by the window's *context* positions (all on one side, none in the buffer). Test labels may go anywhere and are scored against truth in the truth region. Train/calibration labels must stay on the train side | test 2,066 vessels / 6.83 M reports; train 6,994 / 31.38 M; calibration 4,610 / 7.87 M |
 
+**P-region benchmarks** (`runner.select_cutoffs`, `region_window_ok`):
+- The test split samples cutoffs in the cutoff region (the test side). Other splits, such as the damped-velocity fit, sample anywhere in the truth region on the train side.
+- The sampler runs on candidates whose cutoff report is on the required side and whose window is in the split's period. Windows are then dropped if any context report leaves that side, or, outside test, if any label report enters the buffer or the test side.
+  - The label window runs through the last target plus the 30 min truth bracket.
+  - The run records the effective sampling region and the number of sampled cutoffs dropped (`sampler.sampling_region`, `sampler.region_dropped`).
+- Test membership therefore depends only on context positions.
+- The navigable mask has no P-region fit, so feasibility is not scored under P-region.
+
 Membership: `manifest.split_of(vessel, t[, lat, lon])` for a point and `manifest.window_split(vessel, start, end[, positions])` for a context-plus-label window. A window whose ends fall in different splits or in a purge gap is excluded. Under P-region the rule uses context positions: test membership is never decided by where a vessel goes after the cutoff, since that would select on the future. Train/calibration windows also require their label positions on the train side.
 
 The P-unseen calibration split is small: 4 days and 164 vessels in the cutoff region. Per-stratum conformal radii (Milestone 4) may need pooled strata or a longer period.
@@ -158,7 +166,7 @@ Forecasts are never constrained to water. Their paths are flagged afterwards (`e
 | Rolling pool (`pool="rolling"`): any segment known complete before `as_of` | Causal; what a deployed system has. Reported only as a labelled variant |
 | P-known: every vessel, including the target's own earlier voyages | §6.2 "known vessel" |
 | Vessel-disjoint (P-unseen): train-assigned vessels only, never the target | §6.2 "unseen vessel". With the frozen pool this is exactly the manifest's training data |
-| P-region | Refused until side-aware eligibility is built |
+| P-region: only segments lying wholly on the train side (bounding box clear of the test region grown by the buffer), from any vessel | Region-disjoint transfer: no reference from the test waters or the buffer band. Segments that pass through the buffer are dropped whole, conservatively. Interpolated track points stay inside the reports' box. The diagnostic rolling pool also admits train-side segments from the test period, which the manifest assigns to no split; the frozen default does not |
 
 Tracks are interpolated only between reports of one segment, whose internal gaps are at most 30 min. Vessel class is the segment's most frequent non-null value, with ties going to the smallest name: the same rule as `history_vessel_class`. It is back-filled by NOAA and flagged by `static_fields_provenance`.
 

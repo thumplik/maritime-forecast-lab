@@ -244,3 +244,36 @@ These replace the first dev runs, `P-known_noaa_us_gulf_2023-06-07_20261021T1829
 | Stationary | n/a (< 10 m) | n/a | −19.3 [−25.4, −14.7] | −15.3 [−23.7, −9.6] |
 
 P-unseen dev is too small to decide anything (pooled underway CIs span zero at every horizon). It is a sanity check only; v2 is developed on P-known dev.
+
+## 2026-10-21 — P-region (region-disjoint), June 2023 test
+
+Protocol P-region on `noaa_us_gulf_2023-06`:
+- **Split:** test (Jun 23–30). The test side is the Houston–Galveston box and the train side is the Gulf beyond a 50 km buffer ([evaluation-protocol.md](evaluation-protocol.md)).
+- **Selection:** test cutoffs have their whole 24 h context inside the box.
+- **Damped τ:** fitted on the train side (`data/model_params/damped_velocity_v1/P-region__noaa_us_gulf_2023-06.json`).
+- **Not scored:** feasibility (there is no P-region navigable mask).
+
+| | All models | Baselines only |
+|---|---|---|
+| Run id | `P-region_noaa_us_gulf_2023-06_20261021T195800Z` | `P-region_noaa_us_gulf_2023-06_20261021T200112Z` |
+| files.json SHA-256 | `c49f75c85239e71f74f9ecd48d06b8557dfbf5c98b25d6c4e5298f57036bc4de` | `b6afbca0babe734617dc2ac45e3dbaf02f84f92b82235db3f8635f61d3e7b65b` |
+| Cutoffs (after the side check; 2,796 sampled cutoffs dropped) | 19,843 | 19,843 |
+| Cells | 0 (no paired samples) | 504 |
+
+- **Code and git SHA:** the code is commit `3fccd4d`. The runs record `3fccd4d-dirty` because only docs were uncommitted.
+- **Superseded first runs:** `…_20261021T194547Z` and `…_20261021T194901Z` came before the leakage review widened the train-side label check by the truth bracket, which changes the P-region τ fit (tug_tow 0.10 → 0.05 h).
+- **Not a held-out result:** these use the June test days (Jun 23–30), which the failure review already read, so they are not held out. The held-out P-region test would be July on `noaa_us_gulf_2023-06-07`, which is gated like every July run.
+
+**Retrieval does not transfer to new waters.** `route_retrieval_v1` returned `no_references` on all 19,843 cutoffs.
+- Under P-region every reference must lie wholly beyond the buffer, so nothing is within 3 km of a Houston cutoff.
+- Paired scoring then leaves no sample for any model, so the all-model run has no cells. Its records hold the failures.
+- This is retrieval's expected limit, like TrAISformer's absolute-position bins (§5 N1). Any transfer needs a different model (kinematics, or route knowledge from another source).
+
+**Baselines on the test side** (median km, paired):
+
+| | Persistence | CV | Damped |
+|---|---|---|---|
+| Underway pooled, 1 h / 6 h / 24 h | 4.20 / **6.52** / **8.78** | 5.60 / 50.9 / 227 | **3.58** / 6.98 / 9.74 |
+| Transiting, 1 h / 6 h / 24 h | 18.7 / 68.0 / **34.0** | **4.90** / 66.8 / 403 | 4.93 / **47.5** / 39.2 |
+
+The baselines need no geography, so they transfer.

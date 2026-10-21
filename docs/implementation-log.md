@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 3 — Historical-route retrieval** (in progress: segment index and `route_retrieval_v1` done and benchmarked; failure review next). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 3 — Historical-route retrieval: complete 2026-10-21** (milestone check below). Next: retrieval v2 on the dev window, one July hold-out run, then Milestone 4 (conformal). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -872,3 +872,50 @@ make splits DS=noaa_us_gulf_2023-06-07 && make fit/mask PROTOCOL={P-known,P-unse
 make benchmark PROTOCOL={P-known,P-unseen} DS=noaa_us_gulf_2023-06-07 SPLIT=dev
 make test   # 282 passed
 ```
+
+## 2026-10-21 — Milestone 3 slice 4 (P-region) and Milestone 3 check: complete
+
+**Milestone:** 3 — historical-route retrieval
+
+**P-region slice (commit `3fccd4d`):**
+- **Cutoff selection:** P-region cutoffs are chosen by context side (`runner.select_cutoffs`, `region_window_ok`). Test windows keep all context in the Houston box. Train windows keep context and labels, through the truth bracket, beyond the 50 km buffer.
+- **Retrieval eligibility:** only segments wholly beyond the buffer.
+- **τ:** a P-region damped-velocity τ was fitted on the Gulf's train side.
+
+**Leakage review:** no leak. Fixed:
+1. The label window now covers the 30 min truth bracket.
+2. The drop count and effective sampling region are recorded in the run.
+3. The rolling-pool caveat and the June-only (not held-out) status are documented.
+
+**Results** (`docs/benchmarks.md`):
+- `P-region_noaa_us_gulf_2023-06_20261021T195800Z`: all models. Retrieval returns `no_references` on 19,843 of 19,843 cutoffs, so there are no paired cells: it does not transfer to new waters.
+- `P-region_noaa_us_gulf_2023-06_20261021T200112Z`: baselines only, 504 cells. The baselines transfer.
+- 2,796 sampled cutoffs were dropped by the side check.
+- The first P-region runs (`…194547Z`, `…194901Z`) are superseded.
+
+**Milestone 3 check:**
+
+| Criterion | Evidence | Status |
+|---|---|---|
+| Protocol-aware segment index (§5 R1) | `data/segment_index.py`, `test_segment_index.py`, golden `test_segment_index_real.py` | met |
+| Matching, alignment, continuation, top-K, central prediction, provenance | `models/route_retrieval.py`, `test_route_retrieval.py` | met |
+| Benchmark vs baselines on identical samples under P-known, P-unseen, P-region | `P-known_…152618Z`, `P-unseen_…153929Z`, P-region runs above (retrieval has no forecasts there, which is recorded) | met |
+| Failure review by category | `docs/failure-review.md`, `scripts/failure_review.py`. Weather-driven turns are documented as not assessable (no archived weather) | met |
+| **Done when:** head-to-head with baselines by vessel class and horizon | Class strata in both runs; `failure-review.md` §5 | met |
+| **Done when:** provenance shows the references behind each forecast | `CandidateTrajectory.reference_segment_ids`, `central_trajectory_id`; tested | met |
+| **Done when:** leakage tests prove no post-cutoff reference was eligible | Unit full-vs-truncated equivalence; frozen forecast unchanged by other vessels' pre-cutoff test-period data; synthetic and real invariance; golden "every reference known by train end" for P-known and P-unseen | met |
+
+**Commands run:**
+```bash
+make fit PROTOCOL=P-region                                    # train-side tau
+make benchmark PROTOCOL=P-region                              # 190 s
+uv run --project backend python scripts/run_benchmark.py --protocol P-region --models persistence_v1 constant_velocity_v1 constant_turn_rate_v1 damped_velocity_v1   # 108 s
+make test && make lint                                        # 283 passed; clean
+cd backend && uv run pytest -m golden tests/golden/test_route_retrieval_real.py tests/golden/test_invariance_real.py tests/golden/test_segment_index_real.py   # 8 passed, 596 s
+```
+
+**Outcome:** Milestone 3 is complete.
+
+**Next step:**
+- **Before Milestone 4:** the retrieval v2 experiments agreed with the user are developed on the P-known dev window, in the order in `docs/failure-review.md` (stationary handling first). The design is then frozen and July is scored once, with baselines, v1 and v2 together (`--confirm-test`, recorded in the ledger).
+- **Milestone 4, smallest first slice:** split-conformal displacement radii per model × horizon × stratum, fitted on the `noaa_us_gulf_2023-06-07` calibration split (Jun 23–30). Empirical coverage is judged on the July records of that one run, per stratum and per July week.

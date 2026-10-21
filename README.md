@@ -89,6 +89,7 @@ Where it does **not** win:
   - P-unseen: it wins up to 3 h (+54% at 1 h), ties at 6–12 h and **loses at 24 h** (−38% [−63, −10]).
   - Without the vessel's own earlier voyages, long-horizon harbour moves are poorly matched by other ships' tracks.
 - **Moored and anchored vessels:** persistence is better at every horizon. At 24 h retrieval's median is 2.9 km against 0.2 km. A nearby reference ship that later left drags the forecast away. Departure timing is a separate problem.
+- **New waters:** under P-region (train elsewhere in the Gulf, test in Houston), retrieval has no historical route nearby and fails on every cutoff. The kinematic baselines, which need no geography, still work there.
 - **References run out:**
   - Most historical segments end within hours, when the reference ship leaves receiver coverage.
   - After that, the forecast holds the reference's last position.
@@ -114,8 +115,8 @@ The success condition for every model is the same: **beat the best of persistenc
 | 0 | Data spike & coverage audit: what horizons can the data support? | ✓ |
 | 1 | Contracts, data pipeline, read API, track explorer, CI | ✓ |
 | 2 | Baselines & the evaluator: paired benchmark, calibration, invariance, feasibility, benchmark API | ✓ |
-| 3 | **Historical-route retrieval:** kNN over train-period segments, aligned and continued along real routes | ← *now* (index, `route_retrieval_v1` benchmarked, [failure review](docs/failure-review.md) done; P-region next) |
-| 4 | Conformal uncertainty: calibrated displacement radii per stratum | |
+| 3 | Historical-route retrieval: kNN over train-period segments, aligned and continued along real routes ([failure review](docs/failure-review.md)) | ✓ (v2 in development on a dev window; fresh July test pending) |
+| 4 | **Conformal uncertainty:** calibrated displacement radii per stratum | ← next |
 | 5 | Workbench UI: forecast comparison, truth overlay, benchmark dashboard | |
 | 6 | Timestral zero-shot adapter (position, velocity, velocity + retrieved route) | |
 | 7 | Research models: TrAISformer via the calibration paper's reimplementation | |
