@@ -199,7 +199,8 @@ class TrajectoryForecaster(Protocol):
 @dataclass
 class BaseForecaster:
     """Shared plumbing: request checks against capabilities, timing, typed failures.
-    Subclasses implement `_predict` returning (lats, lons, warnings)."""
+    Subclasses implement `_predict` returning (lats, lons, warnings), optionally followed by
+    a dict of extra ModelForecast fields (candidate trajectories and their provenance)."""
 
     model_id: str = ""
     config: dict = field(default_factory=dict)
@@ -254,7 +255,8 @@ class BaseForecaster:
             )
         if isinstance(out, ModelForecast):  # adapter-declared failure
             return out
-        lats, lons, warnings = out
+        lats, lons, warnings, *rest = out
+        extra = rest[0] if rest else {}
         values = [float(v) for v in (*lats, *lons)]
         if len(lats) != len(horizon.target_times) or not all(math.isfinite(v) for v in values):
             return self._result(
@@ -287,4 +289,5 @@ class BaseForecaster:
             points=points,
             warnings=warnings,
             runtime_ms=(time.perf_counter() - t0) * 1000,
+            **extra,
         )

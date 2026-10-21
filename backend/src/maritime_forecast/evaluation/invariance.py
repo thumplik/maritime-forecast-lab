@@ -154,9 +154,11 @@ def _blocked(*roots: Path) -> Iterator[None]:
         parquet_store.BLOCKED_ROOTS.difference_update(added)
 
 
-def _scope_files(store, dataset_id, as_of, history_hours, grids, wide) -> list[Path]:
-    if wide:  # index-building models see the whole dataset, as in a benchmark
+def _scope_files(store, dataset_id, as_of, history_hours, grids, wide, wide_days=None):
+    if wide and wide_days is None:  # index-building models see the whole dataset
         return store.files(dataset_id)
+    if wide:  # ... or `wide_days` before as_of (and all of the look-ahead), to bound the cost
+        history_hours = max(history_hours, wide_days * 24)
     lo = as_of - timedelta(hours=history_hours)
     hi = as_of + timedelta(hours=max(h for h, _ in grids), days=1)
     return store.files(dataset_id, lo, hi)
@@ -172,8 +174,11 @@ def check_invariance(
     grids: list[tuple[float, int]] = DEFAULT_GRIDS,
     perturbations: list[Perturbation] = PERTURBATIONS,
     workdir: Path | None = None,
+    wide_days: float | None = None,
 ) -> InvarianceReport:
-    """Run every model on every case and grid: perturbed runs first, then the reference."""
+    """Run every model on every case and grid: perturbed runs first, then the reference.
+    `wide_days` bounds the lookback of the wide scope (models that query the store); their
+    configuration must then not need data from before it."""
     report = InvarianceReport()
     for m, f in factories.items():  # a model that cannot forecast would pass vacuously
         if not f(store, dataset_id).capabilities().installed:
@@ -185,7 +190,7 @@ def check_invariance(
     try:
         for i, (vessel_id, as_of) in enumerate(cases):
             report.cases += 1
-            files = _scope_files(store, dataset_id, as_of, history_hours, grids, wide)
+            files = _scope_files(store, dataset_id, as_of, history_hours, grids, wide, wide_days)
             if not files:
                 raise LookupError(f"no partitions around {as_of} in {dataset_id}")
             src = (

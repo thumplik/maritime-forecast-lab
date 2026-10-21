@@ -183,3 +183,36 @@ Path crossings (the move between grid points passes over land) run 1–4 points 
 4. This is the measured gap a route-aware model (Milestone 3 retrieval) has to close: keep CV's short-horizon accuracy without leaving the channel.
 
 GeoJSON of the paired transiting stratum is written by `make benchmark` to `data/runs/exports/<run_id>/transiting.geojson` (7.9 MB / 1.5 MB). Use `scripts/export_geojson.py` for other filters.
+
+## 2026-10-21 — R1 `route_retrieval_v1` vs B0, June 2023 (Milestone 3)
+
+Same setup as above (test period, seed 20230601, §6.3 sampler, 10-min grid, paired, 1,000 vessel-bootstrap resamples). Retrieval uses the frozen pool: segments known complete by the end of the train period (2023-06-17), and under P-unseen, train-assigned vessels other than the target. Code: the commit that adds `models/route_retrieval.py` (runs made on a working tree based on `9477ff0`, which the run records as its git SHA).
+
+| | P-known | P-unseen |
+|---|---|---|
+| Run id | `P-known_noaa_us_gulf_2023-06_20261021T152618Z` | `P-unseen_noaa_us_gulf_2023-06_20261021T153929Z` |
+| files.json SHA-256 | `7c1ec7c0f28335a0fdf14a9dffcd9fcbe2199043ed1bbde6b6b07a0d421d841b` | `66322275b3ea3043361dafd26958bc0a4f57a10f75ebc4eddaa633718534c14c` |
+| Cutoffs (underway + stationary) | 22,639 | 4,977 |
+| Wall time | 767 s (pool build ~60 s, ~25 ms per retrieval forecast) | 252 s |
+| Retrieval failures (`no_references`) | ≤ 0.1% per cell | 0.3–0.6% per cell |
+
+All baseline numbers match the earlier runs on the cells they share. Retrieval's few failures remove those samples from every model's paired set.
+
+**Paired skill of retrieval against the best baseline per cell** (1 − retrieval / best-baseline median error; 95% vessel-bootstrap CI):
+
+| Stratum | Protocol | 1 h | 2 h | 3 h | 6 h | 12 h | 24 h |
+|---|---|---|---|---|---|---|---|
+| Transiting | P-known | +0.62 [0.57, 0.66] | +0.74 [0.71, 0.77] | +0.77 [0.73, 0.79] | +0.66 [0.59, 0.70] | +0.42 [0.33, 0.48] | +0.31 [0.20, 0.43] |
+| Transiting | P-unseen | +0.69 [0.62, 0.75] | +0.71 [0.61, 0.78] | +0.71 [0.60, 0.80] | +0.50 [0.37, 0.66] | +0.30 [0.16, 0.44] | −0.03 [−0.53, 0.31] |
+| Underway (pooled) | P-known | +0.64 [0.61, 0.67] | +0.62 [0.58, 0.65] | +0.55 [0.50, 0.59] | +0.36 [0.29, 0.42] | +0.17 [0.07, 0.25] | −0.01 [−0.09, 0.07] |
+| Underway (pooled) | P-unseen | +0.54 [0.47, 0.63] | +0.45 [0.26, 0.58] | +0.30 [0.09, 0.45] | +0.01 [−0.28, 0.21] | −0.11 [−0.39, 0.08] | −0.38 [−0.63, −0.10] |
+| Stationary | P-known | n/a | n/a | n/a | n/a | −21.5 [−28.1, −17.0] | −11.7 [−16.8, −7.8] |
+| Stationary | P-unseen | n/a | n/a | n/a | n/a | −37.9 [−75.3, −21.4] | −15.9 [−37.0, −7.0] |
+
+- **Stationary:** n/a means the best baseline's median error is under 10 m, so skill is undefined. Retrieval's median is still worse at every horizon: 0.01–0.31 km at 1–6 h and 2.9 km at 24 h (P-known), against ≤ 0.23 km for persistence.
+- **Medians, transiting, P-known (km):**
+  - Retrieval: 1.62 / 3.45 / 5.88 / 12.80 / 20.83 / 25.61.
+  - Best baseline: CV 4.22 / 13.22 / 25.21, then damped 37.33 / 35.76 / 37.06.
+- **Feasibility, underway pooled, P-known:**
+  - Retrieval puts a point on land in 8.7% → 29.5% of paths (1 → 24 h). Damped is at 26–29% and CV at 61–88%.
+  - Retrieval's path-crossing rate is 28% → 66%: chords between 10-min points cut channel bends.

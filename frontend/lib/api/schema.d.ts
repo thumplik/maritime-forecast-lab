@@ -411,6 +411,11 @@ export interface components {
             /** Points */
             points: components["schemas"]["TrackPoint"][];
             /**
+             * Reference Ends At
+             * @description When the reference runs out (its segment ended). Later points hold the last referenced position; null if the reference covers every target time
+             */
+            reference_ends_at?: string | null;
+            /**
              * Reference Segment Ids
              * @description Provenance: historical segments this path used
              */
@@ -855,6 +860,11 @@ export interface components {
         };
         /** ModelForecast */
         ModelForecast: {
+            /**
+             * Central Trajectory Id
+             * @description The candidate trajectory `points` were taken from, if any
+             */
+            central_trajectory_id?: string | null;
             /** Config */
             config?: {
                 [key: string]: unknown;

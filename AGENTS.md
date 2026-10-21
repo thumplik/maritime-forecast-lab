@@ -18,6 +18,13 @@ The full specification is [docs/build-plan.md](docs/build-plan.md); section numb
 11. **Do not start the next milestone** until acceptance criteria are met or a blocker is documented for review.
 12. **Ask a human only for genuinely blocking choices**: data purchases, network-restricted downloads, major architecture changes, failed calibration. Not routine implementation preferences.
 
+13. **Update the GitHub README after every improvement.** When a change produces new kept benchmark results (a new or changed model, or an evaluator change that moves numbers), update [README.md](README.md) in the same commit:
+    - the results section, with the new numbers;
+    - the figures (`scripts/make_readme_figures.py`, pointed at the new run ids);
+    - the roadmap status.
+
+    Every README number must come from an immutable run listed in [docs/benchmarks.md](docs/benchmarks.md). Never use diagnostic, smoke or calibration-split runs. Report losses as plainly as wins: if the new model does not beat the best baseline in a stratum or at a horizon, the README says so.
+
 ## Leakage invariants (§6.2) — violating any of these is a bug
 
 - A forecast sees only observations with `observed_at <= as_of` for the target vessel, plus auxiliary data the active protocol permits.

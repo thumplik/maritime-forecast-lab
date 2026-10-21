@@ -60,6 +60,11 @@ class CandidateTrajectory(BaseModel):
     reference_segment_ids: list[str] = Field(
         default_factory=list, description="Provenance: historical segments this path used"
     )
+    reference_ends_at: AwareDatetime | None = Field(
+        None,
+        description="When the reference runs out (its segment ended). Later points hold the "
+        "last referenced position; null if the reference covers every target time",
+    )
 
 
 class ConformalRegion(BaseModel):
@@ -101,6 +106,9 @@ class ModelForecast(BaseModel):
     target_times: list[AwareDatetime]
     points: list[TrackPoint] = Field(description="Central prediction; empty unless status=ok")
     trajectories: list[CandidateTrajectory] = Field(default_factory=list)
+    central_trajectory_id: str | None = Field(
+        None, description="The candidate trajectory `points` were taken from, if any"
+    )
     uncertainty: ConformalRegion | None = None
     runtime_ms: float | None = None
     warnings: list[str] = Field(default_factory=list)
@@ -119,9 +127,19 @@ class ModelForecast(BaseModel):
             for tr in self.trajectories:
                 if [p.timestamp for p in tr.points] != self.target_times:
                     raise ValueError("every candidate trajectory must match target_times")
+            if self.central_trajectory_id is not None and self.central_trajectory_id not in {
+                t.trajectory_id for t in self.trajectories
+            }:
+                raise ValueError("central_trajectory_id must name one of the trajectories")
             if self.uncertainty and len(self.uncertainty.radii_m) != len(self.target_times):
                 raise ValueError("one uncertainty radius per target time")
-        elif self.error is None or self.points or self.trajectories or self.uncertainty:
+        elif (
+            self.error is None
+            or self.points
+            or self.trajectories
+            or self.uncertainty
+            or self.central_trajectory_id
+        ):
             raise ValueError(
                 "a non-ok forecast has an error and no points, trajectories or uncertainty"
             )

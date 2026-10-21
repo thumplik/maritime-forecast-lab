@@ -139,6 +139,11 @@ Tracks are interpolated only between reports of one segment, whose internal gaps
 - **Equivalence:** the eligible segments from the full archive equal those from an index built only from reports at or before the cutoff. This is checked on the synthetic fixture plus adversarial tracks, and on real data for both protocols and both pools.
 - **Teeth:** the equivalence breaks with the naive `end + gap` rule, and it breaks without `causal_ends`.
 - **Pool:** a real test-period cutoff only sees segments known by the train end, and under P-unseen only train vessels, never the target.
+- **Forecaster** (`route_retrieval_v1`):
+  - Every reference used by 150 real test cutoffs per protocol was known by the train end; under P-unseen every reference came from a train vessel other than the target (golden).
+  - Perturbing or deleting other vessels' test-period reports *before* the cutoff leaves a frozen-pool forecast byte-identical (unit). The rolling pool changes, which shows the test has teeth.
+  - The invariance harness (post-cutoff perturbations) passes on synthetic and real cutoffs.
+  - The benchmark runner refuses rolling or truncated pools (`diagnostic_only`).
 
 ## Calibration (§6.6)
 

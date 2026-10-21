@@ -482,6 +482,19 @@
             "title": "Points",
             "type": "array"
           },
+          "reference_ends_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "When the reference runs out (its segment ended). Later points hold the last referenced position; null if the reference covers every target time",
+            "title": "Reference Ends At"
+          },
           "reference_segment_ids": {
             "description": "Provenance: historical segments this path used",
             "items": {
@@ -1583,6 +1596,18 @@
       "ModelForecast": {
         "additionalProperties": false,
         "properties": {
+          "central_trajectory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The candidate trajectory `points` were taken from, if any",
+            "title": "Central Trajectory Id"
+          },
           "config": {
             "additionalProperties": true,
             "title": "Config",

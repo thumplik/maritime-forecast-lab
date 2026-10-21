@@ -127,13 +127,18 @@ def segment_index_sql(source: str, cfg: IndexConfig, causal_ends: bool = True) -
 
 def build_segment_index(
     store, dataset_id: str, cfg: IndexConfig | None = None, end: datetime | None = None,
-    _causal_ends: bool = True,
+    _causal_ends: bool = True, start: datetime | None = None,
 ) -> pl.DataFrame:  # fmt: skip
-    """Index of every segment in the dataset (or in data before `end`, for tests).
+    """Index of every segment in the dataset, or in data within [start, end). A forecaster
+    builds from data before its pool bound, so post-cutoff data is never even read; `start`
+    bounds the build (segments begin no earlier than it).
     `_causal_ends=False` exists only so a test can show the causality check has teeth."""
     cfg = cfg or IndexConfig()
-    files = store.files(dataset_id, None, end)
-    where = f" WHERE observed_at < TIMESTAMPTZ '{end.isoformat()}'" if end else ""
+    files = store.files(dataset_id, start, end)
+    conds = ([f"observed_at >= TIMESTAMPTZ '{start.isoformat()}'"] if start else []) + (
+        [f"observed_at < TIMESTAMPTZ '{end.isoformat()}'"] if end else []
+    )
+    where = f" WHERE {' AND '.join(conds)}" if conds else ""
     paths = ", ".join(f"'{f}'" for f in files)
     src = f"(SELECT * FROM read_parquet([{paths}], hive_partitioning=false){where})"
     return store.con.execute(segment_index_sql(src, cfg, _causal_ends)).pl()

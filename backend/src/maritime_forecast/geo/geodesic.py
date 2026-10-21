@@ -78,3 +78,33 @@ def along_cross_track(
     dist, brg = inverse(lat_true, lon_true, lat_pred, lon_pred)
     rel = np.deg2rad(brg - np.asarray(true_course_deg, float))
     return dist * np.cos(rel), dist * np.sin(rel)
+
+
+class LocalFrame:
+    """Azimuthal-equidistant plane centred at (lat0, lon0) on WGS84: x east, y north, metres.
+
+    This is the project's documented local frame. Distances and bearings FROM the centre are
+    exact; between two other points the error grows with their distance from the centre
+    (well under 0.1% within ~100 km). Recover lat/lon with `to_latlon` (exact inverse), so
+    the antimeridian is handled by the projection, not by longitude arithmetic.
+    """
+
+    def __init__(self, lat0: float, lon0: float):
+        from pyproj import Transformer
+
+        self.lat0, self.lon0 = float(lat0), float(lon0)
+        self._t = Transformer.from_crs(
+            "EPSG:4326",
+            f"+proj=aeqd +lat_0={self.lat0} +lon_0={self.lon0} +ellps=WGS84 +units=m",
+            always_xy=True,
+        )
+
+    def to_xy(self, lat: ArrayLike, lon: ArrayLike) -> tuple[Arr, Arr]:
+        x, y = self._t.transform(np.asarray(lon, float), np.asarray(lat, float))
+        return np.asarray(x, float), np.asarray(y, float)
+
+    def to_latlon(self, x: ArrayLike, y: ArrayLike) -> tuple[Arr, Arr]:
+        lon, lat = self._t.transform(
+            np.asarray(x, float), np.asarray(y, float), direction="INVERSE"
+        )
+        return np.asarray(lat, float), wrap_lon(lon)

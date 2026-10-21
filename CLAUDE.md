@@ -4,7 +4,7 @@ Research workbench for forecasting where an AIS-tracked vessel will be 1 h – 3
 
 ## Where we are
 
-**Current milestone: 3 — historical-route retrieval** (Milestone 2 completed 2026-10-21). API serves data, forecasts, forecast evaluation and benchmarks (`make api`); minimal web explorer; CI; `make dev` runs both. Baselines B0, the paired evaluator, feasibility (navigable mask) and calibration are in place.
+**Current milestone: 3 — historical-route retrieval** (Milestone 2 completed 2026-10-21). API serves data, forecasts, forecast evaluation and benchmarks (`make api`); minimal web explorer; CI; `make dev` runs both. Baselines B0, the paired evaluator, feasibility (navigable mask) and calibration are in place. Milestone 3: segment index and `route_retrieval_v1` built and benchmarked (P-known, P-unseen); failure review next.
 Status, blockers and next step live in [docs/implementation-log.md](docs/implementation-log.md) — read it first, append to it last.
 
 ## Commands

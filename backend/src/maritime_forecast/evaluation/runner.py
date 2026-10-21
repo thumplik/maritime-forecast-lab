@@ -315,6 +315,11 @@ def preflight(cfg: BenchmarkConfig, ctx: ModelContext) -> None:
             raise ValueError(
                 f"{m} was fitted on the {cfg.split!r} split; scoring it there would be in-sample"
             )
+        if model.config.get("diagnostic_only"):
+            raise ValueError(
+                f"{m} is configured as a diagnostic variant (e.g. a rolling retrieval pool); "
+                "it is never scored in a benchmark"
+            )
         if not caps.installed:
             raise ValueError(f"{m} is not installed/fitted for {ctx.protocol} on {cfg.dataset_id}")
         if caps.max_horizon_hours < max(cfg.horizons_h):

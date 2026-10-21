@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 3 — Historical-route retrieval** (in progress: slice 1, segment index, done). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 3 — Historical-route retrieval** (in progress: segment index and `route_retrieval_v1` done and benchmarked; failure review next). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -671,3 +671,82 @@ make test && make lint                       # 257 passed
 - `similarity` labels and reference segment ids as provenance;
 - registered behind the forecaster contract (`reads_beyond_own_history=True`), passing the invariance harness;
 - then a paired benchmark against B0 under P-known and P-unseen.
+
+## 2026-10-21 — Milestone 3 slice 2: `route_retrieval_v1` and its first benchmark
+
+**Milestone:** 3 — historical-route retrieval
+**Done:**
+- `models/route_retrieval.py`, registered as `route_retrieval_v1` (§5 R1); design in `docs/model-integration-notes.md`.
+  - **Pool:** the model builds its own pool from the store, using data up to `pool_until(as_of)` only. The default frozen pool ends at train end, the target-independent `eligible()` is applied when the pool is built, and the P-unseen target exclusion per query. The pool is cached per process, keyed by data version, behind a lock.
+  - **Matching:** kNN over 10-min track edges within 1 km of the anchor (3 km as a fallback), with continuous alignment. Scored on offset, the last 30 min of track shape, course, speed and class. Top 10, at most 3 per vessel.
+  - **Continuation:** references are translated in an anchor-centred AEQD frame (new `geo.geodesic.LocalFrame`) and followed forward. A reference holds its last position after its segment ends (`reference_ends_at`).
+  - **Output:** the central path is the similarity-weighted medoid. `trajectories` carry `similarity` (not probability) and `reference_segment_ids`; `central_trajectory_id` names the medoid.
+  - **Failure:** no reference nearby is a typed `no_references` failure, with no silent fallback.
+- **Contract additions:**
+  - `BaseForecaster._predict` may return extra forecast fields.
+  - Schema: `CandidateTrajectory.reference_ends_at`, `ModelForecast.central_trajectory_id`.
+  - `build_segment_index(start=)`; `check_invariance(wide_days=)`.
+  - The runner's preflight refuses `diagnostic_only` model configs (rolling pool, `index_days`).
+- **Tests:**
+  - 13 unit tests (`test_route_retrieval.py`) on a synthetic lane fixture:
+    - branch following, provenance and similarity, held references;
+    - P-unseen exclusion, frozen-pool bounds;
+    - frozen forecast byte-identical when other vessels' test-period data **before** the cutoff are deleted or shifted (rolling differs: teeth);
+    - deterministic pool build, typed failures, the cache data-version key, synthetic invariance, `LocalFrame` round trips.
+  - 3 golden tests (`test_route_retrieval_real.py`):
+    - every reference used by 150 real test cutoffs per protocol has `known_at ≤ train end`; under P-unseen every reference is from a train vessel other than the target;
+    - the model's pool equals the prebuilt index filtered by `eligible()`.
+  - The real-data invariance golden test now includes retrieval.
+- **Docs and rules:**
+  - Docs: `model-integration-notes.md`, `evaluation-protocol.md`, `benchmarks.md`, README (results, figures, roadmap), `CLAUDE.md` status.
+  - `AGENTS.md` rule 13 (user request): update the README results, figures and roadmap after every improvement that produces new kept benchmark results, from immutable runs only, losses included.
+
+**Leakage review (leakage-reviewer subagent):** no temporal or protocol leak. Fixed:
+1. Rolling or truncated pools could have been benchmarked as headline. They are now `diagnostic_only` and refused by preflight.
+2. The production frozen pool was not tested against test-period data before the cutoff. A unit test now covers it, with teeth.
+3. API thread safety: a lock around pool builds.
+4. Determinism without the cache: a test.
+5. The prefilter reduced to one edge per segment on an approximate metric. Pass 1 now keeps 4 per segment and pass 2 scores exactly.
+6. `reference_ends_at` when a reference covered no target time.
+7. `class_source: "backfilled"` in the config.
+8. An explicit manifest must match `ctx.protocol`.
+9. A misleading test comment.
+
+Not done:
+- A structured "held steps" share per cell (only `reference_ends_at` per trajectory and a warning).
+- A labelled variant that falls back to a baseline instead of failing.
+
+**Defaults** were fixed a priori. One 600-cutoff diagnostic ran on the P-known **calibration** split (scratch script, not a kept run). Its medians for underway and transiting were below the baselines, and for stationary they were above. Nothing was tuned on test.
+
+**Commands run:**
+```bash
+cd backend && uv run pytest tests/unit -q                       # 270 passed, 1 xfailed
+uv run pytest -m golden tests/golden/test_route_retrieval_real.py tests/golden/test_invariance_real.py   # 4 passed, 694 s
+make lint && make gen-api
+make benchmark PROTOCOL=P-known     # 767 s
+make benchmark PROTOCOL=P-unseen    # 252 s
+uv run --project backend python scripts/make_readme_figures.py   # RUN -> new P-known run
+```
+
+**Results:** runs `P-known_noaa_us_gulf_2023-06_20261021T152618Z` and `P-unseen_noaa_us_gulf_2023-06_20261021T153929Z` (digests and the full skill table are in `docs/benchmarks.md`).
+- **Transiting:** retrieval beats the best baseline at every horizon under P-known (skill +0.62 at 1 h, +0.77 at 3 h, +0.31 at 24 h; all CIs exclude 0). Under P-unseen it wins at 1–12 h and ties at 24 h.
+- **Pooled underway:**
+  - P-known: wins to 12 h, ties at 24 h.
+  - P-unseen: wins to 3 h, ties at 6–12 h, **loses at 24 h** (−0.38 [−0.63, −0.10]).
+- **Stationary:** worse than persistence at every horizon.
+- **Failures:** ≤ 0.1% (P-known), ≤ 0.6% (P-unseen); all are `no_references`.
+- **Cost:** pool build about 60 s and about 9 GB peak; about 25 ms per forecast.
+- Note: the runs record git `9477ff0`, but the working tree held this uncommitted change. The commit that adds `models/route_retrieval.py` contains exactly the code that ran.
+
+**Blockers / open questions:** none blocking.
+- An API `as_of` inside the train period rebuilds the pool per `as_of` (about 1 min).
+- P-region retrieval is still refused.
+
+**Next step:** the Milestone 3 failure review (§7) on these runs, by category:
+- channel junctions (wrong branch);
+- anchoring and departures (the stationary loss);
+- references running out (held positions, long horizons);
+- missing observations;
+- new geography (`no_references`).
+
+That needs a "held steps" share per cell. Then decide on a stationary/departure gate (e.g. persistence below a speed threshold, as a labelled variant). P-region is still to be built.

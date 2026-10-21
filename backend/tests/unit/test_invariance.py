@@ -21,9 +21,20 @@ from maritime_forecast.models.base import (
     ForecastHorizon,
     ModelCapabilities,
 )
+from maritime_forecast.schemas.manifest import Period, SplitManifest
 from maritime_forecast.storage.parquet_store import ParquetStore
 
-PARAMS = {"damped_velocity_v1": {"taus_hours": {"default": 2.0, "cargo": 0.5}}}
+# Retrieval runs here too (it must never change), but this fixture has few earlier segments
+# near each case, so its non-vacuous check is in test_route_retrieval.py.
+SYN_MANIFEST = SplitManifest(
+    protocol="P-known", dataset_id="syn", description="SYNTHETIC",
+    periods=[Period(split="train", start=T0, end=T0 + timedelta(days=1))],
+)  # fmt: skip
+PARAMS = {
+    "damped_velocity_v1": {"taus_hours": {"default": 2.0, "cargo": 0.5}},
+    "route_retrieval_v1": {"manifest": SYN_MANIFEST, "config": {"pool": "rolling"}},
+}
+FEW_REFERENCES = {"route_retrieval_v1"}
 
 CASES = [
     (MOVING, T0 + timedelta(minutes=60)),
@@ -57,7 +68,7 @@ def test_all_registered_models_are_invariant(store, tmp_path):
     assert rep.vacuous == []
     n = len(CASES) * len(registry_factories(PARAMS)) * 3  # 3 grids
     assert rep.checks == n * (len(PERTURBATIONS) + 1)
-    for model_id in registry_factories(PARAMS):  # every model must really forecast
+    for model_id in set(registry_factories(PARAMS)) - FEW_REFERENCES:  # must really forecast
         assert rep.ok_fraction(model_id) >= 0.8, (model_id, rep.ok_fraction(model_id))
 
 

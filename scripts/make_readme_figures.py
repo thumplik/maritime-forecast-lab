@@ -1,7 +1,8 @@
 """Render the README figures (light and dark PNGs) from real runs and local data.
 
     docs/img/forecast-example-{light,dark}.png  one test-period cutoff: history, the real track
-                                                after the cutoff, and three baselines over 6 h,
+                                                after the cutoff, three baselines and route
+                                                retrieval over 6 h,
                                                 on the navigable-water mask
     docs/img/error-by-horizon-{light,dark}.png  transiting stratum, median error + 95% CI
     docs/img/on-land-{light,dark}.png           share of forecasts on infeasible land, and the
@@ -38,11 +39,14 @@ from maritime_forecast.storage.parquet_store import ParquetStore  # noqa: E402
 from maritime_forecast.storage.run_store import RunStore  # noqa: E402
 
 DATASET = "noaa_us_gulf_2023-06"
-RUN = "P-known_noaa_us_gulf_2023-06_20261021T034634Z"
-EXAMPLE_CUTOFF = 14125  # a transiting tanker at Bolivar Roads, heading up the ship channel
+RUN = "P-known_noaa_us_gulf_2023-06_20261021T152618Z"
+# A transiting tanker at Bolivar Roads, heading up the ship channel. Chosen for the baseline
+# README (before retrieval existed), not picked for retrieval's result.
+EXAMPLE_CUTOFF = 14125
 OUT = REPO_ROOT / "docs" / "img"
 
-# Reference palette (dataviz skill), validated all-pairs in both modes for 3 series.
+# Reference palette (dataviz skill), slots 1-4 in fixed order, validated in both modes (the
+# light-mode contrast WARN for slots 3-4 is covered by the direct labels on every series).
 THEMES = {
     "light": dict(
         surface="#fcfcfb",
@@ -52,7 +56,7 @@ THEMES = {
         land="#d9d7d0",
         water="#eef3f8",
         truth="#0b0b0b",
-        series=["#2a78d6", "#eb6834", "#1baf7a"],
+        series=["#2a78d6", "#eb6834", "#1baf7a", "#eda100"],
     ),
     "dark": dict(
         surface="#1a1a19",
@@ -62,13 +66,14 @@ THEMES = {
         land="#3d3c38",
         water="#22272d",
         truth="#f0efec",
-        series=["#3987e5", "#d95926", "#199e70"],
+        series=["#3987e5", "#d95926", "#199e70", "#c98500"],
     ),
 }
 MODELS = [
     ("constant_velocity_v1", "Constant velocity"),
     ("damped_velocity_v1", "Damped velocity"),
     ("persistence_v1", "Persistence"),
+    ("route_retrieval_v1", "Route retrieval"),
 ]
 
 
@@ -117,10 +122,11 @@ def _segments(df: pl.DataFrame, gap_min=30):
 
 def forecast_figure(th, name, data):
     c, past, future, preds, mask = data
-    # Frame the real track and the damped/persistence paths; constant velocity runs off it.
+    # Frame the real track and the damped/retrieval paths; constant velocity runs off it.
     keep = np.vstack(
         [
             preds["damped_velocity_v1"],
+            preds["route_retrieval_v1"],
             past[["longitude_deg", "latitude_deg"]].to_numpy(),
             future[["longitude_deg", "latitude_deg"]].to_numpy(),
         ]
@@ -199,7 +205,7 @@ def forecast_figure(th, name, data):
         ax.annotate(
             label + off,
             last,
-            xytext=(8, -4 if off else -2),
+            xytext=(8, -14) if m == "route_retrieval_v1" else (8, -4 if off else -2),
             textcoords="offset points",
             color=th["text"],
             fontsize=9,
@@ -231,7 +237,7 @@ def forecast_figure(th, name, data):
     )
     leg.get_frame().set_alpha(0.92)
     fig.suptitle(
-        "A tanker heading up the Houston Ship Channel: 6 h baseline forecasts",
+        "A tanker heading up the Houston Ship Channel: 6 h forecasts",
         color=th["text"],
         fontsize=11,
         x=0.02,
@@ -313,17 +319,23 @@ def land_figure(th, name):
     fig.patch.set_facecolor(th["surface"])
     _style(ax, th)
     floor = None
+    ends = []
     for (m, label), col in zip(MODELS, th["series"], strict=True):
         rs = sorted((r for r in cells if r.model_id == m), key=lambda r: r.horizon_minutes)
         h = [r.horizon_minutes / 60 for r in rs]
         v = [100 * r.feasibility.land_point_rate for r in rs]
         floor = [100 * r.feasibility.truth_on_land_rate for r in rs]
         ax.plot(h, v, color=col, lw=2, marker="o", ms=5, mec=th["surface"], mew=1.2)
+        ends.append((v[-1], label))
+    placed: list[float] = []  # end labels at least 5 points apart, nearest to their line
+    for y, label in sorted(ends):
+        ly = max([y] + [p + 5 for p in placed[-1:]])
+        placed.append(ly)
         ax.annotate(
-            f"{label}  {v[-1]:.0f}%",
-            (h[-1], v[-1]),
-            xytext=(6, 0),
-            textcoords="offset points",
+            f"{label}  {y:.0f}%",
+            (h[-1], y),
+            xytext=(h[-1] * 1.06, ly),
+            textcoords="data",
             va="center",
             color=th["text"],
             fontsize=9,

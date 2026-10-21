@@ -38,13 +38,21 @@ def test_registered_models_invariant_on_real_cutoffs(tmp_path):
     fp = fit_path("P-known", DATASET)
     if not fp.exists():
         pytest.skip("needs the P-known damped-velocity fit (make fit PROTOCOL=P-known)")
+    from maritime_forecast.config import MANIFEST_DIR
+
     params = {
         "damped_velocity_v1": {
             "taus_hours": DampedVelocityFit.model_validate_json(fp.read_text()).taus_hours
-        }
+        },
+        # Retrieval builds its pool from the (perturbed) store. A rolling pool over the last
+        # day keeps the per-case build small while exercising the same code path.
+        "route_retrieval_v1": {
+            "manifest": (MANIFEST_DIR / "splits" / f"P-known__{DATASET}.json").read_text(),
+            "config": {"pool": "rolling", "index_days": 1},
+        },
     }
     rep = check_invariance(registry_factories(params), ParquetStore(), DATASET, cases,
-                           history_hours=24, workdir=tmp_path)  # fmt: skip
+                           history_hours=24, workdir=tmp_path, wide_days=2)  # fmt: skip
     assert rep.cases == len(cases) >= 4
     assert rep.ok, rep.violations
     assert rep.vacuous == [], rep.vacuous  # every perturbation changed each target's future

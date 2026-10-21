@@ -53,4 +53,29 @@ Limitation of both CV modes: no turns, channel geometry or land.
 - **Result:** on June 2023 it is slightly worse than CV at every horizon and stratum. Holding the recent turn does not help on average at these horizons. It is kept as a reference, and tuning on train is a candidate for later.
 
 
-_Retrieval, conformal, Timestral and TrAISformer sections are added in Milestones 3–7._
+## Historical-route retrieval (`route_retrieval_v1`, §5 R1)
+- **Pool:** the model builds the segment index itself, from the store, using only reports at or before `until = pool_until(as_of)`, then applies `eligible()` (see [evaluation-protocol.md](evaluation-protocol.md#retrieval-eligibility-5-r1-62-milestone-3)).
+  - Under the default **frozen** pool, `until` is the end of the train period (2023-06-17). One build serves every calibration and test cutoff: about 50–60 s and roughly 9 GB peak for June 2023.
+  - The pool is cached per process, keyed by store, dataset, partition files (size and mtime), bound, manifest hash and index config, behind a lock.
+  - A golden test checks that this pool equals the prebuilt `make index` output filtered by `eligible()`.
+- **Matching:** every 10-min track edge passing within 1 km of the anchor (the latest report; 3 km if none is within 1 km) is a candidate alignment. The anchor is projected onto the edge, which gives a continuous reference time τ. The match distance is
+  `D = (offset/500 m)² + (recent shape/500 m)² + (course diff/30°)² [both ≥ 1 kn] + (speed diff/3 kn)² + 1 [different class]`.
+  - The recent shape compares the last 30 min of 10-min displacements, from the target's own reports, never interpolated across a gap.
+  - The best edge is kept per segment, then the top 10 segments, with at most 3 per vessel.
+  - A reference must continue for at least 60 min (or the whole horizon, if shorter) after τ.
+  - Lookup is a 0.05° cell grid plus an equirectangular prefilter, used only to discard edges out of reach. Scoring is done in the exact local frame.
+- **Continuation:** each reference is translated so its point at τ sits on the anchor, in the azimuthal-equidistant frame centred on the anchor (`geo.geodesic.LocalFrame`), and followed forward in time. There is no rotation.
+  - When a reference's segment ends (a coverage gap or the end of its data), its last position is held. `reference_ends_at` records when, and a warning says so for the central path.
+- **Central prediction:** the similarity-weighted medoid of the candidates that cover at least half of the best candidate's span. It is always a real path, so the two branches of a junction are never averaged into the bank between them.
+- **Output:** `trajectories` holds the K candidates, each with its `similarity = exp(−D/2)` (**not a probability**) and `reference_segment_ids` (provenance). `central_trajectory_id` names the one used for `points`.
+- **Failure:** with no eligible segment within 3 km, the forecast fails with `no_references`. It never falls back silently to a baseline.
+- **Defaults** were fixed a priori. The only check before the test benchmark was a 600-cutoff diagnostic on the P-known **calibration** split; nothing was tuned on test.
+- **Variants:** `pool="rolling"` and `index_days` are diagnostic only (`config.diagnostic_only`). The benchmark runner refuses them, because a rolling index overlaps calibration and test (§5 U1).
+- **Back-filled class:** vessel class is NOAA back-filled for both the target and the references (`config.class_source = "backfilled"`).
+- **Known limitations:**
+  - **Moored and anchored vessels:** a nearby reference that later departed drags the forecast away. Persistence is better for the stationary set (see the benchmark).
+  - **Long horizons:** most references end within hours (they leave coverage), and holding their last position makes 24 h forecasts persistence-like.
+  - The antimeridian is not handled in the cell lookup (Gulf data only).
+  - Under P-known with the API's deployment protocol, an `as_of` inside the train period rebuilds the pool for that `as_of`, which takes about 1 min.
+
+_Conformal, Timestral and TrAISformer sections are added in Milestones 4–7._
