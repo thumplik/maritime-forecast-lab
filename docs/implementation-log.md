@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 3 — Historical-route retrieval** (not started). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 3 — Historical-route retrieval** (in progress: slice 1, segment index, done). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -624,3 +624,50 @@ make calibrate   # PASS; golden: 3 passed (333.6 s)
 - tests prove no post-cutoff or test-vessel segment is ever eligible.
 
 Then a plain kNN `route_retrieval_v1` (alignment plus a median continuation, similarity labelled as such), behind the forecaster contract and the invariance harness.
+
+## 2026-10-21 — Milestone 3 slice 1: protocol-aware retrieval segment index
+
+**Milestone:** 3 — historical-route retrieval
+**Done:**
+- `data/segment_index.py`, `scripts/build_segment_index.py` (`make index`): one row per completed gap-segment (≥ 3 reports, ≥ 10 min).
+  - Each row has its endpoints, bbox, mean SOG, a deterministic class with back-filled provenance, and a 10-min track interpolated only inside the segment.
+  - The sidecar is `data/manifests/segment_index/<dataset>.json` (now un-ignored).
+- `eligible(index, as_of, target, manifest, pool)` (rules in `docs/evaluation-protocol.md` § Retrieval eligibility):
+  - `known_at = end + 2 × gap ≤ as_of`.
+  - **Frozen pool by default:** `known_at ≤ train end`, so the retrieval index period is the train period as §5 U1 requires. Rolling is a labelled variant.
+  - P-known allows the target's own voyages. P-unseen uses train-assigned vessels only, never the target. P-region is refused.
+- `segmented_sql(..., causal_ends=True)`: the spike test never looks across a gap. Off by default, so truth and benchmarks are unchanged.
+- Tests:
+  - 11 unit tests: full-archive vs truncated equivalence on the fixture plus adversarial tracks; teeth for the naive `end + gap` rule and for `causal_ends=False`; the known_at boundary; tracks never bridging; the frozen pool; P-unseen and target exclusion; determinism and provenance; P-region refused.
+  - 4 golden tests: real-data equivalence for both protocols and pools; a test-period cutoff with real test- and train-assigned targets.
+
+**Leakage review (leakage-reviewer subagent):** no temporal leak; `end + 2 × gap` is sufficient for every input traced. Fixed:
+1. The rolling pool conflicted with §5 U1 (calibration must be disjoint from the index period). The frozen pool is now the default, which follows the spec, so no spec change was needed.
+2. `any_value(vessel_class)` was nondeterministic (a real vessel has mixed classes). It now uses the mode with a tie-break, the same rule as the models.
+3. Class provenance (back-filled) is now carried.
+4. The `segment.py` docstring now states the 2 × gap bound.
+5. Tests strengthened: test-period cutoffs, real targets, explicit `causal_ends` teeth, the target's ongoing segment excluded.
+
+Also found while testing: a parallel `avg()` made `sog_mean` differ at 1e-14 between identical builds. It is now an ordered `list_avg`.
+
+**Commands run:**
+```bash
+make index                                   # 240,798 segments, 15,964,045 track points, 252 MB, 102–138 s, ~11.5 GB peak RSS
+cd backend && uv run pytest -m golden tests/golden/test_segment_index_real.py   # 4 passed
+make test && make lint                       # 257 passed
+```
+
+**Results:**
+- At a late-June test cutoff: 208 k eligible segments (8,739 vessels) under the rolling P-known pool, and 143 k under rolling P-unseen.
+- The frozen pool keeps only segments known by Jun 17.
+- Segments by class: tug_tow 65 k, pleasure_sail 54 k, other 36 k, fishing 22 k, passenger 18 k, tanker 17 k. 30% have a mean SOG of at least 2 kn.
+
+**Blockers / open questions:** none.
+- Peak memory for the full build is about 11.5 GB of 24 GB. Chunking by vessel would lower it if datasets grow.
+
+**Next step:** `route_retrieval_v1` (§5 R1) on the frozen index:
+- plain kNN over local-frame recent track shape, position, course, speed and class;
+- align the references at the current position and continue them; top-K candidates plus a medoid central path;
+- `similarity` labels and reference segment ids as provenance;
+- registered behind the forecaster contract (`reads_beyond_own_history=True`), passing the invariance harness;
+- then a paired benchmark against B0 under P-known and P-unseen.

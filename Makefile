@@ -8,7 +8,7 @@ END   ?= 2023-06-30
 
 NPM := npm --prefix frontend
 
-.PHONY: help setup dev web-test gen-api test lint format fetch fetch-list canonical audit calibrate splits import fetch-dma api benchmark fit notebook fetch-land mask
+.PHONY: help setup dev web-test gen-api test lint format fetch fetch-list canonical audit calibrate splits import fetch-dma api benchmark fit notebook fetch-land mask index
 
 help:  ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -68,6 +68,9 @@ fetch-land:  ## OSM land polygons for the truth region (~0.9 GB transfer, delete
 
 mask:  ## Navigable-water mask from TRAIN-split traffic: make mask PROTOCOL=P-known
 	$(PY) scripts/build_navigable_mask.py --protocol $(PROTOCOL)
+
+index:  ## Retrieval segment index (completed segments + regular tracks) for the June dataset
+	$(PY) scripts/build_segment_index.py
 
 benchmark:  ## Paired baseline benchmark: make benchmark PROTOCOL=P-known (or P-unseen)
 	$(PY) scripts/run_benchmark.py --protocol $(PROTOCOL)

@@ -11,6 +11,8 @@ data/manifests/*
 !data/manifests/splits/*.json
 !data/manifests/masks/
 !data/manifests/masks/*.json
+!data/manifests/segment_index/
+!data/manifests/segment_index/*.json
 
 # Models, checkpoints, caches
 *.ckpt

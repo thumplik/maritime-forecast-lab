@@ -120,6 +120,26 @@ Forecasts are never constrained to water. Their paths are flagged afterwards (`e
 - The API's `POST /forecasts/evaluation` uses the deployment protocol's (P-known) mask. When `as_of` falls inside that train split, land flags are **null**, with a warning: the mask's traffic could include this vessel's own track after `as_of` (its truth). Speed and acceleration flags are still reported.
 - The runner refuses any mask not fitted on the train split.
 
+## Retrieval eligibility (§5 R1, §6.2; Milestone 3)
+
+`data/segment_index.py` (`make index`) indexes every completed track segment of a dataset once: 240,798 segments and 16.0 M ten-minute track points for June 2023, built in about 2 min. What a forecast may use is decided per cutoff by `eligible(index, as_of, target, manifest, pool)`.
+
+| Rule | Why |
+|---|---|
+| `known_at = end + 2 × gap ≤ as_of` | One gap to know the segment ended. One more for a spike report inside that gap: whether it is dropped depends on its next report. Segmentation runs with `causal_ends=True`, so the spike test never looks across a gap |
+| Frozen pool (default): also `known_at ≤ end of the train period` | The retrieval index period is the training period, disjoint from calibration and test (§5 U1). No test sample's truth can be another's reference |
+| Rolling pool (`pool="rolling"`): any segment known complete before `as_of` | Causal; what a deployed system has. Reported only as a labelled variant |
+| P-known: every vessel, including the target's own earlier voyages | §6.2 "known vessel" |
+| Vessel-disjoint (P-unseen): train-assigned vessels only, never the target | §6.2 "unseen vessel". With the frozen pool this is exactly the manifest's training data |
+| P-region | Refused until side-aware eligibility is built |
+
+Tracks are interpolated only between reports of one segment, whose internal gaps are at most 30 min. Vessel class is the segment's most frequent non-null value, with ties going to the smallest name: the same rule as `history_vessel_class`. It is back-filled by NOAA and flagged by `static_fields_provenance`.
+
+**Tests:**
+- **Equivalence:** the eligible segments from the full archive equal those from an index built only from reports at or before the cutoff. This is checked on the synthetic fixture plus adversarial tracks, and on real data for both protocols and both pools.
+- **Teeth:** the equivalence breaks with the naive `end + gap` rule, and it breaks without `causal_ends`.
+- **Pool:** a real test-period cutoff only sees segments known by the train end, and under P-unseen only train vessels, never the target.
+
 ## Calibration (§6.6)
 
 `make calibrate` → paper-compatible constant velocity on P-paper vs the published table, ±10% tolerance. Assumptions made in reconstructing P-paper are listed in [coverage-audit.md](coverage-audit.md#calibration).

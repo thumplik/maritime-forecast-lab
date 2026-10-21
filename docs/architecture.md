@@ -41,6 +41,7 @@ Other providers: CSV/Parquet ── scripts/import_ais.py --mapping <config/sour
 | `maritime_forecast.schemas` | Pydantic contracts: `Observation`, `SplitManifest` (+`RegionSplit`), `DatasetManifest`/`IngestReport`, `ForecastRequest`/`ForecastResponse`/`ForecastEvaluation`, `BenchmarkRun` |
 
 | `maritime_forecast.api` | FastAPI API: app factory, typed errors, response models, `jobs` (background benchmark processes) |
+| `maritime_forecast.data.segment_index` | Retrieval index of completed segments with regular tracks; per-cutoff, per-protocol eligibility (Milestone 3) |
 | `maritime_forecast.geo.navigable_mask` | Navigable-water raster: OSM land minus train-split traffic cells; point and segment tests |
 | `maritime_forecast.evaluation.feasibility` | Per-step feasibility flags (land, crossing, speed, acceleration) |
 | `maritime_forecast.evaluation.export` | GeoJSON of a run (predictions, truth points, anchors) outside the immutable run directory |
@@ -118,4 +119,4 @@ Fixed in Milestone 1, found with the synthetic fixture:
 - Longitude interpolation (`geo.geodesic.lon_lerp_sql`, used by truth and by the P-paper grid) and the spike-filter distance take the short way round.
 - The web map unwraps longitudes along a track.
 
-Milestone 2 feature work is complete; next is the milestone check.
+Milestone 2 is complete. Milestone 3 (retrieval) has started with the segment index.

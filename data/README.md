@@ -7,6 +7,7 @@ Everything here except this file, `.gitkeep`s and `manifests/*.json` is gitignor
 | `raw/noaa_<region>/date=YYYY-MM-DD/part-0.parquet` | NOAA daily points, bbox-filtered, original columns typed | `scripts/fetch_noaa.py` |
 | `processed/canonical/<dataset_id>/date=YYYY-MM-DD/part-0.parquet` | Canonical §4 observations, one partition per UTC day | `scripts/canonicalize.py`, `scripts/import_ais.py` |
 | `processed/segmented/<dataset_id>/bucket-NN.parquet` | Segmented observations + motion features (16 vessel-hash buckets) | `scripts/coverage_audit.py` |
+| `processed/segment_index/<dataset_id>/segments.parquet` | Retrieval segment index: completed segments with 10-min tracks (sidecar in `manifests/segment_index/`) | `scripts/build_segment_index.py` (`make index`) |
 | `manifests/*.json` | Fetch manifests (source URLs, SHA-256, filter) and `<dataset_id>.canonical.json` dataset manifests (mapping, inputs with SHA-256 and ingest report, rows per day). Committed | fetch / canonicalize / import |
 | `manifests/splits/*.json` | Protocol split manifests (committed) | `scripts/make_splits.py` |
 | `runs/<run_id>/` | Audit and benchmark outputs with JSON sidecars | audit / benchmark scripts |

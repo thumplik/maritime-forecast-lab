@@ -26,7 +26,9 @@ class SegmentConfig:
 DEFAULT_SEGMENT_CONFIG = SegmentConfig()
 
 
-def segmented_sql(source: str, cfg: SegmentConfig = DEFAULT_SEGMENT_CONFIG) -> str:
+def segmented_sql(
+    source: str, cfg: SegmentConfig = DEFAULT_SEGMENT_CONFIG, causal_ends: bool = False
+) -> str:
     """Return SQL producing canonical columns plus segment ids and motion features.
 
     Steps:
@@ -44,6 +46,13 @@ def segmented_sql(source: str, cfg: SegmentConfig = DEFAULT_SEGMENT_CONFIG) -> s
     That is acceptable for truth and for the Milestone 0 audit (affects ~5e-6 of rows), but
     model context must be built by running this on observations already filtered to
     `observed_at <= as_of` (Milestone 2 leakage invariance test enforces it).
+
+    `causal_ends=True` (the retrieval segment index) only lets the spike test look at a next
+    report that is within `gap_minutes`, so a report's survival depends only on reports up to
+    one gap after it. A segment that ended 2 x `gap_minutes` before a cutoff then depends
+    only on reports up to that cutoff: one gap to know it ended, one more for any spike inside
+    that gap (see data.segment_index). Off by default: truth and benchmarks keep the
+    original rule.
     """
     gap_s = cfg.gap_minutes * 60
     vmax_mps = cfg.max_implied_speed_kn * 1852 / 3600
@@ -68,7 +77,8 @@ def segmented_sql(source: str, cfg: SegmentConfig = DEFAULT_SEGMENT_CONFIG) -> s
     spikes AS (
         SELECT *,
             ({d_prev}) / greatest(epoch(observed_at - p_t), 1) > {vmax_mps}
-            AND ({d_next}) / greatest(epoch(n_t - observed_at), 1) > {vmax_mps} AS is_spike
+            AND ({d_next}) / greatest(epoch(n_t - observed_at), 1) > {vmax_mps}
+            {f"AND epoch(n_t - observed_at) <= {gap_s}" if causal_ends else ""} AS is_spike
         FROM nb
     ),
     clean AS (
