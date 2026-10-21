@@ -76,3 +76,69 @@ Caveats:
 - `vessel_class` (strata, transiting flag) is NOAA back-filled, not as-of.
 - Along/cross-track medians cover only samples with a defined true course (`n_decomposed`, about 80–95% of paired samples). Samples where the vessel is stationary at the target have no along/cross split.
 - Headline cells tolerate model failure rates up to 1%. The rate is reported per model.
+
+## 2026-10-21 — B0 with damped velocity and constant turn rate (commit a3022ac)
+
+Paper-mode CV is no longer in product benchmarks (`calibration_only`; it stays in `make calibrate`). Models: `persistence_v1`, `constant_velocity_v1`, `damped_velocity_v1` (τ per class, fitted on each protocol's **train** split, see `docs/model-integration-notes.md`), and `constant_turn_rate_v1`. Setup is otherwise as above: same test period, sampler, seed and cutoffs (22,639 / 4,977).
+
+| | P-known | P-unseen |
+|---|---|---|
+| Run id | `P-known_noaa_us_gulf_2023-06_20261021T021006Z` | `P-unseen_noaa_us_gulf_2023-06_20261021T021141Z` |
+| files.json SHA-256 | `ad2f13675f6428a4784a8c2675c8c5c20ada09059339d6fafd09aefa9433cdf0` | `a2055ead489f9e5f5e6a2562fd0b94d723e392ae2a856b75c48aee2f1c0fcbd0` |
+| Cells scored / dropped / headline | 508 / 11 / 444 | 500 / 1 / 232 |
+| Wall time | 95 s | 27 s |
+
+These runs were made after the slice-3 leakage-review fixes and a refit from a clean tree. They match the pre-fix runs cell for cell.
+
+### Headline: underway (pooled), median error km
+
+| Horizon | Persistence | CV | Damped | CTR | Damped skill vs best baseline |
+|---|---|---|---|---|---|
+| **P-known** (n ≈ 7,400–8,000, 1,381–1,533 vessels) |
+| 1 h | 5.66 | 5.12 | **4.28** [3.97, 4.54] | 5.86 | best (persistence −0.32 [−0.39, −0.26]) |
+| 2 h | 7.25 | 12.87 | **6.87** | 14.21 | best (persistence −0.05 [−0.09, −0.01]) |
+| 3 h | **8.04** | 21.84 | 8.20 | 23.45 | −0.02 [−0.06, +0.01] (tie) |
+| 6 h | **9.22** | 50.24 | 10.04 | 52.15 | −0.09 [−0.14, −0.05] |
+| 12 h | **11.05** | 110.60 | 12.06 | 114.08 | −0.09 [−0.15, −0.05] |
+| 24 h | **13.14** | 231.42 | 14.11 | 234.30 | −0.07 [−0.11, −0.04] |
+| **P-unseen** (n ≈ 1,650–1,760, 291–327 vessels) |
+| 1 h | 4.22 | 5.33 | **3.49** [3.06, 4.10] | 6.01 | best (persistence −0.21 [−0.32, −0.10]) |
+| 2 h | **5.17** | 13.16 | 5.21 | 14.58 | −0.01 [−0.12, +0.06] (tie) |
+| 3 h | **5.57** | 22.04 | 5.80 | 23.67 | −0.04 [−0.16, +0.05] (tie) |
+| 6 h | **6.62** | 49.87 | 7.06 | 51.75 | −0.07 [−0.21, −0.00] |
+| 12 h | **8.08** | 108.38 | 8.68 | 111.13 | −0.07 [−0.17, −0.00] |
+| 24 h | **9.43** | 228.43 | 9.98 | 229.91 | −0.06 [−0.19, +0.00] |
+
+### Headline: transiting stratum, median error km
+
+| Horizon | Persistence | CV | Damped | CTR | Best | Damped skill vs best |
+|---|---|---|---|---|---|---|
+| **P-known** (n = 1,069–1,394, 379–451 vessels) |
+| 1 h | 18.99 | **4.22** | 5.35 | 5.27 | CV | −0.27 [−0.39, −0.17] |
+| 2 h | 35.23 | **13.22** | 15.39 | 15.07 | CV | −0.16 [−0.24, −0.07] |
+| 3 h | 47.82 | **25.21** | 25.33 | 27.99 | CV | −0.00 [−0.10, +0.08] (tie) |
+| 6 h | 61.95 | 66.41 | **37.33** | 69.94 | damped | persistence −0.66, CV −0.78 |
+| 12 h | 54.30 | 175.65 | **35.76** | 179.61 | damped | persistence −0.52 [−0.61, −0.40] |
+| 24 h | 53.20 | 409.86 | **37.06** | 413.58 | damped | persistence −0.44 [−0.53, −0.28] |
+| **P-unseen** (n = 212–258, 72–89 vessels) |
+| 1 h | 18.55 | **5.05** | 5.39 | 6.20 | CV | −0.07 [−0.28, +0.07] (tie) |
+| 2 h | 34.11 | **14.25** | 15.43 | 16.32 | CV | −0.08 [−0.34, +0.12] (tie) |
+| 3 h | 47.99 | **24.63** | 24.83 | 28.06 | CV | −0.01 [−0.33, +0.18] (tie) |
+| 6 h | 57.97 | 64.12 | **33.48** | 66.38 | damped | persistence −0.73 [−0.94, −0.41] |
+| 12 h | 54.85 | 173.41 | **32.72** | 180.13 | damped | persistence −0.68 [−0.85, −0.39] |
+| 24 h | 52.76 | 409.16 | **32.25** | 409.86 | damped | persistence −0.64 [−0.87, −0.22] |
+
+Stationary cells are all headline now that paper-mode CV (and its 1–2% failures) is gone. Persistence is best there (median 0.23–0.27 km at 24 h; damped 0.33–0.34; CV 0.9–1.1). Skill is null where the best baseline's median is under 10 m (1–6 h).
+
+### What this says
+
+1. **Damped velocity is the new bar for ships in transit beyond 3 h.** It cuts the 6–24 h transiting error to about 33–37 km, from 53–62 km for persistence, with CIs that exclude zero in both protocols. Up to 3 h, CV is still best or tied.
+2. **In pooled port traffic, damped velocity only wins at 1 h** (and at 2 h under P-known). From 3 h onward persistence is slightly better (skill −0.02 to −0.09). τ is one value per class and is chosen mostly by the long-horizon errors, so it under-damps short harbour moves.
+3. **Constant turn rate is slightly worse than CV everywhere.** Holding a turn rate adds error. It stays as a registered baseline, but it is not in the "best baseline" set.
+4. The best-baseline reference for any later model is now **per stratum and horizon, from {persistence, CV, damped}**. For transiting ships it is CV up to 3 h and damped velocity from 6 h.
+
+Caveats:
+- `vessel_class` (strata and the per-class τ) is NOAA back-filled, not as-of.
+- τ was fitted on underway train cutoffs only, but it is applied to stationary cutoffs too. Stationary vessels have SOG ≈ 0, so the effect is small.
+- The fit objective is the mean of median errors over 1–24 h, so the 12–24 h errors dominate it.
+- Fitted τ is refused for any `as_of` before the end of the train period (`fit_overlaps_as_of`) and for any other manifest.

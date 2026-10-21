@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 2 — Baselines and the evaluator** (not started; awaiting go-ahead). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 2 — Baselines and the evaluator** (in progress: slices 1–3 done). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -426,3 +426,56 @@ RunStore.load() on old and new runs, then compared run.json, cutoffs and records
 - constant turn rate;
 - `GET /models` and `POST /forecasts`;
 - drop paper-mode CV from product benchmarks.
+
+## 2026-10-21 — Milestone 2 slice 3: damped velocity, constant turn rate, /models and /forecasts
+
+**Milestone:** 2
+**Done:**
+- **`damped_velocity_v1`**: v(t) = SOG·e^(−t/τ), with τ per vessel class.
+  - `models/fit_damped.py` and `make fit PROTOCOL=...` fit τ on the protocol's **train split only**, from a grid of 0.02 h to ∞. Truth is capped at the end of the train period (`truth_until`), so the purge gap cannot leak calibration or test data into the fit.
+  - The fit records `manifest_sha256` and `data_until`. The model refuses a fit made for another manifest, and refuses any `as_of` before `data_until` (`fit_overlaps_as_of`).
+  - The runner refuses to benchmark on the split a model was fitted on.
+  - Fits for P-known and P-unseen are committed in `data/model_params/damped_velocity_v1/`. The τ table is in `docs/model-integration-notes.md`.
+- **`constant_turn_rate_v1`**: median turn rate over the last 10 min, capped at 0.05°/s and decaying with a 20 min time constant, integrated in ENU and then projected geodesically. Reports flagged `sog_implausible` are excluded.
+- **API**:
+  - `GET /models` lists capabilities and parameters in use.
+  - `POST /forecasts` serves causal forecasts. Its cache key covers the request, model configs and versions, the data version (manifest, inputs and partition file stats) and the code SHA. It uses the P-known fit.
+  - OpenAPI and TS types were regenerated; the Makefile `gen-api` target was fixed.
+- **Paper-mode CV** is `calibration_only` and excluded from `product_model_ids()`. All stationary cells are now headline.
+- **Capability flags**:
+  - `reads_beyond_own_history` and `uses_store_at_predict` are now required, and the second implies the first.
+  - The invariance harness's whole-dataset scope keys on `uses_store_at_predict`. Damped velocity does not query the store, so its golden run takes minutes instead of hours.
+- **Leakage review (leakage-reviewer subagent).** All findings were fixed in `bee9b53`:
+  - The API applied the P-known τ to cutoffs inside its own train period. These are now refused.
+  - The harness could pass a model that never returns `ok`. Each model now needs an ok-fraction of at least 0.8, and uninstalled models are refused.
+  - Fit truth depended on the purge gap. It is now capped at the end of the train period.
+  - A benchmark on the fit's own split was possible. It is now refused.
+  - The fit tests had no teeth. They were rewritten on a thinned fixture, and verified to fail with the truth cap removed. P-unseen non-vacuity uses TURNING as the test vessel.
+  - The cache key now includes the code SHA. CTR now ignores flagged reports.
+- Refit τ from a clean tree (`a3022ac`): the τ values are identical, and the fit file now records `data_until`.
+- Incident: a killed golden run left 18 GB of DuckDB spill in `backend/.tmp`, which hung `git add`. The spill was deleted and `.tmp/` gitignored (noted in CLAUDE.md).
+
+**Commands run:**
+```bash
+make fit PROTOCOL=P-known && make fit PROTOCOL=P-unseen
+make benchmark PROTOCOL=P-known     # 95 s, 22,639 cutoffs
+make benchmark PROTOCOL=P-unseen    # 27 s, 4,977 cutoffs
+cd backend && uv run pytest         # 214 passed, 3 deselected, 1 xfailed
+cd backend && uv run pytest -m golden   # 3 passed (137 s)
+make lint
+```
+
+**Results:** see `docs/benchmarks.md` (2026-10-21 section). The post-review runs match the pre-review runs cell for cell.
+- Transiting stratum: damped velocity is best from 6 h, at 33–37 km against 53–62 km for persistence, with CIs excluding zero in both protocols. CV is still best up to 3 h.
+- Pooled underway: damped velocity wins at 1 h. From 3 h onward persistence is slightly better.
+- CTR is slightly worse than CV everywhere.
+
+**Blockers / open questions:** none.
+- τ is one value per class, tuned mostly on 12–24 h errors. A per-horizon or per-motion-state τ is possible, but it would be a different baseline; not pursued.
+
+**Next step:** remaining Milestone 2 items:
+- `POST /benchmarks` and `GET /benchmarks/{id}[/summary]`;
+- the forecast evaluation endpoint;
+- navigable-water mask and feasibility flags;
+- GeoJSON export from the CLI;
+- then the milestone check.
