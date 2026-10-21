@@ -919,3 +919,45 @@ cd backend && uv run pytest -m golden tests/golden/test_route_retrieval_real.py 
 **Next step:**
 - **Before Milestone 4:** the retrieval v2 experiments agreed with the user are developed on the P-known dev window, in the order in `docs/failure-review.md` (stationary handling first). The design is then frozen and July is scored once, with baselines, v1 and v2 together (`--confirm-test`, recorded in the ledger).
 - **Milestone 4, smallest first slice:** split-conformal displacement radii per model × horizon × stratum, fitted on the `noaa_us_gulf_2023-06-07` calibration split (Jun 23–30). Empirical coverage is judged on the July records of that one run, per stratum and per July week.
+
+## 2026-10-21 — Retrieval v2 developed on the dev window and frozen
+
+**Milestone:** between 3 (complete) and 4. These are the retrieval improvements agreed after the failure review.
+**Done:**
+- `route_retrieval_v2` (2.0.0), commits `b472ecb` and `672a766`. It is v1 plus a stationary hold.
+  - A target stationary at the cutoff (the sampler's rule) keeps its last position: persistence, labelled as such.
+  - Underway targets are unchanged.
+- **Gate design** (dev only; scratch diagnostic on the 4,1xx P-known dev stationary cutoffs):
+  - Releasing the hold once 50 / 60 / 75 / 90% of the reference weight had moved more than 1 km was worse than always holding, in median and mean, at 1–24 h. For example, at 24 h the median was 1.47 / 0.76 / 0.39 / 0.31 km against 0.22 km.
+  - So v2 always holds.
+- **Speed-matched continuation** (dev underway cutoffs) was mixed:
+  - transiting median 1.83 → 1.47 km at 1 h and 3.92 → 3.49 km at 2 h;
+  - pooled 8.25 → 8.76 km at 12 h;
+  - better than v1 on fewer than half the samples.
+  - Kept as an off-by-default option, not in v2.
+- **Branch choice** (failure-review item 3) was not attempted; v2 is frozen without it.
+- **Leakage review (leakage-reviewer subagent):** no leak, and no July use (no ledger; every June+July run is dev). Fixed:
+  1. The hold is honestly labelled persistence (`stationary_policy`, warning, description).
+  2. The hold is unconditional when `depart_share >= 1`, with no 0/0 path; relative weights are used otherwise.
+  3. `failure_review` tolerates forecasts without a central reference.
+  4. A test now exercises the partial release.
+  5. Pre-freeze runs are noted as not v2.0.0.
+
+**Commands run:**
+```bash
+uv run --project backend python <scratch>/gate_sweep.py    # dev, stationary cutoffs
+uv run --project backend python <scratch>/speed_sweep.py   # dev, underway cutoffs
+uv run --project backend python scripts/run_benchmark.py --protocol P-known --dataset-id noaa_us_gulf_2023-06-07 --split dev --models persistence_v1 constant_velocity_v1 damped_velocity_v1 route_retrieval_v1 route_retrieval_v2 --no-geojson   # 447 s
+make test   # 285 passed
+```
+
+**Results:** `P-known_noaa_us_gulf_2023-06-07_dev_20261021T204207Z` (clean `672a766`).
+- **Stationary:** v2 = persistence on all 27,354 records, so its skill is 0.00. v1's was −15.3 at 24 h.
+- **Underway and transiting:** v2 = v1. Transiting skill is +0.61 / +0.70 / −0.08 at 1 / 6 / 24 h.
+- Details are in `docs/benchmarks.md`.
+
+**Blockers / open questions:** the July hold-out run needs the user's go-ahead. It consumes the fresh test set once for baselines, v1 and v2 (`--confirm-test`, recorded in the ledger).
+
+**Next step:**
+1. On approval, run the July test for P-known and P-unseen with baselines, v1 and v2, then update the README from those runs (AGENTS.md rule 13).
+2. Then Milestone 4: conformal radii fitted on the calibration split and judged on those July records.

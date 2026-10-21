@@ -79,4 +79,10 @@ Limitation of both CV modes: no turns, channel geometry or land.
   - **P-region:** references must lie wholly beyond the 50 km buffer, so retrieval has no reference near any test-side cutoff and fails (`no_references`) on all of them. Measured: 19,843 of 19,843 June P-region cutoffs (`docs/benchmarks.md`). It does not transfer to new waters.
   - Under P-known with the API's deployment protocol, an `as_of` inside the train period rebuilds the pool for that `as_of`, which takes about 1 min.
 
+## Historical-route retrieval v2 (`route_retrieval_v2`)
+- **What it is:** v1 plus a hold for targets stationary at the cutoff (the sampler's rule: 10-min mean SOG < 0.5 kn). Such a target keeps its last position at every target time. That is **persistence**, labelled as such (`config.stationary_policy`, the warning, the description, and `central_trajectory_id = null`). Candidate trajectories are still returned for inspection but do not inform the points.
+- **Why it holds unconditionally:** this was decided on the P-known dev window after the failure review found false departures were the stationary loss. Following the references off a mooring, at any release threshold tried (0.5–0.9 of the reference weight moved), was worse than holding. The references carry no departure-timing skill here.
+- **No references nearby:** the forecast still fails (`no_references`) rather than holding, so v2 has the same coverage as v1.
+- **Options in the code, off in v2:** `speed_match` (follow references at the target's pace; mixed on dev) and a partial hold (`depart_share` < 1).
+
 _Conformal, Timestral and TrAISformer sections are added in Milestones 4–7._

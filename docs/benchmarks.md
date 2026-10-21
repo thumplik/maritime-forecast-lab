@@ -277,3 +277,28 @@ Protocol P-region on `noaa_us_gulf_2023-06`:
 | Transiting, 1 h / 6 h / 24 h | 18.7 / 68.0 / **34.0** | **4.90** / 66.8 / 403 | 4.93 / **47.5** / 39.2 |
 
 The baselines need no geography, so they transfer.
+
+## 2026-10-21 — `route_retrieval_v2` frozen on the dev window (development record, not held out)
+
+`route_retrieval_v2` (2.0.0) = v1 plus a hold for targets stationary at the cutoff. **On the stationary set it is persistence by construction**: `config.stationary_policy = "hold_last_position"`, and the description and warnings say so. It is not retrieval skill. On underway targets it is identical to v1.
+
+| | P-known, dev (Jun 18–22), `noaa_us_gulf_2023-06-07` |
+|---|---|
+| Run id | `P-known_noaa_us_gulf_2023-06-07_dev_20261021T204207Z` (git `672a766`, clean) |
+| files.json SHA-256 | `f8dadbbeb160e52a73adba102d4c35d06f0010aaf0668486080b11705fedcec5` |
+| Models | persistence, CV, damped, v1, v2 (paired) |
+
+| Median km (skill of v2) | 1 h | 6 h | 24 h |
+|---|---|---|---|
+| Stationary: v1 / v2 / persistence | 0.01 / 0.00 / 0.00 (n/a) | 0.21 / 0.01 / 0.01 (+0.00) | 3.60 / 0.22 / 0.22 (+0.00) |
+| Underway pooled: v1 = v2 | 1.61 (+0.60) | 6.31 (+0.30) | 13.32 (−0.04) |
+| Transiting: v1 = v2 | 1.83 (+0.61) | 12.53 (+0.70) | 52.94 (−0.08) |
+
+- **v2 is persistence on moored vessels:** v2's predictions equal persistence's on all 27,354 stationary records.
+- **How the design was chosen** (dev only; scratch diagnostics on dev cutoffs):
+  - Releasing the hold where 50–90% of the reference weight had moved was worse than always holding, in median and mean, at every horizon.
+  - Speed-matched continuation was mixed (transiting medians 1.83 → 1.47 km at 1 h, but 8.25 → 8.76 km pooled at 12 h) and is not in v2.
+- **Not v2.0.0 as frozen**, though they carry its id:
+  - `…_dev_20261021T201719Z` is a pre-freeze sweep point with `depart_share` 0.5, from a dirty tree.
+  - `…_dev_20261021T203429Z` ran before the labelling fixes.
+- **July is still unscored** (no test-access ledger).

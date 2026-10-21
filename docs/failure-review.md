@@ -120,8 +120,8 @@ Rules:
 
 Each change is developed on the dev window and benchmarked as a new model version next to `route_retrieval_v1`, under the rules above, with July as the held-out test:
 
-1. **Stationary handling:** for a target stationary at the cutoff, prefer staying unless most candidates leave. Weight candidates by whether they stayed moored over the horizon. This removes false departures without claiming to predict real ones.
-2. **Speed-matched continuation:** time-warp each reference by the target's speed relative to the reference's, within bounds.
+1. **Done in `route_retrieval_v2` (dev):** hold stationary targets. Partial holds were worse than always holding, so v2 is persistence there. **Stationary handling:** for a target stationary at the cutoff, prefer staying unless most candidates leave. Weight candidates by whether they stayed moored over the horizon. This removes false departures without claiming to predict real ones.
+2. **Tried on dev, not adopted (mixed).** **Speed-matched continuation:** time-warp each reference by the target's speed relative to the reference's, within bounds.
 3. **Branch choice:** longer context and course-history terms. Measure whether the `wrong_branch` excess over its control falls.
 4. **Class gating** for fishing vessels, as a labelled hybrid, only if the dev window agrees.
 5. **Reference chaining** for horizons beyond the references' coverage.
