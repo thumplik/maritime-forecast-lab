@@ -21,4 +21,6 @@ Other providers: write a mapping in `config/sources/` (see docs/data-contracts.m
 
 - **Danish Maritime Authority (DMA)** historical AIS, http://aisdata.ais.dk/. Daily zips for recent years, monthly zips for 2023 and earlier. `scripts/fetch_dma.py` range-reads one day out of a monthly zip. Terrestrial, not down-sampled (Class A about every 10 s). Static fields are broadcast. Check DMA's terms of use before redistributing anything derived from it. One verified day: `dma_2023-06` (see docs/data-contracts.md).
 
+- **OpenStreetMap land polygons** (`land-polygons-split-4326` from osmdata.openstreetmap.de), © OpenStreetMap contributors, ODbL 1.0. Attribute OSM in anything shown. Only polygons near the truth region are kept (`processed/geo/osm_land_us_gulf.parquet`). The source zip's SHA-256 and Last-Modified are in `manifests/osm_land_us_gulf.json`. Navigable masks built from it plus train-split traffic are `processed/geo/navigable_<protocol>__<dataset>.npz`; their sidecars, `manifests/masks/*.json`, are committed.
+
 To reproduce: `make fetch && make canonical`. Checksums of every source zip are in the manifest.

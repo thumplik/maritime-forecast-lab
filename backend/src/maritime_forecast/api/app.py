@@ -55,6 +55,7 @@ from maritime_forecast.data.segment import (
 )
 from maritime_forecast.evaluation.forecast_eval import evaluate_forecast
 from maritime_forecast.evaluation.runner import BenchmarkConfig, benchmark_context, preflight
+from maritime_forecast.geo.navigable_mask import MaskMismatchError, load_navigable_mask
 from maritime_forecast.models.base import ForecastHorizon, ModelContext, history_from_store
 from maritime_forecast.models.registry import get_model, model_ids
 from maritime_forecast.provenance import git_sha
@@ -484,7 +485,43 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         The forecast is the one `POST /forecasts` serves (same `forecast_id`); truth is read
         only after it is made, from the truth region, never bridged across gaps."""
         resp = _forecast(store, req)
-        return evaluate_forecast(store, resp, req.step_minutes, settings.max_bracket_gap_minutes)
+        as_of = req.as_of.astimezone(UTC)
+        hist = history_from_store(store, req.dataset_id, req.vessel_id, as_of, req.history_hours)
+        anchor = None
+        if hist.reports.height:
+            last = hist.reports.row(-1, named=True)
+            anchor = {
+                "lat": last["latitude_deg"],
+                "lon": last["longitude_deg"],
+                "sog_knots": last["sog_knots"],
+                "observed_at": last["observed_at"],
+            }
+        warnings = []
+        mask = None
+        try:
+            mctx = _model_context(settings, store, req.dataset_id)
+            found = load_navigable_mask(
+                settings.deployment_protocol, req.dataset_id, mctx.manifest_sha256
+            )
+        except MaskMismatchError as e:
+            found = None
+            warnings.append(f"navigable mask not used: {e}")
+        if found is not None:
+            mask, side = found
+            if as_of < datetime.fromisoformat(side["traffic"]["data_until"]):
+                # The mask's traffic cells could include this vessel's own track after as_of
+                # (its truth): land flags would favour paths that follow the truth.
+                mask = None
+                warnings.append(
+                    f"land flags not scored: as_of is inside the {settings.deployment_protocol} "
+                    "train split the navigable mask was built from"
+                )
+        if anchor is None:
+            warnings.append("no report in the history window: feasibility not scored")
+        ev = evaluate_forecast(
+            store, resp, req.step_minutes, settings.max_bracket_gap_minutes, anchor, mask
+        )
+        return ev.model_copy(update={"warnings": ev.warnings + warnings})
 
     # -- benchmarks ------------------------------------------------------------------------
     @app.post(
@@ -593,6 +630,7 @@ def summarize(run, strata: set[str] | None = None, headline_only: bool = False):
                         n_failed=r.n_failed,
                         failure_rate=r.failure_rate,
                         skill_vs_best_baseline=r.skill_vs_best_baseline,
+                        feasibility=r.feasibility,
                     )
                     for r in rs
                 },
@@ -611,6 +649,7 @@ def summarize(run, strata: set[str] | None = None, headline_only: bool = False):
         n_cutoffs=run.sampler.get("n_cutoffs"),
         seed=run.sampler.get("seed"),
         max_cutoffs_per_set=run.sampler.get("max_cutoffs_per_set"),
+        feasibility=run.feasibility,
         cells=rows,
         not_evaluable=run.not_evaluable,
         dropped_cells=[d for d in run.dropped_cells if strata is None or d.stratum in strata],

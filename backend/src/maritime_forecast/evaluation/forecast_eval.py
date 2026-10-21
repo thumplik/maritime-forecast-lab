@@ -14,13 +14,16 @@ import numpy as np
 import polars as pl
 
 from maritime_forecast.config import default_region
+from maritime_forecast.evaluation.feasibility import feasibility_flags
 from maritime_forecast.evaluation.runner import truth_on_grid
 from maritime_forecast.geo.geodesic import along_cross_track, distance_m
+from maritime_forecast.geo.navigable_mask import NavigableMask
 from maritime_forecast.schemas.forecast import (
     ForecastEvaluation,
     ForecastResponse,
     HorizonScore,
     ModelEvaluation,
+    PathFeasibility,
     TrackPoint,
 )
 from maritime_forecast.storage.parquet_store import ParquetStore
@@ -35,7 +38,11 @@ def evaluate_forecast(
     forecast: ForecastResponse,
     step_minutes: int,
     max_bracket_gap_minutes: float = 30.0,
+    anchor: dict | None = None,
+    mask: NavigableMask | None = None,
 ) -> ForecastEvaluation:
+    """`anchor` is the last history report {lat, lon, sog_knots, observed_at}; without it no
+    feasibility is reported. `mask` adds land flags (descriptive, never a constraint)."""
     if not forecast.forecasts:
         raise ValueError("nothing to evaluate")
     times = forecast.forecasts[0].target_times
@@ -69,6 +76,19 @@ def evaluate_forecast(
             plon = np.array([p.longitude_deg for p in f.points])
             err = distance_m(plat, plon, lat, lon)
             along, cross = along_cross_track(plat, plon, lat, lon, course)
+        feas = None
+        if ok[f.model_id] and anchor is not None:
+            fl = feasibility_flags(
+                np.array([anchor["lat"]]), np.array([anchor["lon"]]),
+                np.array([np.nan if anchor["sog_knots"] is None else anchor["sog_knots"]]),
+                np.array([(times[0] - anchor["observed_at"]).total_seconds()]),
+                plat[None, :], plon[None, :], step.total_seconds(), mask,
+            )  # fmt: skip
+            row = {k: None if v is None else v[0].tolist() for k, v in fl.items()}
+            feas = PathFeasibility(
+                land_point=row["land_point"], land_crossing=row["land_crossing"],
+                implausible_speed=row["speed"], implausible_accel=row["accel"],
+            )  # fmt: skip
         scores = []
         for i, m in enumerate(minutes):
             if not ev[i] or not ok[f.model_id]:
@@ -91,6 +111,7 @@ def evaluate_forecast(
                 status=f.status,
                 scores=scores,
                 ade_m=float(np.mean(on_pairs)) if on_pairs else None,
+                feasibility=feas,
             )
         )
     warnings = []
@@ -98,7 +119,7 @@ def evaluate_forecast(
     if all(r == "no_report_before" for r in reasons):
         warnings.append(
             f"the vessel has no report in the truth region ({truth_region}) before any target "
-            "time; the dataset may lie outside it"
+            "time: it was not reporting, or the dataset lies outside that region"
         )
     elif not any(ev):
         warnings.append("no target time has truth: nothing was scored")
@@ -117,5 +138,6 @@ def evaluate_forecast(
         truth_reasons=reasons,
         paired=paired,
         models=models,
+        feasibility_mask=mask.source_id if mask is not None else None,
         warnings=warnings,
     )

@@ -9,6 +9,8 @@ data/manifests/*
 !data/manifests/*.json
 !data/manifests/splits/
 !data/manifests/splits/*.json
+!data/manifests/masks/
+!data/manifests/masks/*.json
 
 # Models, checkpoints, caches
 *.ckpt

@@ -71,7 +71,8 @@ def test_get_finalized_run_and_summary(env):
     s = client.get("/benchmarks/syn-run/summary").json()
     assert s["n_cutoffs"] == run.sampler["n_cutoffs"] and s["seed"] == cfg.seed
     assert len(s["cells"]) == len({(r.stratum, r.horizon_minutes) for r in run.results})
-    assert s["max_cutoffs_per_set"] is None and not s["warnings"]
+    assert s["max_cutoffs_per_set"] is None
+    assert [w for w in s["warnings"] if "navigable mask" not in w] == []
     for c in s["cells"]:  # one row per paired cell, every model side by side
         assert set(c["models"]) == set(cfg.model_ids)
         assert all(m["n_failed"] == 0 for m in c["models"].values())

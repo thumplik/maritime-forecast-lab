@@ -179,6 +179,16 @@ class HorizonScore(BaseModel):
         return self
 
 
+class PathFeasibility(BaseModel):
+    """Per target time, for the move from the previous point (the last report, for the
+    first): evaluation.feasibility. Land flags are null when no navigable mask is loaded."""
+
+    land_point: list[bool] | None = None
+    land_crossing: list[bool] | None = None
+    implausible_speed: list[bool]
+    implausible_accel: list[bool]
+
+
 class ModelEvaluation(BaseModel):
     model_id: str
     status: Literal["ok", "unsupported", "failed"]
@@ -188,6 +198,7 @@ class ModelEvaluation(BaseModel):
         description="Mean error over the PAIRED target times (comparable across models); "
         "null if there are none",
     )
+    feasibility: PathFeasibility | None = Field(None, description="Null unless status is ok")
 
 
 class ForecastEvaluation(BaseModel):
@@ -214,6 +225,9 @@ class ForecastEvaluation(BaseModel):
     )
     paired: list[bool] = Field(description="Per target time: every model is evaluable")
     models: list[ModelEvaluation]
+    feasibility_mask: str | None = Field(
+        None, description="Navigable mask the land flags come from; null if none was loaded"
+    )
     warnings: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")

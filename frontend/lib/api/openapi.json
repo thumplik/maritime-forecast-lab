@@ -159,6 +159,19 @@
             ],
             "title": "Error"
           },
+          "feasibility": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Feasibility config and land-mask source (null in older runs)",
+            "title": "Feasibility"
+          },
           "git_sha": {
             "title": "Git Sha",
             "type": "string"
@@ -338,6 +351,19 @@
             ],
             "title": "Error"
           },
+          "feasibility": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Feasibility config and navigable-mask source",
+            "title": "Feasibility"
+          },
           "git_sha": {
             "title": "Git Sha",
             "type": "string"
@@ -436,6 +462,7 @@
           "n_cutoffs",
           "seed",
           "max_cutoffs_per_set",
+          "feasibility",
           "cells",
           "not_evaluable",
           "dropped_cells",
@@ -516,6 +543,16 @@
             "minimum": 0.0,
             "title": "Failure Rate",
             "type": "number"
+          },
+          "feasibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeasibilityStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "headline": {
             "description": "Eligible for headline tables: admitted horizon and failure_rate <= 0.01",
@@ -903,6 +940,69 @@
         "title": "ErrorDetail",
         "type": "object"
       },
+      "FeasibilityStats": {
+        "description": "Fractions of the cell's paired samples whose forecast, anywhere up to this horizon,\nhas the flag (evaluation.feasibility). Land rates are null when no land mask was loaded.",
+        "properties": {
+          "implausible_accel_rate": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Implausible Accel Rate",
+            "type": "number"
+          },
+          "implausible_speed_rate": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Implausible Speed Rate",
+            "type": "number"
+          },
+          "land_crossing_rate": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Land Crossing Rate"
+          },
+          "land_point_rate": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Land Point Rate"
+          },
+          "truth_on_land_rate": {
+            "anyOf": [
+              {
+                "maximum": 1.0,
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Same for every model: paired samples whose TRUE positions, at any evaluable step up to the horizon, the mask puts on land (cumulative, like the model rates). Vessels are not on land, so this is the mask's own error (docks, narrow channels): how much a land rate can be trusted",
+            "title": "Truth On Land Rate"
+          }
+        },
+        "required": [
+          "implausible_speed_rate",
+          "implausible_accel_rate"
+        ],
+        "title": "FeasibilityStats",
+        "type": "object"
+      },
       "ForecastEvaluation": {
         "additionalProperties": false,
         "description": "Truth and errors for one forecast; returned separately and only on request.\n\nEvery target time is reported for every model (no silent drops). A target time without\ntruth is not evaluable for any model, with the truth reason; where truth exists but a model\nproduced no forecast, that model's score is `model_failed`. `paired` marks the target times\nwhere every model is evaluable, the set to compare models on.",
@@ -919,6 +1019,18 @@
           "dataset_id": {
             "title": "Dataset Id",
             "type": "string"
+          },
+          "feasibility_mask": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Navigable mask the land flags come from; null if none was loaded",
+            "title": "Feasibility Mask"
           },
           "forecast_id": {
             "title": "Forecast Id",
@@ -1428,6 +1540,17 @@
             "description": "Mean error over the PAIRED target times (comparable across models); null if there are none",
             "title": "Ade M"
           },
+          "feasibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PathFeasibility"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null unless status is ok"
+          },
           "model_id": {
             "title": "Model Id",
             "type": "string"
@@ -1687,6 +1810,59 @@
         "title": "ModelRef",
         "type": "object"
       },
+      "PathFeasibility": {
+        "description": "Per target time, for the move from the previous point (the last report, for the\nfirst): evaluation.feasibility. Land flags are null when no navigable mask is loaded.",
+        "properties": {
+          "implausible_accel": {
+            "items": {
+              "type": "boolean"
+            },
+            "title": "Implausible Accel",
+            "type": "array"
+          },
+          "implausible_speed": {
+            "items": {
+              "type": "boolean"
+            },
+            "title": "Implausible Speed",
+            "type": "array"
+          },
+          "land_crossing": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "boolean"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Land Crossing"
+          },
+          "land_point": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "boolean"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Land Point"
+          }
+        },
+        "required": [
+          "implausible_speed",
+          "implausible_accel"
+        ],
+        "title": "PathFeasibility",
+        "type": "object"
+      },
       "ProtocolRef": {
         "properties": {
           "dataset_id": {
@@ -1854,6 +2030,16 @@
           "failure_rate": {
             "title": "Failure Rate",
             "type": "number"
+          },
+          "feasibility": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/FeasibilityStats"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "median_error_m": {
             "$ref": "#/components/schemas/Stat"

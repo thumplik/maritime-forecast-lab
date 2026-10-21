@@ -8,7 +8,7 @@ END   ?= 2023-06-30
 
 NPM := npm --prefix frontend
 
-.PHONY: help setup dev web-test gen-api test lint format fetch fetch-list canonical audit calibrate splits import fetch-dma api benchmark fit notebook
+.PHONY: help setup dev web-test gen-api test lint format fetch fetch-list canonical audit calibrate splits import fetch-dma api benchmark fit notebook fetch-land mask
 
 help:  ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -62,6 +62,12 @@ splits:  ## Materialize split manifests into data/manifests/splits/
 
 fit:  ## Fit damped-velocity tau on a protocol's train split: make fit PROTOCOL=P-known
 	$(PY) scripts/fit_damped_velocity.py --protocol $(PROTOCOL)
+
+fetch-land:  ## OSM land polygons for the truth region (~0.9 GB transfer, deleted after filtering)
+	$(PY) scripts/fetch_land_polygons.py
+
+mask:  ## Navigable-water mask from TRAIN-split traffic: make mask PROTOCOL=P-known
+	$(PY) scripts/build_navigable_mask.py --protocol $(PROTOCOL)
 
 benchmark:  ## Paired baseline benchmark: make benchmark PROTOCOL=P-known (or P-unseen)
 	$(PY) scripts/run_benchmark.py --protocol $(PROTOCOL)

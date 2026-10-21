@@ -1,7 +1,8 @@
 """Unattended paired benchmark of registered models (build plan §6, Milestone 2).
 
 Writes an immutable run to data/runs/benchmarks/<run_id>/ (run.json, records.parquet,
-cutoffs.parquet, report.md, files.json).
+cutoffs.parquet, report.md, files.json), then a GeoJSON export of the paired transiting
+stratum to data/runs/exports/<run_id>/transiting.geojson (scripts/export_geojson.py for more).
 
 Usage:
     uv run --project backend python scripts/run_benchmark.py --protocol P-known
@@ -15,6 +16,7 @@ import argparse
 import time
 
 from maritime_forecast.config import MANIFEST_DIR
+from maritime_forecast.evaluation.export import write_run_geojson
 from maritime_forecast.evaluation.runner import BenchmarkConfig, run_benchmark
 from maritime_forecast.storage.parquet_store import ParquetStore
 from maritime_forecast.storage.run_store import RunStore
@@ -31,6 +33,7 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=20230601)
     ap.add_argument("--n-boot", type=int, default=1000)
     ap.add_argument("--max-cutoffs-per-set", type=int, default=None, help="smoke runs only")
+    ap.add_argument("--no-geojson", action="store_true", help="skip the GeoJSON export")
     args = ap.parse_args()
 
     cfg = BenchmarkConfig(
@@ -49,6 +52,11 @@ def main() -> None:
     print(f"run {run.run_id}: {run.sampler['n_cutoffs']:,} cutoffs, {len(run.results)} cells, "
           f"{time.time() - t0:.0f} s")  # fmt: skip
     print(f"report: data/runs/benchmarks/{run.run_id}/report.md")
+    if not args.no_geojson:
+        out = write_run_geojson(
+            RunStore(), run.run_id, ["underway:TRANSITING"], paired_only=True, name="transiting"
+        )
+        print(f"geojson: {out} ({out.stat().st_size / 1e6:.1f} MB)")
 
 
 if __name__ == "__main__":

@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from maritime_forecast.schemas.benchmark import (
     BenchmarkRun,
     DroppedCell,
+    FeasibilityStats,
     ModelRef,
     ProtocolRef,
     Stat,
@@ -198,6 +199,7 @@ class SummaryModelCell(BaseModel):
     n_failed: int = Field(description="Evaluable samples this model failed (excluded for all)")
     failure_rate: float
     skill_vs_best_baseline: Stat | None = None
+    feasibility: FeasibilityStats | None = None
 
 
 class SummaryCell(BaseModel):
@@ -228,6 +230,7 @@ class BenchmarkSummary(BaseModel):
     n_cutoffs: int | None
     seed: int | None
     max_cutoffs_per_set: int | None = Field(description="Set only for smoke runs")
+    feasibility: dict | None = Field(description="Feasibility config and navigable-mask source")
     cells: list[SummaryCell]
     not_evaluable: dict[str, dict[str, int]]
     dropped_cells: list[DroppedCell] = Field(description="Unscored cells (same stratum filter)")

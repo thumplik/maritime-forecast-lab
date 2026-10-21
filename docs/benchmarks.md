@@ -142,3 +142,44 @@ Caveats:
 - τ was fitted on underway train cutoffs only, but it is applied to stationary cutoffs too. Stationary vessels have SOG ≈ 0, so the effect is small.
 - The fit objective is the mean of median errors over 1–24 h, so the 12–24 h errors dominate it.
 - Fitted τ is refused for any `as_of` before the end of the train period (`fit_overlaps_as_of`) and for any other manifest.
+
+## 2026-10-21 — Feasibility flags against the navigable-water mask
+
+Same models, cutoffs, seed and test period as the previous section. (Two earlier runs of this slice, `…033802Z` / `…034013Z`, used a non-cumulative truth floor; the leakage review caught it and they were deleted.) **Every error metric, record and cutoff is identical to `…021006Z` / `…021141Z`** (checked cell by cell). What is new is feasibility per cell, a GeoJSON export, and horizon positions in `records.parquet`.
+
+| | P-known | P-unseen |
+|---|---|---|
+| Run id | `P-known_noaa_us_gulf_2023-06_20261021T034634Z` | `P-unseen_noaa_us_gulf_2023-06_20261021T034836Z` |
+| files.json SHA-256 | `7ee914bff5198d0a3b86f36dcd46ff0db133de938c0cab6e2718fb5a2c839cf5` | `dc300c21a8089dd95b4ae3d713f1d396f2c0ddb717e57b0cb457dbddae1a3740` |
+| Mask | `osm_land_us_gulf@e8224df7b334+traffic[P-known:train,>=2v,dilate1]` | `…+traffic[P-unseen:train,>=2v,dilate1]` |
+| Wall time | 120 s (95 s before feasibility) | 33 s |
+
+The mask is OSM land minus cells used by at least 2 vessels in that protocol's **train** split (see `docs/evaluation-protocol.md` § Feasibility). Its own error is the `truth` column below: the share of paired samples whose TRUE positions, at any evaluable step up to the horizon, it puts on land. This is cumulative, like the model rates. Under P-known it grows from 1.4% at 1 h to 8.1% at 24 h for pooled underway vessels, and from 0.8% to 3.7% for transiting ones. Under P-unseen it reaches 8.6% and 4.2% at 24 h. A model land rate near that floor means nothing.
+
+### Share of paired forecasts with a point on infeasible land, anywhere up to the horizon
+
+| Horizon | truth | Persistence | CV | Damped | CTR |
+|---|---|---|---|---|---|
+| **P-known, underway pooled** |
+| 1 h | 1.4% | 0.3% | 61.3% | 26.0% | 64.1% |
+| 6 h | 3.6% | 0.3% | 80.7% | 28.9% | 81.0% |
+| 24 h | 8.1% | 0.3% | 88.1% | 29.2% | 88.0% |
+| **P-known, transiting** |
+| 1 h | 0.8% | 0.0% | 29.5% | 21.3% | 30.1% |
+| 6 h | 1.8% | 0.0% | 58.1% | 33.2% | 58.6% |
+| 24 h | 3.7% | 0.0% | 83.1% | 37.6% | 83.0% |
+| **P-unseen, transiting** |
+| 1 h | 0.8% | 0.0% | 34.5% | 27.1% | 34.9% |
+| 6 h | 2.8% | 0.0% | 62.8% | 36.8% | 64.4% |
+| 24 h | 4.2% | 0.0% | 85.8% | 41.0% | 86.3% |
+
+Path crossings (the move between grid points passes over land) run 1–4 points higher than land points. Implausible speed (> 60 kn) is 0.0% everywhere. Implausible acceleration (> 2 kn/min) is 1.1–1.3% for persistence (an instant stop from about 20 kn), 0.2% for damped velocity, and 0.0% for CV and CTR. Full tables are in each run's `report.md`.
+
+### What this says
+
+1. **Straight-line extrapolation leaves the water within an hour in port.** Most pooled underway cutoffs are in the Houston Ship Channel and its branches, and CV or CTR puts 61–64% of them on land by 1 h. Even for ships in transit, 30–35% are on land by 1 h, and 83–86% by 24 h.
+2. **Damped velocity's lower error is partly that it stops before reaching land** (26–41% on land). It still crosses land often. Its long-horizon win is not route knowledge.
+3. **Persistence is feasible by construction** (0.0–0.3%, below the mask's own floor). A stationary point is tested once, while the truth floor counts any of many steps. It is also the best baseline in pooled port traffic from 3 h onward (previous section).
+4. This is the measured gap a route-aware model (Milestone 3 retrieval) has to close: keep CV's short-horizon accuracy without leaving the channel.
+
+GeoJSON of the paired transiting stratum is written by `make benchmark` to `data/runs/exports/<run_id>/transiting.geojson` (7.9 MB / 1.5 MB). Use `scripts/export_geojson.py` for other filters.

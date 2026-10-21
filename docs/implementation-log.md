@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 2 — Baselines and the evaluator** (in progress: slices 1–4 done). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 2 — Baselines and the evaluator** (in progress: slices 1–5 done; milestone check next). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -532,3 +532,57 @@ Real-data smoke through the app (scratch script, not committed):
 - navigable-water mask and feasibility flags;
 - GeoJSON export from the benchmark CLI;
 - then `/milestone-check`.
+
+## 2026-10-21 — Milestone 2 slice 5: navigable-water mask, feasibility flags, GeoJSON export
+
+**Milestone:** 2 — baselines and the evaluator
+**Done:**
+- `scripts/fetch_land_polygons.py` (`make fetch-land`) streams OSM `land-polygons-split-4326` (ODbL, 885 MiB) with resume. It keeps the 19,175 polygons near `us_gulf` and deletes the zip. The manifest is `data/manifests/osm_land_us_gulf.json` (SHA-256 `e8224df7b334…`).
+- **Finding:** OSM land polygons count channels, rivers and lakes behind the coastline as land. On their own they put 74% of stationary and 51% of underway real Houston reports on land. The Houston Ship Channel at Baytown is "land"; Galveston Bay is water.
+- `geo/navigable_mask.py`:
+  - The land raster is 0.001° (≈ 100 m), cached, and matches exact point-in-polygon on 99.94% of random points.
+  - Traffic cells (≥ 2 distinct vessels in the protocol's train split; P-unseen: train-assigned vessels only), dilated 1 cell, are removed from land.
+  - Point and segment tests, a bit-packed save, and a checksummed sidecar in `data/manifests/masks/` (now un-ignored).
+  - Parameters were chosen on each protocol's calibration split with `scripts/tune_navigable_mask.py`. The table is in `docs/evaluation-protocol.md` § Feasibility.
+- `evaluation/feasibility.py`: per-step flags for land point, land crossing (half-cell sampling along lon/lat lines), implied speed > 60 kn, and acceleration > 2 kn/min.
+- Runner:
+  - `preflight` refuses a mask fitted for another manifest, or not on train.
+  - Flags are cumulative over the grid. Per-cell `FeasibilityStats` cover the paired samples and include a cumulative `truth_on_land_rate` (the mask's own error).
+  - Records gain horizon `pred_*`/`truth_*` positions and `feas_*` columns, null where a model failed.
+  - The run records its mask, warns when there is none, and has a feasibility table in `report.md`.
+- `POST /forecasts/evaluation` returns per-model `PathFeasibility` against the P-known mask. Land flags are null when `as_of` is inside that train split. The benchmark summary carries feasibility.
+- `evaluation/export.py`, `scripts/export_geojson.py`: GeoJSON per run under `data/runs/exports/` with a sidecar.
+  - Predictions are LineStrings from the anchor through the horizon points, labelled as chords. Truth is a MultiPoint, never a line.
+  - `make benchmark` exports the paired transiting stratum.
+- Dependencies: `shapely`, `pyshp`. Makefile: `fetch-land`, `mask`.
+- Tests: 246 (+13) — rasterization, mask logic, thin-land segments, P-unseen and time filters on traffic, runner integration, refusal, GeoJSON, API null-in-window.
+
+**Leakage review (leakage-reviewer subagent):** no leakage, and no error metric depends on the mask. Fixed:
+1. The truth floor was single-point while model rates are cumulative; it is now cumulative. Two runs made before this fix were deleted.
+2. API land flags could reflect the target's own post-`as_of` track (inside the P-known train window); they are now null there. A warning was added when there is no anchor.
+3. The tuning measurement is committed and was re-checked on P-unseen's calibration split (calibration vessels).
+4. GeoJSON `paired_only` now nulls unpaired errors.
+5. Only train-split masks are accepted.
+
+**Commands run:**
+```bash
+uv add shapely pyshp
+uv run --project backend python scripts/fetch_land_polygons.py --keep-zip   # zip deleted afterwards
+make mask PROTOCOL=P-known && make mask PROTOCOL=P-unseen
+uv run --project backend python scripts/tune_navigable_mask.py --protocol P-known   # and P-unseen
+make benchmark PROTOCOL=P-known     # 120 s
+make benchmark PROTOCOL=P-unseen    # 33 s
+make test && make lint && make gen-api && make web-test   # 246 passed
+```
+
+**Results:** runs `P-known_noaa_us_gulf_2023-06_20261021T034634Z` and `P-unseen_noaa_us_gulf_2023-06_20261021T034836Z` (digests in `docs/benchmarks.md`).
+- Every error metric, record and cutoff is identical to the previous kept runs.
+- Pooled underway (P-known), share on infeasible land by 1 h → 24 h: CV 61% → 88%, damped 26% → 29%, persistence 0.3%; truth floor 1.4% → 8.1%.
+- Transiting: CV 30–35% at 1 h.
+- Implausible speed is 0% everywhere.
+
+**Blockers / open questions:** none.
+- The truth floor grows to about 8% at 24 h in pooled port traffic (docks, cells no train vessel visited). A denser source (NOAA ENC, or OSM inland water polygons via a regional extract) would lower it. Not needed to read the current, much larger model rates.
+- P-region masks are not built (P-region benchmarks are not built either).
+
+**Next step:** `/milestone-check` for Milestone 2. The open "done when" items to verify: calibration passes, and every model passes the invariance test with the current code.

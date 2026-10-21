@@ -281,6 +281,13 @@ export interface components {
             dropped_cells?: components["schemas"]["DroppedCell"][];
             /** Error */
             error?: string | null;
+            /**
+             * Feasibility
+             * @description Feasibility config and land-mask source (null in older runs)
+             */
+            feasibility?: {
+                [key: string]: unknown;
+            } | null;
             /** Git Sha */
             git_sha: string;
             /** Horizons Minutes */
@@ -357,6 +364,13 @@ export interface components {
             dropped_cells: components["schemas"]["DroppedCell"][];
             /** Error */
             error: string | null;
+            /**
+             * Feasibility
+             * @description Feasibility config and navigable-mask source
+             */
+            feasibility: {
+                [key: string]: unknown;
+            } | null;
             /** Git Sha */
             git_sha: string;
             /** Horizons Minutes */
@@ -429,6 +443,7 @@ export interface components {
              * @description n_failed / (n_paired + n_failed)
              */
             failure_rate: number;
+            feasibility?: components["schemas"]["FeasibilityStats"] | null;
             /**
              * Headline
              * @description Eligible for headline tables: admitted horizon and failure_rate <= 0.01
@@ -584,6 +599,26 @@ export interface components {
             message: string;
         };
         /**
+         * FeasibilityStats
+         * @description Fractions of the cell's paired samples whose forecast, anywhere up to this horizon,
+         *     has the flag (evaluation.feasibility). Land rates are null when no land mask was loaded.
+         */
+        FeasibilityStats: {
+            /** Implausible Accel Rate */
+            implausible_accel_rate: number;
+            /** Implausible Speed Rate */
+            implausible_speed_rate: number;
+            /** Land Crossing Rate */
+            land_crossing_rate?: number | null;
+            /** Land Point Rate */
+            land_point_rate?: number | null;
+            /**
+             * Truth On Land Rate
+             * @description Same for every model: paired samples whose TRUE positions, at any evaluable step up to the horizon, the mask puts on land (cumulative, like the model rates). Vessels are not on land, so this is the mask's own error (docks, narrow channels): how much a land rate can be trusted
+             */
+            truth_on_land_rate?: number | null;
+        };
+        /**
          * ForecastEvaluation
          * @description Truth and errors for one forecast; returned separately and only on request.
          *
@@ -602,6 +637,11 @@ export interface components {
             data_version: string;
             /** Dataset Id */
             dataset_id: string;
+            /**
+             * Feasibility Mask
+             * @description Navigable mask the land flags come from; null if none was loaded
+             */
+            feasibility_mask?: string | null;
             /** Forecast Id */
             forecast_id: string;
             /** Max Bracket Gap Minutes */
@@ -801,6 +841,8 @@ export interface components {
              * @description Mean error over the PAIRED target times (comparable across models); null if there are none
              */
             ade_m?: number | null;
+            /** @description Null unless status is ok */
+            feasibility?: components["schemas"]["PathFeasibility"] | null;
             /** Model Id */
             model_id: string;
             /** Scores */
@@ -899,6 +941,21 @@ export interface components {
             /** Model Version */
             model_version: string;
         };
+        /**
+         * PathFeasibility
+         * @description Per target time, for the move from the previous point (the last report, for the
+         *     first): evaluation.feasibility. Land flags are null when no navigable mask is loaded.
+         */
+        PathFeasibility: {
+            /** Implausible Accel */
+            implausible_accel: boolean[];
+            /** Implausible Speed */
+            implausible_speed: boolean[];
+            /** Land Crossing */
+            land_crossing?: boolean[] | null;
+            /** Land Point */
+            land_point?: boolean[] | null;
+        };
         /** ProtocolRef */
         ProtocolRef: {
             /** Dataset Id */
@@ -980,6 +1037,7 @@ export interface components {
         SummaryModelCell: {
             /** Failure Rate */
             failure_rate: number;
+            feasibility?: components["schemas"]["FeasibilityStats"] | null;
             median_error_m: components["schemas"]["Stat"];
             /**
              * N Failed

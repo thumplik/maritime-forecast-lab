@@ -87,6 +87,39 @@ Runs go to the immutable run store; failed runs are recorded too. Results are in
 
 Geodesic displacement error (km, nmi) per horizon; ADE/FDE; along/cross-track; median, p90, mean with paired bootstrap 95% CI resampling vessels. Paired: identical (cutoff, horizon) set for every model in a comparison.
 
+## Feasibility (§6.5)
+
+Forecasts are never constrained to water. Their paths are flagged afterwards (`evaluation/feasibility.py`), and per cell the runner reports the share of **paired** samples flagged anywhere up to the horizon. Flags of a model that failed are null, never "feasible".
+
+| Flag | Rule |
+|---|---|
+| land point | A forecast grid point is infeasible in the navigable mask |
+| land crossing | The move from the previous point passes through an infeasible cell. The anchor report is the previous point for step 1. The move is sampled every half cell along a straight lon/lat line, a documented approximation over one grid step |
+| implausible speed | Implied speed of a move > 60 kn (the canonical `sog_implausible` bound) |
+| implausible acceleration | Implied speed changes by > 2 kn/min from the previous move. For step 1 the comparison is with the anchor's reported SOG |
+
+**Navigable mask** (`geo/navigable_mask.py`, `make fetch-land`, `make mask PROTOCOL=...`):
+
+- **Land** is OSM land polygons (`land-polygons-split-4326`, ODbL) rasterized at cell centres on a 0.001° grid (≈ 100 m) over the truth region. The raster matches exact point-in-polygon tests on 99.94% of random points; the rest are boundary cells. Natural Earth is never used.
+- **Water is not only the sea.** OSM land is everything that is not sea, so ship channels, rivers and lakes behind the coastline count as land. On their own, the polygons put 74% of stationary and 50% of underway real reports in Houston–Galveston on land.
+- **Traffic cells** are therefore removed from land: cells where at least `min_vessels` distinct vessels reported during the protocol's **train** split. Under P-unseen only train-assigned vessels count. Quality-flagged reports are excluded, and the cells are then dilated by `dilate_cells`. Fit only on protocol-permitted data (§6.2). The sidecar in `data/manifests/masks/` records the manifest SHA-256, the split, the periods and the mask checksum.
+- **Parameters were chosen on each protocol's calibration split**, never test, with `scripts/tune_navigable_mask.py`. For each candidate, the mask is fitted on train and scored on 500 k sampled calibration reports in Houston–Galveston (seed 1). Under P-unseen these are calibration-assigned vessels only. The table shows the share of real reports called infeasible, and the share of OSM land still flagged:
+
+  | min_vessels | dilate | P-known stationary | P-known underway | P-unseen stationary | P-unseen underway | land still flagged |
+  |---|---|---|---|---|---|---|
+  | — (OSM only) | — | 73.9% | 50.7% | 75.3% | 52.1% | 100% |
+  | 1 | 1 | 0.03% | 0.02% | 0.22% | 0.17% | 99.1–99.2% |
+  | **2** | **1** | **0.56%** | **0.10%** | **0.58%** | **0.75%** | **99.4%** |
+  | 2 | 2 | 0.43% | 0.09% | 0.22% | 0.73% | 99.1% |
+  | 3 | 1 | 1.27% | 0.29% | 3.53% | 0.90% | 99.5% |
+
+  Underway error is higher under P-unseen because unseen vessels use places train traffic never visited.
+  2 vessels rather than 1 keeps one stray transponder (for example, one carried on a truck) from opening a road.
+- **The mask's own error is reported in every cell** as `truth_on_land_rate`. It is computed the same way as the model rates: the share of paired samples whose true positions, at any evaluable step up to the horizon, the mask puts on land. A model's land rate near that floor carries no information.
+- The runner refuses a mask fitted for another manifest, or on the split being scored, before a run is created. With no mask, land flags are null and the run carries a warning.
+- The API's `POST /forecasts/evaluation` uses the deployment protocol's (P-known) mask. When `as_of` falls inside that train split, land flags are **null**, with a warning: the mask's traffic could include this vessel's own track after `as_of` (its truth). Speed and acceleration flags are still reported.
+- The runner refuses any mask not fitted on the train split.
+
 ## Calibration (§6.6)
 
 `make calibrate` → paper-compatible constant velocity on P-paper vs the published table, ±10% tolerance. Assumptions made in reconstructing P-paper are listed in [coverage-audit.md](coverage-audit.md#calibration).

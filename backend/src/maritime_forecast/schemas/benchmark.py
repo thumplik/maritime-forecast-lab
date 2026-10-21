@@ -35,6 +35,23 @@ class Stat(BaseModel):
     ci_high: float
 
 
+class FeasibilityStats(BaseModel):
+    """Fractions of the cell's paired samples whose forecast, anywhere up to this horizon,
+    has the flag (evaluation.feasibility). Land rates are null when no land mask was loaded."""
+
+    land_point_rate: float | None = Field(None, ge=0, le=1)
+    land_crossing_rate: float | None = Field(None, ge=0, le=1)
+    implausible_speed_rate: float = Field(ge=0, le=1)
+    implausible_accel_rate: float = Field(ge=0, le=1)
+    truth_on_land_rate: float | None = Field(
+        None, ge=0, le=1,
+        description="Same for every model: paired samples whose TRUE positions, at any evaluable "
+        "step up to the horizon, the mask puts on land (cumulative, like the model rates). "
+        "Vessels are not on land, so this is the mask's own error (docks, narrow channels): "
+        "how much a land rate can be trusted",
+    )  # fmt: skip
+
+
 class CellResult(BaseModel):
     """One model x horizon x stratum cell, scored on the paired evaluable set."""
 
@@ -79,6 +96,7 @@ class CellResult(BaseModel):
         "(same vessel resamples). Null unless every registered baseline is in the run, or when "
         "the best baseline's error is ~0 (undefined)",
     )
+    feasibility: FeasibilityStats | None = None
 
     @model_validator(mode="after")
     def _headline(self) -> CellResult:
@@ -128,6 +146,9 @@ class BenchmarkRun(BaseModel):
     results: list[CellResult] = Field(default_factory=list)
     dropped_cells: list[DroppedCell] = Field(
         default_factory=list, description="Never silent: every unscored (stratum, horizon)"
+    )
+    feasibility: dict | None = Field(
+        None, description="Feasibility config and land-mask source (null in older runs)"
     )
     warnings: list[str] = Field(default_factory=list)
     error: str | None = None

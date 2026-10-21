@@ -1,0 +1,23 @@
+{
+  "dataset": "osm_land_us_gulf",
+  "source_url": "https://osmdata.openstreetmap.de/download/land-polygons-split-4326.zip",
+  "license": "ODbL 1.0, \u00a9 OpenStreetMap contributors",
+  "last_modified": "Tue, 20 Oct 2026 03:43:31 GMT",
+  "size_bytes": 928413925,
+  "sha256": "e8224df7b334e864d8fb3398016a5ab0e25a55c8fd4bad061043abd88bdb323d",
+  "filter": {
+    "version": "osm-land-bbox-v1",
+    "region": "us_gulf",
+    "bbox_lon_lat": [
+      -98.5,
+      23.0,
+      -80.5,
+      31.5
+    ]
+  },
+  "polygons_in_source": 873765,
+  "polygons_kept": 19175,
+  "output": "data/processed/geo/osm_land_us_gulf.parquet",
+  "fetched_at": "2026-10-21T03:27:48+00:00",
+  "git_sha": "1084ffb7196fb1882284b8ab049ee39454fc83fc-dirty"
+}

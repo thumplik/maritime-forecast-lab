@@ -335,3 +335,36 @@ def test_evaluation_brackets_with_a_report_before_as_of(client):
     ).json()
     assert e["truth_reasons"] == [None, None, None] and all(e["paired"])
     assert e["truth"][0]["latitude_deg"] == pytest.approx(29.063)
+
+
+def test_evaluation_reports_path_feasibility(client):
+    e = client.post("/forecasts/evaluation", json=_ev_req()).json()
+    assert e["feasibility_mask"] is None  # no mask for the SYNTHETIC dataset: land not scored
+    for m in e["models"]:
+        f = m["feasibility"]
+        assert f["land_point"] is None and len(f["implausible_speed"]) == 6
+        assert not any(f["implausible_speed"])
+
+
+def test_evaluation_land_flags_null_inside_the_masks_training_window(client, monkeypatch):
+    import numpy as np
+
+    import maritime_forecast.api.app as app_mod
+    from maritime_forecast.config import BBox
+    from maritime_forecast.geo.navigable_mask import Grid, NavigableMask
+
+    grid = Grid.for_bbox(BBox("t", 28.5, 29.5, -95.0, -94.0), 0.01)
+    mask = NavigableMask(grid, np.zeros((grid.ny, grid.nx), bool), "SYNTHETIC")
+
+    def fake(until):
+        return lambda *a: (mask, {"traffic": {"data_until": until}})
+
+    monkeypatch.setattr(app_mod, "load_navigable_mask", fake("2023-06-02T00:00:00+00:00"))
+    e = client.post("/forecasts/evaluation", json=_ev_req()).json()
+    assert e["feasibility_mask"] is None and any("train split" in w for w in e["warnings"])
+    assert all(m["feasibility"]["land_point"] is None for m in e["models"])
+    assert all(m["feasibility"]["implausible_speed"] is not None for m in e["models"])
+    monkeypatch.setattr(app_mod, "load_navigable_mask", fake("2023-06-01T00:00:00+00:00"))
+    e = client.post("/forecasts/evaluation", json=_ev_req()).json()
+    assert e["feasibility_mask"] == "SYNTHETIC"
+    assert all(m["feasibility"]["land_point"] == [False] * 6 for m in e["models"])

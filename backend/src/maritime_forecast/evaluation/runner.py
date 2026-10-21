@@ -34,8 +34,10 @@ from maritime_forecast.data.cutoffs import (
 from maritime_forecast.data.segment import segmented_sql
 from maritime_forecast.evaluation.admission import DEFAULT_ADMISSION, admit_by_stratum
 from maritime_forecast.evaluation.bootstrap import paired_vessel_bootstrap
+from maritime_forecast.evaluation.feasibility import FeasibilityConfig, feasibility_flags
 from maritime_forecast.evaluation.truth import truth_sql
 from maritime_forecast.geo.geodesic import along_cross_track, distance_m, inverse
+from maritime_forecast.geo.navigable_mask import NavigableMask, load_navigable_mask
 from maritime_forecast.models.base import ForecastHorizon, ModelContext, histories_for_cutoffs
 from maritime_forecast.models.registry import get_model, model_ids, product_model_ids
 from maritime_forecast.provenance import git_sha
@@ -44,6 +46,7 @@ from maritime_forecast.schemas.benchmark import (
     BenchmarkRun,
     CellResult,
     DroppedCell,
+    FeasibilityStats,
     Stat,
 )
 from maritime_forecast.schemas.dataset import DatasetManifest
@@ -72,6 +75,7 @@ class BenchmarkConfig:
     max_bracket_gap_minutes: float = 30
     max_cutoffs_per_set: int | None = None  # for smoke runs; None = all sampled cutoffs
     min_cell_samples: int = 20
+    feasibility: FeasibilityConfig = field(default_factory=FeasibilityConfig)
     samplers: dict[str, SamplerConfig] = field(
         default_factory=lambda: {
             "underway": SamplerConfig(motion_set="underway"),
@@ -87,6 +91,7 @@ class BenchmarkConfig:
         d["manifest_path"] = str(self.manifest_path)
         d["model_ids"] = list(self.models())
         d["samplers"] = {k: v.as_dict() for k, v in self.samplers.items()}
+        d["feasibility"] = self.feasibility.as_dict()
         return d
 
 
@@ -248,6 +253,10 @@ def _finite_or_none(x: float) -> float | None:
     return None if x is None or not np.isfinite(x) else float(x)
 
 
+def _rate(flags: np.ndarray | None, ids: np.ndarray, j: int) -> float | None:
+    return None if flags is None else float(flags[ids, j].mean())
+
+
 def _nanmedian(a: np.ndarray) -> float | None:
     a = a[np.isfinite(a)]
     return float(np.median(a)) if a.size else None
@@ -279,8 +288,21 @@ def benchmark_context(
     return manifest, ctx
 
 
+def navigable_mask(cfg: BenchmarkConfig, ctx: ModelContext) -> tuple[NavigableMask, dict] | None:
+    """The protocol's fitted navigable mask, or None if it was never built. Raises if it was
+    fitted for another manifest or on the split being scored."""
+    found = load_navigable_mask(ctx.protocol, cfg.dataset_id, ctx.manifest_sha256)
+    if found is not None and found[1]["traffic"]["split"] != "train":
+        raise ValueError(
+            f"the navigable mask was fitted on the {found[1]['traffic']['split']!r} split; "
+            "only train-split masks are used"
+        )
+    return found
+
+
 def preflight(cfg: BenchmarkConfig, ctx: ModelContext) -> None:
     """Refuse a benchmark that could not produce an honest run (raises ValueError)."""
+    navigable_mask(cfg, ctx)
     known = set(model_ids())
     unknown = [m for m in cfg.models() if m not in known]
     if unknown:
@@ -362,6 +384,27 @@ def _run(cfg, store, runs, run_id, manifest, base_record, ctx) -> BenchmarkRun:
     truth = truth_grid(cfg, store, cutoffs, grid_steps)
     models = list(cfg.models())
 
+    # -- feasibility flags, cumulative over the grid (a flag at step k: anywhere in 1..k) ---
+    found = navigable_mask(cfg, ctx)
+    mask = found[0] if found else None
+    n = cutoffs.height
+    anchor = [cutoffs[c].cast(pl.Float64).fill_null(np.nan).to_numpy()
+              for c in ("latitude_deg", "longitude_deg", "sog_knots")]  # fmt: skip
+    feas = {}
+    for m in models:
+        f = feasibility_flags(
+            *anchor, np.full(n, step_min * 60.0), preds[m]["lat"], preds[m]["lon"],
+            step_min * 60.0, mask, cfg.feasibility,
+        )  # fmt: skip
+        feas[m] = {k: None if v is None else np.logical_or.accumulate(v, axis=1)
+                   for k, v in f.items()}  # fmt: skip
+    # Truth on "land" at each step, and cumulatively (any evaluable truth step 1..k): the
+    # cumulative form is the mask's own error, comparable to the cumulative model rates.
+    truth_bad = (
+        mask.is_infeasible(truth["lat"], truth["lon"]) & truth["evaluable"] if mask else None
+    )
+    truth_bad_cum = np.logical_or.accumulate(truth_bad, axis=1) if mask else None
+
     # -- per-model errors on the grid ------------------------------------------------------
     ok = {m: (preds[m]["status"] == "ok") for m in models}
     all_ok = np.logical_and.reduce([ok[m] for m in models])
@@ -418,6 +461,30 @@ def _run(cfg, store, runs, run_id, manifest, base_record, ctx) -> BenchmarkRun:
                     along_m=pl.Series(np.where(ev & ok[m], along[m][:, j], np.nan)).fill_nan(None),
                     cross_m=pl.Series(np.where(ev & ok[m], cross[m][:, j], np.nan)).fill_nan(None),
                     ade_m=pl.Series(np.where(ev & all_ok, ade, np.nan)).fill_nan(None),
+                    pred_lat=pl.Series(np.where(ok[m], preds[m]["lat"][:, j], np.nan)).fill_nan(
+                        None
+                    ),
+                    pred_lon=pl.Series(np.where(ok[m], preds[m]["lon"][:, j], np.nan)).fill_nan(
+                        None
+                    ),
+                    truth_lat=pl.Series(np.where(ev, truth["lat"][:, j], np.nan)).fill_nan(None),
+                    truth_lon=pl.Series(np.where(ev, truth["lon"][:, j], np.nan)).fill_nan(None),
+                    **{
+                        f"feas_{k}": pl.Series(
+                            v[:, j] if v is not None else np.zeros(n, bool), dtype=pl.Boolean
+                        ).zip_with(
+                            pl.Series(ok[m] & (v is not None)),
+                            pl.Series([None] * n, dtype=pl.Boolean),
+                        )
+                        for k, v in feas[m].items()
+                    },
+                    truth_infeasible=(
+                        pl.Series(truth_bad[:, j]).zip_with(
+                            pl.Series(ev), pl.Series([None] * n, dtype=pl.Boolean)
+                        )
+                        if truth_bad is not None
+                        else pl.Series([None] * n, dtype=pl.Boolean)
+                    ),
                 )
             )
     records = pl.concat(rec_frames)
@@ -510,6 +577,14 @@ def _run(cfg, store, runs, run_id, manifest, base_record, ctx) -> BenchmarkRun:
                     ci_low=float(lo),
                     ci_high=float(hi),
                 )
+            fs = feas[m]
+            feasibility = FeasibilityStats(
+                land_point_rate=_rate(fs["land_point"], ids, j),
+                land_crossing_rate=_rate(fs["land_crossing"], ids, j),
+                implausible_speed_rate=_rate(fs["speed"], ids, j),
+                implausible_accel_rate=_rate(fs["accel"], ids, j),
+                truth_on_land_rate=_rate(truth_bad_cum, ids, j),
+            )
             results.append(
                 CellResult(
                     model_id=m,
@@ -538,6 +613,7 @@ def _run(cfg, store, runs, run_id, manifest, base_record, ctx) -> BenchmarkRun:
                     median_ade_m=_nanmedian(ade_m),
                     best_baseline_id=best,
                     skill_vs_best_baseline=skill,
+                    feasibility=feasibility,
                 )
             )
 
@@ -555,10 +631,18 @@ def _run(cfg, store, runs, run_id, manifest, base_record, ctx) -> BenchmarkRun:
         not_evaluable=not_eval,
         results=results,
         dropped_cells=dropped,
+        feasibility={
+            **cfg.feasibility.as_dict(),
+            "mask": found[1]["source_id"] if found else None,
+            "mask_sha256": found[1]["mask_sha256"] if found else None,
+        },
         warnings=(
             [f"smoke run: at most {cfg.max_cutoffs_per_set} cutoffs per motion set; "
              "not a full benchmark"]
             if cfg.max_cutoffs_per_set is not None else []
+        ) + (
+            [] if found else [f"no navigable mask for {manifest.protocol}: land feasibility "
+                              "not scored (run scripts/build_navigable_mask.py)"]
         ),
     )  # fmt: skip
     runs.write_table(run_id, "cutoffs", cutoffs)
@@ -614,6 +698,32 @@ def render_report(run: BenchmarkRun) -> str:
                 + " | ".join(row)
                 + " |"
             )
+        L.append("")
+    mask = (run.feasibility or {}).get("mask")
+    L += (
+        [
+            "## Feasibility (paired samples, anywhere up to the horizon)",
+            "",
+            f"Mask: `{mask}`. Cells: % with a forecast point on infeasible land / % whose path "
+            "crosses it / % with an implausible speed. `truth` is the % of the TRUE positions the "
+            "mask puts on land: the mask's own error, a floor under any land rate.",
+            "",
+        ]
+        if mask
+        else ["## Feasibility", "", "No navigable mask: land feasibility not scored.", ""]
+    )
+    for stratum in ("underway:ALL", "underway:TRANSITING"):
+        cells = [r for r in run.results if r.stratum == stratum and r.feasibility]
+        if not cells or not mask:
+            continue
+        L += [f"### {stratum}", "", "| horizon | truth | " + " | ".join(models) + " |",
+              "|---|---|" + "---|" * len(models)]  # fmt: skip
+        for h in sorted({r.horizon_minutes for r in cells}):
+            by = {r.model_id: r.feasibility for r in cells if r.horizon_minutes == h}
+            t = next(iter(by.values())).truth_on_land_rate
+            row = [f"{by[m].land_point_rate:.1%} / {by[m].land_crossing_rate:.1%} / "
+                   f"{by[m].implausible_speed_rate:.1%}" for m in models]  # fmt: skip
+            L.append(f"| {h / 60:g} h | {t:.1%} | " + " | ".join(row) + " |")
         L.append("")
     L += [
         "## Not evaluable by horizon",
