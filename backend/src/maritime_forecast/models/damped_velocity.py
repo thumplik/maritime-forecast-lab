@@ -33,14 +33,32 @@ from maritime_forecast.models.constant_velocity import STALE_WARNING_MINUTES, se
 MODEL_ID = "damped_velocity_v1"
 FIT_DIR = DATA_DIR / "model_params" / MODEL_ID
 # Candidate decay times (hours); None = no damping (constant velocity).
-TAU_GRID_H: tuple[float | None, ...] = (0.25, 0.5, 1, 1.5, 2, 3, 4, 6, 8, 12, 24, 48, None)
+TAU_GRID_H: tuple[float | None, ...] = (
+    0.02,
+    0.05,
+    0.1,
+    0.15,
+    0.25,
+    0.5,
+    1,
+    1.5,
+    2,
+    3,
+    4,
+    6,
+    8,
+    12,
+    24,
+    48,
+    None,
+)
 
 
 class DampedVelocityFit(BaseModel):
     """A fitted parameter set: tau per vessel class, with the provenance that makes it safe."""
 
     model_id: str = MODEL_ID
-    fit_version: str = "fit-damped-v1"
+    fit_version: str = "fit-damped-v2"  # v2: grid down to 0.02 h; boundary flag
     protocol: str
     dataset_id: str
     manifest_sha256: str
@@ -49,6 +67,10 @@ class DampedVelocityFit(BaseModel):
         description="vessel_class -> tau hours (null = no damping); 'default' for other classes"
     )
     n_cutoffs: dict[str, int]
+    at_grid_boundary: list[str] = Field(
+        default_factory=list,
+        description="Classes whose best tau is the smallest grid value (true optimum may be lower)",
+    )
     objective: dict[str, dict[str, float]] = Field(
         description="class -> tau (as string) -> mean over horizons of median error (m)"
     )

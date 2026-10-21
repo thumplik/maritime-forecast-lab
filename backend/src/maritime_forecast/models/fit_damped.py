@@ -137,7 +137,10 @@ def fit_damped_velocity(
             objective_table[c] = objective(mask)
             taus[c] = best(objective_table[c])
 
+    lowest = _tau_key(TAU_GRID_H[0])
+    boundary = sorted(c for c, t in taus.items() if _tau_key(t) == lowest)
     return DampedVelocityFit(
+        at_grid_boundary=boundary,
         protocol=manifest.protocol,
         dataset_id=dataset_id,
         manifest_sha256=hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
