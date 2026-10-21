@@ -276,3 +276,45 @@ class SplitManifest(BaseModel):
         ):
             return None
         return a
+
+    def window_splits(self, vessel_ids, starts, ends) -> list[SplitName | None]:
+        """Vectorized window_split for many windows (time and/or vessel manifests).
+
+        Same rule as window_split, evaluated with polars; a unit test asserts row-for-row
+        equality. P-region needs positions per window and is not vectorized.
+        """
+        import polars as pl
+
+        if self.region_split is not None:
+            raise NotImplementedError("use window_split with positions for P-region")
+        df = pl.DataFrame({"v": list(vessel_ids), "s": starts, "e": ends})
+        if self.vessel_assignment is not None:
+            uniq = df["v"].unique().to_list()
+            mapping = {v: self.vessel_assignment.assign(v) for v in uniq}
+            df = df.with_columns(vs=pl.col("v").replace_strict(mapping, return_dtype=pl.Utf8))
+        else:
+            df = df.with_columns(vs=pl.lit(None, dtype=pl.Utf8))
+        if self.periods is None:
+            return df["vs"].to_list()
+
+        def time_split(col: str) -> pl.Expr:
+            expr = pl.lit(None, dtype=pl.Utf8)
+            for p in reversed(self.periods):  # first matching period wins, as in time_split()
+                inside = (pl.col(col) >= pl.lit(p.start)) & (pl.col(col) < pl.lit(p.end))
+                expr = pl.when(inside).then(pl.lit(p.split)).otherwise(expr)
+            return expr
+
+        def point_split(col: str) -> pl.Expr:
+            ts = time_split(col)
+            ok = ts.is_not_null() & (pl.col("vs").is_null() | (pl.col("vs") == ts))
+            return pl.when(ok).then(ts).otherwise(pl.lit(None, dtype=pl.Utf8))
+
+        df = df.with_columns(a=point_split("s"), b=point_split("e"))
+        other = pl.lit(False)
+        for p in self.periods:
+            other = other | (
+                (pl.lit(p.start) < pl.col("e")) & (pl.lit(p.end) > pl.col("s"))
+                & (pl.lit(p.split) != pl.col("a"))
+            )  # fmt: skip
+        keep = pl.col("a").is_not_null() & (pl.col("a") == pl.col("b")) & ~other.fill_null(False)
+        return df.select(pl.when(keep).then(pl.col("a")).otherwise(None))["a"].to_list()

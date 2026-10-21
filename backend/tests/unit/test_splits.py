@@ -229,3 +229,27 @@ def test_region_sql_null_coordinates_are_excluded():
     rs = p_region("d").region_split
     got = duckdb.sql(f"SELECT {rs.sql_case('NULL::DOUBLE', '-88.0')}").fetchone()[0]
     assert got is None
+
+
+def test_vectorized_window_splits_match_scalar():
+    import numpy as np
+
+    rng = np.random.default_rng(3)
+    base = datetime(2023, 6, 1, tzinfo=UTC)
+    n = 4000
+    starts = [base + timedelta(minutes=int(m)) for m in rng.integers(-2 * 1440, 32 * 1440, n)]
+    ends = [
+        s + timedelta(minutes=int(m))
+        for s, m in zip(starts, rng.integers(0, 3 * 1440, n), strict=True)
+    ]
+    vessels = [str(366_000_000 + int(i)) for i in rng.integers(0, 3000, n)]
+    gap = SplitManifest(protocol="P-known", dataset_id="d", description="", periods=[
+        Period(split="test", start=base, end=base + timedelta(hours=10)),
+        Period(split="calibration", start=base + timedelta(hours=10), end=base + timedelta(hours=11)),
+        Period(split="test", start=base + timedelta(hours=11), end=base + timedelta(hours=20)),
+    ])  # fmt: skip
+    for m in (p_known("d"), p_unseen("d"), p_paper("d"), gap):
+        fast = m.window_splits(vessels, starts, ends)
+        slow = [m.window_split(v, s, e) for v, s, e in zip(vessels, starts, ends, strict=True)]
+        assert fast == slow, m.protocol
+        assert len({x for x in fast if x}) >= 1

@@ -115,11 +115,10 @@ def select_cutoffs(
         cutoff_candidates_sql(src, box.sql_predicate(), _lit(lo), _lit(hi))
     ).pl()
     hist = timedelta(hours=cfg.history_hours)
-    keep = [
-        manifest.window_split(v, t - hist, t + max_h) == cfg.split
-        for v, t in zip(cand["vessel_id"], cand["observed_at"], strict=True)
-    ]
-    cand = cand.filter(pl.Series(keep, dtype=pl.Boolean))
+    splits = manifest.window_splits(
+        cand["vessel_id"], cand["observed_at"] - hist, cand["observed_at"] + max_h
+    )
+    cand = cand.filter(pl.Series(splits, dtype=pl.Utf8) == cfg.split)
     frames = []
     for name, sc in cfg.samplers.items():
         s = sample_cutoffs(cand, SamplerConfig(**{**asdict(sc), "seed": cfg.seed}))
@@ -182,7 +181,11 @@ def truth_grid(cfg, store, cutoffs, grid_steps):
         f"latitude_deg, longitude_deg, cog_deg, sog_knots FROM ({segmented_sql('_bench_obs')}) "
         f"WHERE {truth_box.sql_predicate()}"
     )
-    con.register("_bench_targets", targets.to_arrow())
+    # Materialize the targets: an ASOF join against a registered Arrow object was measured
+    # ~1800x slower than against a table (382 s vs 0.2 s for 576k targets).
+    con.register("_bench_targets_arrow", targets.to_arrow())
+    con.execute("CREATE OR REPLACE TEMP TABLE _bench_targets AS SELECT * FROM _bench_targets_arrow")
+    con.unregister("_bench_targets_arrow")
     tsql = truth_sql(
         "_bench_targets",
         "_bench_truth_obs",
@@ -194,7 +197,7 @@ def truth_grid(cfg, store, cutoffs, grid_steps):
         f"n_lon, bracket_gap_s, p_cog_deg, p_sog_knots FROM ({tsql}) ORDER BY cutoff_id, k"
     ).pl()
     con.unregister("_bench_obs")
-    con.unregister("_bench_targets")
+    con.execute("DROP TABLE IF EXISTS _bench_targets")
     n = cutoffs.height
     shape = (n, grid_steps)
     f = lambda c: t[c].fill_null(np.nan).to_numpy().astype(float).reshape(shape)  # noqa: E731
