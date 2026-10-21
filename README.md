@@ -4,10 +4,10 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/forecast-example-dark.png">
-  <img alt="Map of Galveston Bay and the Houston Ship Channel. A tanker's real track (dotted) follows the winding channel north-west into the river. The route-retrieval forecast follows the channel's bends close to the real track. A constant-velocity forecast runs straight across land, a damped-velocity forecast stops short in the bay, and persistence stays at the cutoff." src="docs/img/forecast-example-light.png" width="720">
+  <img alt="Map of Galveston Bay at Bolivar Roads, the entrance to the Houston Ship Channel. A tanker arriving from the Gulf turns north-west into the channel; its real track (dotted) follows the channel up the bay. The route-retrieval forecast turns with it and follows the channel close to the real track. Constant-velocity and damped-velocity forecasts continue the last heading west across the Bolivar Peninsula, and persistence stays at the cutoff." src="docs/img/forecast-example-light.png" width="720">
 </picture>
 
-*One real cutoff from the June 2023 test set (picked for the baseline README, before retrieval existed). Every model saw only the reports up to the black square. The dotted line is what the ship actually did, withheld until scoring. Straight-line extrapolation crosses land within hours. Route retrieval follows earlier ships' tracks up the channel, but more slowly: at 6 h it is about where the ship really was at 3 h.*
+*One real cutoff from the July 2023 hold-out, chosen by a fixed rule (the transiting tanker cutoff nearest Bolivar Roads), not by its errors. Every model saw only the reports up to the black square. The dotted line is what the ship actually did, withheld until scoring. The kinematic forecasts carry on along the last heading and cross land. Route retrieval follows earlier ships into the channel and stays close to the real track for 6 h.*
 
 ---
 
@@ -59,54 +59,60 @@ flowchart LR
 
 ## Results so far
 
-All numbers come from immutable runs on the June 2023 NOAA test period (Jun 23–30); run ids and checksums are in [docs/benchmarks.md](docs/benchmarks.md). Since then, the June test results have been read for a [failure review](docs/failure-review.md), so they are no longer an untouched hold-out for later models. July 2023 has been fetched as a fresh test period, and the next model comparison will be reported on it.
+Headline numbers come from the **July 2023 hold-out** (Jul 2–30).
+- **Untouched until scored:** no model was designed or tuned on July. Each model version was scored on it once, and the code enforces and logs this (`data/manifests/test_access/`).
+- **Earlier results:** the June test results that shaped the current models are kept in [docs/benchmarks.md](docs/benchmarks.md) with every run id and checksum, and they show the same pattern.
 - **Skill** is the paired reduction in median error against the best of persistence, constant velocity and damped velocity in that cell, with a 95% vessel-bootstrap CI.
 - **Transiting** means cargo, tanker and passenger ships that have been underway for the last 30 minutes.
-- The evaluator itself is calibrated: paper-mode constant velocity gives 4.03 / 9.65 / 16.16 km at 1 / 2 / 3 h, against the published 3.69 / 9.03 / 15.33 km (+9% / +7% / +5%, within the 10% tolerance).
+- **The evaluator itself is calibrated:** paper-mode constant velocity gives 4.03 / 9.65 / 16.16 km at 1 / 2 / 3 h, against the published 3.69 / 9.03 / 15.33 km (+9% / +7% / +5%, within the 10% tolerance).
 
-### Historical-route retrieval beats every baseline for ships under way
+### Historical-route retrieval beats every baseline for ships in transit, on held-out data
 
-`route_retrieval_v1` finds the training-period voyages that passed closest to the ship's current position on a similar course, speed and recent track. It lines them up at the ship and follows the closest match forward. It has no learned parameters, and its references are only voyages completed before the train split ended (Jun 17).
+**How retrieval works.** It finds the training-period voyages that passed closest to the ship's current position on a similar course, speed and recent track. It lines them up at the ship and follows the closest match forward. It has no learned parameters, and it uses only voyages completed before the training period ended (Jun 17).
+- **v2 vs v1:** v2 ([notes](docs/model-integration-notes.md)) differs from v1 in one way. A ship that is moored at the cutoff stays put.
+- **Under way, v1 and v2 are identical.**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/error-by-horizon-dark.png">
-  <img alt="Median error by horizon for ships in transit, log scales. Route retrieval is lowest at every horizon: 1.6 km at 1 h, 5.9 km at 3 h and 26 km at 24 h. Constant velocity is 4.2 km at 1 h and grows to 410 km at 24 h. Damped velocity levels off at about 37 km and persistence at about 53 km." src="docs/img/error-by-horizon-light.png" width="720">
+  <img alt="Median error by horizon for ships in transit on the July hold-out, log scales. Route retrieval is lowest at every horizon: 1.7 km at 1 h, 6.0 km at 3 h and 25 km at 24 h. Constant velocity is 4.3 km at 1 h and grows to 418 km at 24 h. Damped velocity levels off at about 36 km and persistence at about 50 km." src="docs/img/error-by-horizon-light.png" width="720">
 </picture>
 
-Ships in transit, median error in km (best baseline in brackets):
+Ships in transit, July hold-out, median error in km (best baseline in brackets):
 
 | Horizon | P-known retrieval | Best baseline | Skill [95% CI] | P-unseen retrieval | Best baseline | Skill [95% CI] |
 |---|---|---|---|---|---|---|
-| 1 h | **1.6** | 4.2 (CV) | +62% [57, 66] | **1.6** | 5.1 (CV) | +69% [62, 75] |
-| 3 h | **5.9** | 25.2 (CV) | +77% [73, 79] | **7.2** | 24.6 (CV) | +71% [60, 80] |
-| 6 h | **12.8** | 37.3 (damped) | +66% [59, 70] | **16.6** | 33.5 (damped) | +50% [37, 66] |
-| 12 h | **20.8** | 35.8 (damped) | +42% [33, 48] | **23.0** | 32.7 (damped) | +30% [16, 44] |
-| 24 h | **25.6** | 37.1 (damped) | +31% [20, 43] | 33.3 | 32.3 (damped) | −3% [−53, +31], tie |
+| 1 h | **1.7** | 4.3 (CV) | +60% [57, 63] | **2.0** | 4.6 (CV) | +57% [50, 63] |
+| 3 h | **6.0** | 24.5 (CV) | +76% [74, 77] | **7.2** | 24.2 (CV) | +70% [67, 75] |
+| 6 h | **13.4** | 38.2 (damped) | +65% [61, 68] | **16.3** | 40.4 (damped) | +60% [51, 67] |
+| 12 h | **20.2** | 36.0 (damped) | +44% [39, 48] | **21.8** | 38.9 (damped) | +44% [32, 52] |
+| 24 h | **25.4** | 36.1 (damped) | +30% [19, 37] | **24.7** | 38.8 (damped) | +36% [13, 47] |
 
-Where it does **not** win:
+- **Sample sizes:** P-known has 4,590–6,006 paired samples per horizon from about 950 vessels; P-unseen has 781–1,063 from about 185.
+- **P-unseen caveat:** its July test vessels are the same vessels as in June, so the result is fresh in time but not in vessels.
+
+**Where it does not win:**
 - **All underway traffic (mostly tugs and harbour craft):**
-  - P-known: it wins up to 12 h (+64% at 1 h, +17% at 12 h) and ties at 24 h.
-  - P-unseen: it wins up to 3 h (+54% at 1 h), ties at 6–12 h and **loses at 24 h** (−38% [−63, −10]).
-  - Without the vessel's own earlier voyages, long-horizon harbour moves are poorly matched by other ships' tracks.
-- **Moored and anchored vessels:** persistence is better at every horizon. At 24 h retrieval's median is 2.9 km against 0.2 km. A nearby reference ship that later left drags the forecast away. Departure timing is a separate problem.
+  - P-known: wins up to 6 h (+53% at 1 h, +19% at 6 h), ties at 12 h and **loses at 24 h** (−31% [−39, −23] against persistence).
+  - P-unseen: wins up to 3 h, ties at 6 h, and **loses at 12 h (−17%) and 24 h (−44%)**.
+  - Short, irregular harbour jobs are poorly matched by other ships' tracks over a day.
+- **Moored and anchored vessels:**
+  - v1 lost badly here (median 4.4 km against persistence's 0.35 km at 24 h): a nearby ship that later left dragged the forecast away.
+  - v2 holds a moored ship in place, so on these vessels **it is persistence and ties it by construction**. Retrieval does not predict departures.
 - **New waters:** under P-region (train elsewhere in the Gulf, test in Houston), retrieval has no historical route nearby and fails on every cutoff. The kinematic baselines, which need no geography, still work there.
-- **References run out:**
-  - Most historical segments end within hours, when the reference ship leaves receiver coverage.
-  - After that, the forecast holds the reference's last position.
-  - This is why the advantage shrinks with horizon.
+- **References run out:** most historical segments end within hours, when the reference ship leaves receiver coverage. After that the forecast holds the reference's last position, which is why the advantage shrinks with horizon.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/img/on-land-dark.png">
-  <img alt="Share of underway forecasts that put the ship on land. Constant velocity: 61% at 1 h rising to 88% at 24 h. Damped velocity: about 26–29%. Route retrieval: 9% at 1 h rising to 29% at 24 h. Persistence: about 0%. The mask's own error, measured on the true positions, rises from 1.4% to 8%." src="docs/img/on-land-light.png" width="720">
+  <img alt="Share of underway forecasts on the July hold-out that put the ship on land. Constant velocity: 58% at 1 h rising to 84% at 24 h. Damped velocity: about 24–27%. Route retrieval: 8% at 1 h rising to 30% at 24 h. Persistence: about 0%. The mask's own error, measured on the true positions, rises from 0.5% to 1.6%." src="docs/img/on-land-light.png" width="720">
 </picture>
 
-- **Kinematics leave the channel.** In port, 61% of constant-velocity forecasts are on land within an hour.
-- **Retrieval mostly stays in water:** 9% of its paths have a point on land by 1 h, 29% by 24 h.
-  - Its *path* crossing rate is higher (28% at 1 h): straight 10-minute chords between points cut the bends of narrow channels.
+- **Kinematics leave the channel.** In port, 58% of constant-velocity forecasts are on land within an hour.
+- **Retrieval mostly stays in water:** 8% of its paths have a point on land by 1 h, 30% by 24 h.
+  - Its *path* crossing rate is higher (27% at 1 h): straight 10-minute chords between points cut the bends of narrow channels.
 - **The mask:** the navigable-water mask is OSM land minus water cells that training-period traffic actually used, because OpenStreetMap's land polygons treat the ship channel itself as land.
   - Its own error is measured on the true positions and reported in every cell (dashed line).
 
-The success condition for every model is the same: **beat the best of persistence, constant velocity and damped velocity, per stratum, on paired held-out samples under P-known and P-unseen.** Retrieval meets it for ships in transit (except 24 h under P-unseen, a tie) and for short horizons in all underway traffic. It does not meet it for stationary vessels.
+The success condition for every model is the same: **beat the best of persistence, constant velocity and damped velocity, per stratum, on paired held-out samples under P-known and P-unseen.** Retrieval meets it for ships in transit at every horizon under both protocols, and for all underway traffic up to 3–6 h. It does not meet it for long-horizon harbour traffic. For moored vessels, v2 only ties persistence.
 
 ## Roadmap
 
@@ -115,7 +121,7 @@ The success condition for every model is the same: **beat the best of persistenc
 | 0 | Data spike & coverage audit: what horizons can the data support? | ✓ |
 | 1 | Contracts, data pipeline, read API, track explorer, CI | ✓ |
 | 2 | Baselines & the evaluator: paired benchmark, calibration, invariance, feasibility, benchmark API | ✓ |
-| 3 | Historical-route retrieval: kNN over train-period segments, aligned and continued along real routes ([failure review](docs/failure-review.md)) | ✓ (v2 in development on a dev window; fresh July test pending) |
+| 3 | Historical-route retrieval: kNN over train-period segments, aligned and continued along real routes ([failure review](docs/failure-review.md)); v2 holds moored ships; scored on the July hold-out | ✓ |
 | 4 | **Conformal uncertainty:** calibrated displacement radii per stratum | ← next |
 | 5 | Workbench UI: forecast comparison, truth overlay, benchmark dashboard | |
 | 6 | Timestral zero-shot adapter (position, velocity, velocity + retrieved route) | |

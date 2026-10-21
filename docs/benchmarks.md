@@ -302,3 +302,36 @@ The baselines need no geography, so they transfer.
   - `…_dev_20261021T201719Z` is a pre-freeze sweep point with `depart_share` 0.5, from a dirty tree.
   - `…_dev_20261021T203429Z` ran before the labelling fixes.
 - **July is still unscored** (no test-access ledger).
+
+## 2026-10-21 — July 2023 hold-out: B0, `route_retrieval_v1`, `route_retrieval_v2` (held-out headline)
+
+Dataset `noaa_us_gulf_2023-06-07`, manifests `splits-v2`, **split = test (Jul 2–30), scored once**, from the clean commit `2757bd3`.
+- **Ledger:** both runs are recorded in `data/manifests/test_access/noaa_us_gulf_2023-06-07.json`, written before scoring.
+- **`informed_by`:** the June runs `P-known_…152618Z` and `P-unseen_…153929Z`, their failure reviews, and the dev run `…_dev_20261021T204207Z`.
+- **Models:** persistence, CV, CTR, damped, v1, v2 (paired). The damped τ is the train-split fit (identical to the June fit).
+- **Refused attempt:** a first P-unseen attempt was refused before scoring by the clean-tree guard (an uncommitted edit to the figure script). Nothing was scored or logged for it.
+
+| | P-known | P-unseen |
+|---|---|---|
+| Run id | `P-known_noaa_us_gulf_2023-06-07_20261021T213109Z` | `P-unseen_noaa_us_gulf_2023-06-07_20261021T225730Z` |
+| files.json SHA-256 | `b09eba0c9d9f3c22a575c102141187cf5a85c77ca0184295f4309f9d7b0e3925` | `d610bfd0d6ca5ebfdab049ebfb0acc7d40d0d3dcd2453d4cdd4e1c8373b89b0f` |
+| Cutoffs | 106,503 | 23,166 |
+| Cells | 828 | 756 |
+| Wall time | 5,152 s | 1,002 s |
+
+**Skill of v2 against the best baseline per cell** [95% CI]. v1 is identical on underway cells.
+
+| Stratum | Protocol | 1 h | 3 h | 6 h | 12 h | 24 h |
+|---|---|---|---|---|---|---|
+| Transiting | P-known | +0.60 [0.57, 0.63] | +0.76 [0.74, 0.77] | +0.65 [0.61, 0.68] | +0.44 [0.39, 0.48] | +0.30 [0.19, 0.37] |
+| Transiting | P-unseen | +0.57 [0.50, 0.63] | +0.70 [0.67, 0.75] | +0.60 [0.51, 0.67] | +0.44 [0.32, 0.52] | +0.36 [0.13, 0.47] |
+| Underway pooled | P-known | +0.53 [0.50, 0.56] | +0.44 [0.40, 0.48] | +0.19 [0.13, 0.24] | −0.02 [−0.10, 0.04] | −0.31 [−0.39, −0.23] |
+| Underway pooled | P-unseen | +0.45 [0.37, 0.51] | +0.29 [0.15, 0.40] | +0.06 [−0.08, 0.20] | −0.17 [−0.36, −0.02] | −0.44 [−0.68, −0.24] |
+| Stationary | both | n/a (< 10 m) | n/a | +0.00 (= persistence) | +0.00 | +0.00 |
+
+- **Stationary:** v2 = persistence by construction. v1's stationary skill at 6 / 12 / 24 h is −26.0 / −21.0 / −11.5 under P-known.
+- **Transiting medians, P-known (km):**
+  - v2: 1.71 / 5.97 / 13.36 / 20.19 / 25.40.
+  - Best baseline: CV 4.28 / 24.54, then damped 38.15 / 35.95 / 36.06.
+- **Feasibility, underway pooled, P-known, 1 → 24 h:** a point on land for v2 8.2% → 29.6%, damped 24.2% → 26.9%, CV 58.4% → 83.7%. The mask's own error is 0.5% → 1.6%.
+- **P-unseen:** its July test vessels are the same vessels as in June (same hash buckets), so it is fresh in time, not in vessels.

@@ -4,7 +4,7 @@ Research workbench for forecasting where an AIS-tracked vessel will be 1 h – 3
 
 ## Where we are
 
-**Current milestone: 3 complete (2026-10-21); next is retrieval v2 on the dev window, then Milestone 4 — conformal uncertainty.** API serves data, forecasts, forecast evaluation and benchmarks (`make api`); minimal web explorer; CI; `make dev` runs both. Baselines B0, `route_retrieval_v1` (P-known, P-unseen, P-region benchmarked; failure review in `docs/failure-review.md`), the paired evaluator, feasibility and calibration are in place. June+July dataset `noaa_us_gulf_2023-06-07`: develop on `SPLIT=dev`; July is an enforced hold-out.
+**Current milestone: 4 — conformal uncertainty** (Milestone 3 complete 2026-10-21; `route_retrieval_v2` frozen on dev and scored once on the July hold-out). API serves data, forecasts, forecast evaluation and benchmarks (`make api`); minimal web explorer; CI; `make dev` runs both. Baselines B0, `route_retrieval_v1` (P-known, P-unseen, P-region benchmarked; failure review in `docs/failure-review.md`), the paired evaluator, feasibility and calibration are in place. June+July dataset `noaa_us_gulf_2023-06-07`: develop on `SPLIT=dev`; July is an enforced hold-out.
 Status, blockers and next step live in [docs/implementation-log.md](docs/implementation-log.md) — read it first, append to it last.
 
 ## Commands

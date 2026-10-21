@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 3 — Historical-route retrieval: complete 2026-10-21** (milestone check below). Next: retrieval v2 on the dev window, one July hold-out run, then Milestone 4 (conformal). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 4 — Conformal uncertainty** (not started). Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -961,3 +961,36 @@ make test   # 285 passed
 **Next step:**
 1. On approval, run the July test for P-known and P-unseen with baselines, v1 and v2, then update the README from those runs (AGENTS.md rule 13).
 2. Then Milestone 4: conformal radii fitted on the calibration split and judged on those July records.
+
+## 2026-10-21 — July hold-out scored once (user approval); README updated from it
+
+**Milestone:** between 3 (complete) and 4.
+**Done:**
+- July test split of `noaa_us_gulf_2023-06-07`, P-known and P-unseen, scored once with every product model, from clean `2757bd3` with `--confirm-test`. Both runs are recorded in the ledger before scoring.
+- The first P-unseen attempt was refused by the clean-tree guard (an uncommitted edit to the figure script). The edit was stashed, P-unseen was re-run from the clean tree, and nothing was scored or logged for the refused attempt.
+- `scripts/make_readme_figures.py` points at the July P-known run and plots v2. The map example is chosen by a fixed rule (the transiting tanker nearest Bolivar Roads), not by its errors. Titles and footers were fixed.
+- README results now rest on the July hold-out (AGENTS.md rule 13), and the losses are stated. `benchmarks.md`, `failure-review.md`.
+
+**Commands run:**
+```bash
+uv run --project backend python scripts/run_benchmark.py --protocol P-known  --dataset-id noaa_us_gulf_2023-06-07 --split test --confirm-test --informed-by <June runs, reviews, dev run>   # 5,152 s
+uv run --project backend python scripts/run_benchmark.py --protocol P-unseen --dataset-id noaa_us_gulf_2023-06-07 --split test --confirm-test --informed-by <same>                             # 1,002 s
+uv run --project backend python scripts/make_readme_figures.py
+```
+
+**Results** (`docs/benchmarks.md`):
+- **`P-known_noaa_us_gulf_2023-06-07_20261021T213109Z`** (106,503 cutoffs):
+  - Transiting skill of v2 is +0.60 / +0.76 / +0.65 / +0.44 / +0.30 at 1 / 3 / 6 / 12 / 24 h, with every CI above 0.
+  - Pooled underway wins to 6 h, ties at 12 h, and loses at 24 h (−0.31).
+  - Stationary: v2 = persistence.
+- **`P-unseen_noaa_us_gulf_2023-06-07_20261021T225730Z`** (23,166 cutoffs):
+  - Transiting +0.57 / +0.70 / +0.60 / +0.44 / +0.36, every CI above 0.
+  - Pooled wins to 3 h, ties at 6 h, and loses at 12 h (−0.17) and 24 h (−0.44).
+- **June to July:** transiting held up. Pooled underway at 24 h went from a June tie to a July loss under P-known.
+
+**Blockers / open questions:** none.
+
+**Next step:** Milestone 4, smallest first slice:
+- split-conformal displacement radii for persistence, damped velocity and v2, per horizon × stratum, fitted on the calibration split (Jun 23–30);
+- empirical coverage measured on the records of the two July runs above (no new July scoring), per stratum and per July week;
+- the API returns radii with their nominal level and calibration-set id.

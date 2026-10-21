@@ -113,8 +113,9 @@ Rules:
 1. Any retrieval version developed after this review is designed on the dev window. Its held-out result is the July test.
 2. Benchmarks of such a version record `informed_by` = the two review run ids above. Any June-test result for it is labelled a second look, never held-out.
 3. Gating or hybrids (for example, a fallback for fishing vessels) are adopted only if the dev window shows the same pattern.
-4. These rules are enforced in code (confirmation, clean tree, an access ledger, API refusals); see [evaluation-protocol.md](evaluation-protocol.md#june--july-2023-noaa_us_gulf_2023-06-07-manifests-splits-v2).
-5. **Under P-unseen, July is fresh in time but not in vessels:** its test vessels are the ones this review examined. Any P-unseen July result says so.
+4. **July was scored once on 2026-10-21** for baselines, v1 and v2 (`docs/benchmarks.md`, ledger in `data/manifests/test_access/`). Any later model version gets its own single July run, with this history in `informed_by`.
+5. These rules are enforced in code (confirmation, clean tree, an access ledger, API refusals); see [evaluation-protocol.md](evaluation-protocol.md#june--july-2023-noaa_us_gulf_2023-06-07-manifests-splits-v2).
+6. **Under P-unseen, July is fresh in time but not in vessels:** its test vessels are the ones this review examined. Any P-unseen July result says so.
 
 ## What to try next, in order
 

@@ -38,11 +38,11 @@ from maritime_forecast.models.registry import get_model  # noqa: E402
 from maritime_forecast.storage.parquet_store import ParquetStore  # noqa: E402
 from maritime_forecast.storage.run_store import RunStore  # noqa: E402
 
-DATASET = "noaa_us_gulf_2023-06"
-RUN = "P-known_noaa_us_gulf_2023-06_20261021T152618Z"
-# A transiting tanker at Bolivar Roads, heading up the ship channel. Chosen for the baseline
-# README (before retrieval existed), not picked for retrieval's result.
-EXAMPLE_CUTOFF = 14125
+DATASET = "noaa_us_gulf_2023-06-07"
+RUN = "P-known_noaa_us_gulf_2023-06-07_20261021T213109Z"  # the July hold-out P-known run
+# The example cutoff is chosen by a fixed rule, never by its errors: the transiting tanker
+# cutoff (AIS type 80-89) nearest Bolivar Roads, the channel entrance used for the June README.
+BOLIVAR_ROADS = (29.345, -94.74)
 OUT = REPO_ROOT / "docs" / "img"
 
 # Reference palette (dataviz skill), slots 1-4 in fixed order, validated in both modes (the
@@ -73,7 +73,7 @@ MODELS = [
     ("constant_velocity_v1", "Constant velocity"),
     ("damped_velocity_v1", "Damped velocity"),
     ("persistence_v1", "Persistence"),
-    ("route_retrieval_v1", "Route retrieval"),
+    ("route_retrieval_v2", "Route retrieval"),
 ]
 
 
@@ -89,7 +89,13 @@ def _style(ax, th):
 def example_data():
     store = ParquetStore()
     runs = RunStore()
-    c = runs.table(RUN, "cutoffs").filter(pl.col("cutoff_id") == EXAMPLE_CUTOFF).row(0, named=True)
+    cut = runs.table(RUN, "cutoffs").filter(
+        pl.col("transiting") & (pl.col("vessel_class") == "tanker")
+    )
+    d2 = (pl.col("latitude_deg") - BOLIVAR_ROADS[0]) ** 2 + (
+        (pl.col("longitude_deg") - BOLIVAR_ROADS[1]) * np.cos(np.radians(BOLIVAR_ROADS[0]))
+    ) ** 2
+    c = cut.with_columns(d2=d2).sort("d2", "cutoff_id").row(0, named=True)
     raw = (MANIFEST_DIR / "splits" / f"P-known__{DATASET}.json").read_bytes()
     ctx = ModelContext(
         store=store,
@@ -126,7 +132,7 @@ def forecast_figure(th, name, data):
     keep = np.vstack(
         [
             preds["damped_velocity_v1"],
-            preds["route_retrieval_v1"],
+            preds["route_retrieval_v2"],
             past[["longitude_deg", "latitude_deg"]].to_numpy(),
             future[["longitude_deg", "latitude_deg"]].to_numpy(),
         ]
@@ -205,7 +211,7 @@ def forecast_figure(th, name, data):
         ax.annotate(
             label + off,
             last,
-            xytext=(8, -14) if m == "route_retrieval_v1" else (8, -4 if off else -2),
+            xytext=(8, -14) if m == "route_retrieval_v2" else (8, -4 if off else -2),
             textcoords="offset points",
             color=th["text"],
             fontsize=9,
@@ -237,7 +243,7 @@ def forecast_figure(th, name, data):
     )
     leg.get_frame().set_alpha(0.92)
     fig.suptitle(
-        "A tanker heading up the Houston Ship Channel: 6 h forecasts",
+        "A tanker at the Houston Ship Channel entrance: 6 h forecasts",
         color=th["text"],
         fontsize=11,
         x=0.02,
@@ -248,7 +254,7 @@ def forecast_figure(th, name, data):
         0.012,
         "Dots: 1, 3, 6 h. Hollow rings: the true position then. Shaded: land "
         "in the navigable mask\n(OSM land minus train-split traffic cells). Land © "
-        "OpenStreetMap contributors (ODbL). AIS: NOAA / USCG, June 2023 test period.",
+        "OpenStreetMap contributors (ODbL). AIS: NOAA / USCG, July 2023 held-out test.",
         color=th["text2"],
         fontsize=7,
         va="bottom",
@@ -294,8 +300,7 @@ def error_figure(th, name):
     ax.minorticks_off()
     ax.set_xlim(0.9, 60)
     ax.set_title(
-        "Ships in transit: median error by horizon (P-known test set, 95% vessel-"
-        "bootstrap CI, log scales)",
+        "Ships in transit: median error by horizon (P-known, July hold-out, log scales)",
         color=th["text"],
         fontsize=11,
         loc="left",
@@ -304,11 +309,12 @@ def error_figure(th, name):
     fig.text(
         0.01,
         0.01,
-        f"Paired: every model scored on the same samples (n ≥ {n:,} per horizon). Run {RUN}.",
+        f"Paired: every model scored on the same samples (n ≥ {n:,} per horizon); bands are "
+        f"95% vessel-bootstrap CIs.\nRun {RUN}.",
         color=th["text2"],
         fontsize=7,
     )
-    fig.tight_layout(rect=(0, 0.03, 1, 1))
+    fig.tight_layout(rect=(0, 0.06, 1, 1))
     fig.savefig(OUT / f"error-by-horizon-{name}.png", facecolor=th["surface"])
     plt.close(fig)
 
@@ -364,7 +370,7 @@ def land_figure(th, name):
         loc="left",
     )
     fig.text(
-        0.01, 0.01, f"P-known test set, paired samples. Run {RUN}.", color=th["text2"], fontsize=7
+        0.01, 0.01, f"P-known July hold-out, paired samples. Run {RUN}.", color=th["text2"], fontsize=7
     )
     fig.tight_layout(rect=(0, 0.03, 1, 1))
     fig.savefig(OUT / f"on-land-{name}.png", facecolor=th["surface"])
