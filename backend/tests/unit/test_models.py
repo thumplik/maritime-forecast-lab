@@ -63,6 +63,7 @@ def test_registry():
         "damped_velocity_v1",
         "persistence_v1",
         "route_retrieval_v1",
+        "route_retrieval_v2",
     ]
     assert get_model("persistence_v1").model_id == "persistence_v1"
     from maritime_forecast.models.registry import product_model_ids
@@ -72,7 +73,11 @@ def test_registry():
         assert isinstance(get_model(m), TrajectoryForecaster)
     assert {c.model_id for c in capabilities()} == set(model_ids())
     reads = {c.model_id for c in capabilities() if c.reads_beyond_own_history}
-    assert reads == {"damped_velocity_v1", "route_retrieval_v1"}  # fitted params; index
+    assert reads == {
+        "damped_velocity_v1",
+        "route_retrieval_v1",
+        "route_retrieval_v2",
+    }  # fitted params; index
     with pytest.raises(UnknownModel):
         get_model("oracle")
 

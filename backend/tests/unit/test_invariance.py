@@ -33,8 +33,9 @@ SYN_MANIFEST = SplitManifest(
 PARAMS = {
     "damped_velocity_v1": {"taus_hours": {"default": 2.0, "cargo": 0.5}},
     "route_retrieval_v1": {"manifest": SYN_MANIFEST, "config": {"pool": "rolling"}},
+    "route_retrieval_v2": {"manifest": SYN_MANIFEST, "config": {"pool": "rolling"}},
 }
-FEW_REFERENCES = {"route_retrieval_v1"}
+FEW_REFERENCES = {"route_retrieval_v1", "route_retrieval_v2"}
 
 CASES = [
     (MOVING, T0 + timedelta(minutes=60)),

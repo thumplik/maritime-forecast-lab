@@ -28,6 +28,9 @@ WEST = ["999100004"]
 TARGET = "999100009"  # day-2 voyage north; also made one EAST voyage on day 1 (own history)
 FAR = "999100010"  # day 2, far from every lane
 DAY2 = "999100011"  # day 2, WEST, finished before AS_OF: test-period data before the cutoff
+MOORED = "999100012"  # day 2, moored at the lane's start for 3 h (stationary target)
+STAY_REF = "999100013"  # day 1, moored at the lane's start for 8 h
+LEAVE_REF = "999100014"  # day 1, moored there 30 min, then leaves east at 12 kn
 
 
 def _voyage(mmsi, t_start, branch, vtype=70, start=START):
@@ -52,7 +55,33 @@ def _csv(path):
     rows += _voyage(TARGET, TRAIN_END + timedelta(hours=10), 90.0)
     rows += _voyage(FAR, TRAIN_END + timedelta(hours=10), 90.0, start=(26.0, -90.0))
     rows += _voyage(DAY2, TRAIN_END + timedelta(hours=4), 270.0)
+
+    def moored(mmsi, t_start, minutes):
+        return [f"{mmsi},{t_start + timedelta(minutes=k):%Y-%m-%dT%H:%M:%S},"
+                f"{START[0] + 1e-5 * (k % 2):.6f},{START[1]:.6f},0.0,0.0,511,70,5,180,30,9.5,A"
+                for k in range(0, minutes, 3)]  # fmt: skip
+
+    rows += moored(STAY_REF, T0 + timedelta(hours=2), 8 * 60)
+    rows += moored(LEAVE_REF, T0 + timedelta(hours=2), 30)
+    east = direct(*START, 90.0, 0.0)
+    for k in range(1, 121):  # then east, 12 kn, 1-min reports
+        la, lo = direct(*START, 90.0, knots_to_mps(12.0) * 60 * k)
+        t = T0 + timedelta(hours=2, minutes=29 + k)
+        rows.append(f"{LEAVE_REF},{t:%Y-%m-%dT%H:%M:%S},{float(la):.6f},{float(lo):.6f},"
+                    "12.0,90.0,511,70,0,180,30,9.5,A")  # fmt: skip
+    del east
+    for k in range(0, 180, 3):  # moored: SOG 0, a few metres of GPS jitter
+        t = TRAIN_END + timedelta(hours=9, minutes=k)
+        rows.append(f"{MOORED},{t:%Y-%m-%dT%H:%M:%S},{START[0] + 1e-5 * (k % 2):.6f},"
+                    f"{START[1]:.6f},0.0,0.0,511,70,5,180,30,9.5,A")  # fmt: skip
     path.write_text("\n".join(rows) + "\n")
+
+
+_STORE = []
+
+
+def store_ref():
+    return _STORE[0]
 
 
 @pytest.fixture(scope="module")
@@ -64,6 +93,7 @@ def store(tmp_path_factory):
     _csv(csv)
     s = ParquetStore(tmp / "canonical")
     ingest([csv], load_mapping("noaa_marinecadastre"), "lanes", store=s)
+    _STORE[:] = [s]
     yield s
     mp.undo()
 
@@ -151,9 +181,9 @@ def test_frozen_pool_holds_only_segments_known_by_train_end(store):
     late = TRAIN_END + timedelta(hours=20)  # after the day-2 voyages have ended
     frozen = rr.load_pool(store, "lanes", _manifest(), rr.pool_until(late, _manifest()), cfg)
     ends = frozen.t0 + (frozen.n - 1) * frozen.step_s + 2 * gap.total_seconds()
-    assert frozen.size == 5 and (ends <= TRAIN_END.timestamp()).all()
+    assert frozen.size == 7 and (ends <= TRAIN_END.timestamp()).all()
     rolling = rr.load_pool(store, "lanes", _manifest(), late, cfg)
-    assert rolling.size == 8  # + the target's, FAR's and DAY2's day-2 voyages
+    assert rolling.size == 11  # + the target's, FAR's, DAY2's and MOORED's day-2 segments
     # The target's day-2 voyage is never its own reference while it is still under way.
     f = _forecast(store, pool="rolling")
     assert f.status == "ok"
@@ -277,3 +307,33 @@ def test_variants_are_diagnostic_only_and_class_is_labelled_backfilled(store):
     assert _model(store).config["class_source"] == "backfilled"
     ctx = ModelContext(store, "lanes", protocol="P-unseen", params={"manifest": _manifest()})
     assert not get_model("route_retrieval_v1", ctx).capabilities().installed  # mismatch
+
+
+def test_v2_holds_a_moored_target_where_references_stay(store):
+    """MOORED (stationary at the cutoff) matches two moored day-1 references: one stays, one
+    leaves east after 30 min. Passing lane ships match too but with tiny similarity (speed).
+    At most half the weight has moved, so v2 holds the last position at every target time;
+    v1 follows its medoid. An underway target is untouched by the gate."""
+    as_of = TRAIN_END + timedelta(hours=11)
+    h = history_from_store(store_ref(), "lanes", MOORED, as_of, 3)
+    assert rr.is_stationary(h, 0.5)
+    v2 = get_model("route_retrieval_v2", ModelContext(store_ref(), "lanes",
+                                                       params={"manifest": _manifest()}))  # fmt: skip
+    f2 = v2.predict(h, ForecastHorizon(as_of, 6, 10))
+    assert f2.status == "ok" and f2.model_version == "2.0.0"
+    last = h.last()
+    d = distance_m(np.array([p.latitude_deg for p in f2.points]),
+                   np.array([p.longitude_deg for p in f2.points]),
+                   last["latitude_deg"], last["longitude_deg"])  # fmt: skip
+    assert d.max() < 50  # never a false departure: held, or a reference that stayed
+    held = [w for w in f2.warnings if w.startswith("stationary target")]
+    assert held and f2.central_trajectory_id is None
+    ids = {t.reference_segment_ids[0].split("|")[0] for t in f2.trajectories}
+    assert {STAY_REF, LEAVE_REF} <= ids
+    # Underway: v2 is v1.
+    hu = history_from_store(store_ref(), "lanes", TARGET, AS_OF, 3)
+    v1 = _model(store_ref())
+    u1 = v1.predict(hu, ForecastHorizon(AS_OF, 2, 10))
+    u2 = v2.predict(hu, ForecastHorizon(AS_OF, 2, 10))
+    assert not rr.is_stationary(hu, 0.5)
+    assert u1.points == u2.points and u1.trajectories == u2.trajectories

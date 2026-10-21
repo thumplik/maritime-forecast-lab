@@ -74,6 +74,16 @@ PASS1_KEEP = 4  # approximate best edges per segment re-scored exactly
 EDGE_REACH_M = 3000.0  # edges up to 6 km (36 kn over 10 min) are found from their middle
 _POOL_CACHE: OrderedDict[tuple, _PoolArrays] = OrderedDict()
 _POOL_CACHE_SIZE = 2
+# route_retrieval_v2, frozen on the P-known DEV window (docs/failure-review.md, implementation
+# log 2026-10-21): v1 plus a hold for targets stationary at the cutoff. A release threshold sweep
+# (0.5-0.9 of the candidates' weight moved) was worse than always holding at every horizon, in
+# median and mean: references carry no departure-timing skill, so v2 always holds. Speed-matched
+# continuation was tried on dev too and is NOT in v2 (mixed: better at 1-3 h, worse at 12 h).
+V2 = {
+    "model_id": "route_retrieval_v2",
+    "model_version": "2.0.0",
+    "config": {"stationary_gate": True, "depart_share": 1.0},
+}
 # Warning prefixes other code may match on (evaluation.failure_review).
 WARN_RADIUS_FALLBACK = "no reference within"
 _POOL_LOCK = threading.Lock()  # API routes run in a thread pool; build each pool once
@@ -95,6 +105,19 @@ class RetrievalConfig:
     medoid_min_coverage: float = 0.5
     pool: Pool = "frozen"
     index_days: float | None = None  # build only from the last N days before the pool bound
+    # v2 (docs/failure-review.md §1): a target stationary at the cutoff (the sampler's rule:
+    # mean SOG over the last 10 min < stationary_max_sog_kn) holds its last position at every
+    # target time where at most `depart_share` of the candidates (similarity-weighted) have
+    # moved more than `depart_m` from it. Removes false departures; claims no real ones.
+    stationary_gate: bool = False
+    stationary_max_sog_kn: float = 0.5
+    depart_m: float = 1000.0
+    depart_share: float = 0.5
+    # v2 (docs/failure-review.md §3): follow each reference at the target's pace. Reference time
+    # advances by r * lead, r = target SOG / the reference's speed at the match, clipped to
+    # `speed_ratio_bounds`; r = 1 unless both are moving (>= moving_kn).
+    speed_match: bool = False
+    speed_ratio_bounds: tuple[float, float] = (0.5, 2.0)
     index: IndexConfig = field(default_factory=IndexConfig)
 
     def __post_init__(self) -> None:
@@ -248,6 +271,20 @@ def context_xy(history: AISHistory, frame: LocalFrame, t_anchor: float, steps: i
     return np.array(out, dtype=float).reshape(-1, 2)
 
 
+def _ids(variant: dict) -> dict:
+    return {k: variant[k] for k in ("model_id", "model_version") if k in variant}
+
+
+def is_stationary(history: AISHistory, max_sog_kn: float) -> bool:
+    """The cutoff sampler's stationary rule on the target's own history: mean SOG of the
+    reports in the 10 min up to the last one is below `max_sog_kn` (no SOG: not stationary)."""
+    r = history.reports
+    t_last = r["observed_at"][-1]
+    sog = r.filter(pl.col("observed_at") >= t_last - timedelta(minutes=10))["sog_knots"]
+    sog = sog.drop_nulls()
+    return bool(sog.len()) and float(sog.mean()) < max_sog_kn
+
+
 def _angle_diff(a: np.ndarray, b: float) -> np.ndarray:
     return np.abs((np.asarray(a) - b + 180.0) % 360.0 - 180.0)
 
@@ -257,18 +294,23 @@ class RouteRetrieval(BaseForecaster):
     model_id: str = MODEL_ID
     config: dict = field(default_factory=dict)
     cfg: RetrievalConfig = field(default_factory=RetrievalConfig)
+    model_version: str = "1.0.0"
     store: object | None = None
     dataset_id: str | None = None
     manifest: SplitManifest | None = None
     unavailable_reason: str = "no store, dataset or split manifest in the model context"
 
     @classmethod
-    def from_context(cls, ctx: ModelContext) -> RouteRetrieval:
+    def from_context(cls, ctx: ModelContext, variant: dict | None = None) -> RouteRetrieval:
+        """`variant`: model_id, model_version and config defaults of a registered version
+        (route_retrieval_v2); explicit `params["config"]` still override them."""
+        variant = variant or {}
         params = dict(ctx.params or {})
-        cfg = RetrievalConfig()
+        cfg = replace(RetrievalConfig(), **variant.get("config", {}))
         overrides = params.get("config", {})
         if overrides:
-            overrides = {k: tuple(v) if k == "radii_m" else v for k, v in overrides.items()}
+            overrides = {k: tuple(v) if k in ("radii_m", "speed_ratio_bounds") else v
+                         for k, v in overrides.items()}  # fmt: skip
             cfg = replace(cfg, **overrides)
         manifest, why = None, ""
         if "manifest" in params:  # explicit (tests, invariance harness)
@@ -291,7 +333,7 @@ class RouteRetrieval(BaseForecaster):
                 else:
                     manifest = SplitManifest.model_validate_json(raw)
         if ctx.store is None or ctx.dataset_id is None or (manifest is None and not why):
-            return cls(cfg=cfg)
+            return cls(cfg=cfg, **_ids(variant))
         if (
             manifest is not None
             and cfg.pool == "frozen"
@@ -312,12 +354,13 @@ class RouteRetrieval(BaseForecaster):
                 "diagnostic_only": cfg.pool != "frozen" or cfg.index_days is not None,
             }
         return cls(config=config, cfg=cfg, store=ctx.store, dataset_id=ctx.dataset_id,
-                   manifest=None if why else manifest, unavailable_reason=why)  # fmt: skip
+                   manifest=None if why else manifest, unavailable_reason=why,
+                   **_ids(variant))  # fmt: skip
 
     def capabilities(self) -> ModelCapabilities:
         return ModelCapabilities(
             model_id=self.model_id,
-            model_version="1.0.0",
+            model_version=self.model_version,
             min_history_reports=1,
             reads_beyond_own_history=True,  # other vessels' historical segments
             uses_store_at_predict=True,  # builds its segment pool from the store
@@ -360,9 +403,14 @@ class RouteRetrieval(BaseForecaster):
                        "message": f"no eligible segment within {max(cfg.radii_m):.0f} m of the "
                                   "last report"},
             )  # fmt: skip
-        segs, tau, dist = found
+        segs, tau, dist, ref_sog = found
         rx, ry = _xy_at(pool, frame, segs, tau)  # reference position at the alignment time
-        fx, fy = _xy_at(pool, frame, segs[:, None], tau[:, None] + leads[None, :])
+        rate = np.ones(len(segs))
+        if cfg.speed_match and sog is not None and sog >= cfg.moving_kn:
+            lo, hi = cfg.speed_ratio_bounds
+            moving = ref_sog >= cfg.moving_kn
+            rate[moving] = np.clip(sog / ref_sog[moving], lo, hi)
+        fx, fy = _xy_at(pool, frame, segs[:, None], tau[:, None] + rate[:, None] * leads[None, :])
         px, py = fx - rx[:, None], fy - ry[:, None]
         covered = np.isfinite(px) & np.isfinite(py)
         n_cov = np.where(covered.all(1), covered.shape[1], np.argmin(covered, axis=1))
@@ -412,11 +460,24 @@ class RouteRetrieval(BaseForecaster):
         age_min = (history.as_of - last["observed_at"]).total_seconds() / 60
         if age_min > STALE_WARNING_MINUTES:
             warnings.append(f"last report is {age_min:.0f} min older than as_of")
-        extra = {"trajectories": trajectories, "central_trajectory_id": f"ref{central + 1}"}
-        return lat[central].tolist(), lon[central].tolist(), warnings, extra
+        out_lat, out_lon, central_id = lat[central], lon[central], f"ref{central + 1}"
+        if cfg.stationary_gate and is_stationary(history, cfg.stationary_max_sog_kn):
+            moved = np.hypot(px, py) > cfg.depart_m  # held positions; anchor at the origin
+            share = (sim[:, None] * moved).sum(axis=0) / sim.sum()
+            stay = share <= cfg.depart_share
+            if stay.any():
+                out_lat = np.where(stay, last["latitude_deg"], out_lat)
+                out_lon = np.where(stay, last["longitude_deg"], out_lon)
+                central_id = None  # the path is no longer one candidate's
+                warnings.append(f"stationary target: held at the last position at "
+                                f"{int(stay.sum())} of {len(tt)} target times where most "
+                                "references stayed")  # fmt: skip
+        extra = {"trajectories": trajectories, "central_trajectory_id": central_id}
+        return out_lat.tolist(), out_lon.tolist(), warnings, extra
 
     def _match(self, pool, frame, radius, t_a, leads, q_ctx, sog, cog, target_class, exclude):
-        """Top-K (segment index, tau, D) within `radius` of the anchor, or None."""
+        """Top-K (segment index, tau, D, reference speed kn at tau) within `radius` of the
+        anchor, or None."""
         cfg = self.cfg
         if pool.size == 0:
             return None
@@ -463,8 +524,8 @@ class RouteRetrieval(BaseForecaster):
             return None
         xa, ya = frame.to_xy(pool.lat[e], pool.lon[e])
         xb, yb = frame.to_xy(pool.lat[e + 1], pool.lon[e + 1])
-        e, seg, tau, d = self._best_edges(pool, e, xa, ya, xb, yb, radius, need, sog, cog,
-                                          target_class)  # fmt: skip
+        e, seg, tau, d, rsog = self._best_edges(pool, e, xa, ya, xb, yb, radius, need, sog,
+                                                cog, target_class)  # fmt: skip
         if not len(e):
             return None
         if len(q_ctx):
@@ -493,7 +554,7 @@ class RouteRetrieval(BaseForecaster):
             if len(chosen) == cfg.k:
                 break
         c = np.array(chosen, dtype=np.int64)
-        return seg[c], tau[c], d[c]
+        return seg[c], tau[c], d[c], rsog[c]
 
     def _best_edges(self, pool, e, xa, ya, xb, yb, radius, need, sog, cog, target_class,
                     keep_per_segment=1):  # fmt: skip
@@ -524,7 +585,7 @@ class RouteRetrieval(BaseForecaster):
         starts = np.flatnonzero(np.r_[True, s_sorted[1:] != s_sorted[:-1]])
         rank = np.arange(len(order)) - np.repeat(starts, np.diff(np.r_[starts, len(order)]))
         best = order[rank < keep_per_segment]
-        return e[best], seg[best], tau[best], d[best]
+        return e[best], seg[best], tau[best], d[best], r_sog[best]
 
     def _medoid(self, px, py, covered, n_cov, sim) -> int:
         """Index of the similarity-weighted medoid among candidates covering enough of the

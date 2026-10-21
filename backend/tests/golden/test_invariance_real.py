@@ -50,6 +50,10 @@ def test_registered_models_invariant_on_real_cutoffs(tmp_path):
             "manifest": (MANIFEST_DIR / "splits" / f"P-known__{DATASET}.json").read_text(),
             "config": {"pool": "rolling", "index_days": 1},
         },
+        "route_retrieval_v2": {
+            "manifest": (MANIFEST_DIR / "splits" / f"P-known__{DATASET}.json").read_text(),
+            "config": {"pool": "rolling", "index_days": 1},
+        },
     }
     rep = check_invariance(registry_factories(params), ParquetStore(), DATASET, cases,
                            history_hours=24, workdir=tmp_path, wide_days=2)  # fmt: skip

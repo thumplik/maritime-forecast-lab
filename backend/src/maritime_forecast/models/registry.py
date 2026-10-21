@@ -15,7 +15,7 @@ from maritime_forecast.models.constant_turn import ConstantTurnRate
 from maritime_forecast.models.constant_velocity import ConstantVelocity, ConstantVelocityPaper
 from maritime_forecast.models.damped_velocity import DampedVelocity
 from maritime_forecast.models.persistence import Persistence
-from maritime_forecast.models.route_retrieval import RouteRetrieval
+from maritime_forecast.models.route_retrieval import V2, RouteRetrieval
 
 Factory = Callable[[ModelContext], TrajectoryForecaster]
 
@@ -26,6 +26,7 @@ _FACTORIES: dict[str, Factory] = {
     "constant_turn_rate_v1": lambda ctx: ConstantTurnRate(),
     "damped_velocity_v1": DampedVelocity.from_context,
     "route_retrieval_v1": RouteRetrieval.from_context,
+    "route_retrieval_v2": lambda ctx: RouteRetrieval.from_context(ctx, V2),
 }
 
 
