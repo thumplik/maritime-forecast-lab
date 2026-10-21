@@ -40,9 +40,10 @@ Other providers: CSV/Parquet ── scripts/import_ais.py --mapping <config/sour
 | `maritime_forecast.data.dejitter` | Causal stationary-jitter smoothing for model windows (running mean within stationary runs) |
 | `maritime_forecast.schemas` | Pydantic contracts: `Observation`, `SplitManifest` (+`RegionSplit`), `DatasetManifest`/`IngestReport`, `ForecastRequest`/`ForecastResponse`/`ForecastEvaluation`, `BenchmarkRun` |
 
-| `maritime_forecast.api` | FastAPI read API: app factory, typed errors, response models |
+| `maritime_forecast.api` | FastAPI API: app factory, typed errors, response models, `jobs` (background benchmark processes) |
+| `maritime_forecast.evaluation.forecast_eval` | Scores one served forecast against withheld truth (`ForecastEvaluation`) |
 
-## Read API (Milestone 1)
+## API (Milestones 1–2)
 
 `make api` serves on http://localhost:8000 (OpenAPI docs at `/docs`).
 
@@ -53,11 +54,15 @@ Other providers: CSV/Parquet ── scripts/import_ais.py --mapping <config/sour
 | `GET /vessels?dataset_id&from&to&bbox&limit&offset` | Per-vessel summaries, ordered by id, with `total` for paging | Window ≤ 31 days (default: whole dataset). `limit` ≤ 1000. bbox is `lon_min,lat_min,lon_max,lat_max` |
 | `GET /models?dataset_id` | Registered models with capabilities, `calibration_only`, fit status and parameters in use | — |
 | `POST /forecasts` | `ForecastRequest` → `ForecastResponse`: causal history via `history_from_store`, every requested model, typed per-model failures, input coverage. Never contains truth | `ForecastRequest` limits (≤ 72 h, ≤ 1024 steps, ≤ 10 models) |
+| `POST /forecasts/evaluation` | Same `ForecastRequest` → `ForecastEvaluation` for the forecast `POST /forecasts` serves (same `forecast_id`, same cache). Truth is read only after the forecast exists, with the benchmark's rule (`runner.truth_on_grid`: truth region, 30 min bracket, scan window horizon + 1 h, never bridged). Every target time is reported for every model: a truth reason where there is no truth, `model_failed` where a model gave nothing. `paired` marks the target times every model scored; `ade_m` averages only those | As `POST /forecasts` |
+| `POST /benchmarks` | `BenchmarkRequest` (P-known / P-unseen, models, horizons, seed, n_boot) → 202 + `BenchmarkStatus`, `Location: /benchmarks/{run_id}`. The runner's own `benchmark_context` + `preflight` run first, so anything the CLI refuses (unknown or unfitted model, in-sample fit split, short horizons) is a 422 `benchmark_refused` before a process starts. The run itself is `run_benchmark` in a spawned process writing to the immutable run store | One running benchmark per API (409 `benchmark_busy`); ≤ 12 horizons, `n_boot` 100–5000 |
+| `GET /benchmarks/{run_id}` | `running` (this API's process alive), `incomplete` (a directory without `run.json`: a CLI run in progress, or interrupted), or `succeeded`/`failed` with the full `BenchmarkRun`, checksums verified on every read (409 `run_tampered`) | — |
+| `GET /benchmarks/{run_id}/summary?stratum&headline_only` | One row per (stratum, horizon) cell with every model side by side on that cell's paired set: median error + CI, p90, failure rate, skill vs the best baseline + paired CI, admission and headline flags | 409 `run_not_finished` until finalized |
 | `GET /vessels/{id}/track?dataset_id&from&to` | Columnar points plus `segments` and `gaps`. A gap of more than 30 min starts a new segment, and clients must never draw across gaps | Window ≤ 31 days. At most 200,000 points (413 above that) |
 
 Conventions:
 
-- Every error has the shape `{"error": {"code", "message", "details"}}`. Codes: `invalid_parameter`, `window_too_large` (422), `dataset_not_found`, `vessel_not_found` (404), `too_many_points` (413). Validation errors return the location and message, never the submitted input.
+- Every error has the shape `{"error": {"code", "message", "details"}}`. Codes: `invalid_parameter`, `window_too_large`, `unknown_model`, `benchmark_refused` (422), `dataset_not_found`, `vessel_not_found`, `manifest_not_found`, `run_not_found` (404), `benchmark_busy`, `run_not_finished`, `run_tampered` (409), `too_many_points` (413). Validation errors return the location and message, never the submitted input.
 - Query times must carry a UTC offset; any offset is converted to UTC. Windows are half-open `[from, to)`.
 - Ids are validated by pattern, so dataset ids cannot traverse paths. Every value is a bound parameter.
 - Forecasts use the **P-known train-split fit** (`ApiSettings.deployment_protocol`) for fitted models, recorded in each model's `config`.
@@ -94,13 +99,14 @@ No data or model weights are used.
 
 ## Contracts for Milestone 2
 
-`schemas/forecast.py` and `schemas/benchmark.py` fix the request and response shapes before any endpoint exists. They are published in the OpenAPI components, so they are already TypeScript types. The type system enforces these rules:
+`schemas/forecast.py` and `schemas/benchmark.py` fix the request and response shapes; every one is now served by an endpoint, so FastAPI's OpenAPI schema (and the generated TypeScript) covers them. The type system enforces these rules:
 
 - A forecast response has no truth fields. Truth lives in `ForecastEvaluation`.
 - Candidate scores are `similarity`.
 - Uncertainty can only be a `conformal_radius` with a nominal level and calibration-set id.
 - A non-ok model result has an error and no points.
 - `BenchmarkRun` rejects unpaired cells and truth-selected (non-operational) records.
+- `ForecastEvaluation` has one score per target time per model, evaluable only where truth exists, and `paired` must equal "every model evaluable".
 
 ## Antimeridian
 
@@ -109,4 +115,4 @@ Fixed in Milestone 1, found with the synthetic fixture:
 - Longitude interpolation (`geo.geodesic.lon_lerp_sql`, used by truth and by the P-paper grid) and the spike-filter distance take the short way round.
 - The web map unwraps longitudes along a track.
 
-Not yet built: `/benchmarks` endpoints, forecast evaluation endpoint, navigable-water feasibility flags, GeoJSON export (Milestone 2 continues).
+Not yet built: navigable-water feasibility flags, GeoJSON export (Milestone 2 continues).

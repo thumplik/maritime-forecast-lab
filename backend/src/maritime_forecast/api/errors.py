@@ -35,9 +35,17 @@ def invalid(message: str, **details: Any) -> ApiError:
 
 
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    404: {"model": ErrorBody, "description": "dataset_not_found / vessel_not_found"},
+    404: {
+        "model": ErrorBody,
+        "description": "dataset_not_found / vessel_not_found / manifest_not_found / run_not_found",
+    },
+    409: {"model": ErrorBody, "description": "benchmark_busy / run_not_finished / run_tampered"},
     413: {"model": ErrorBody, "description": "too_many_points"},
-    422: {"model": ErrorBody, "description": "invalid_parameter / window_too_large"},
+    500: {"model": ErrorBody, "description": "run_inconsistent (a run record breaks pairing)"},
+    422: {
+        "model": ErrorBody,
+        "description": "invalid_parameter / window_too_large / unknown_model / benchmark_refused",
+    },
 }
 
 

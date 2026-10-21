@@ -181,28 +181,65 @@ class HorizonScore(BaseModel):
 
 class ModelEvaluation(BaseModel):
     model_id: str
+    status: Literal["ok", "unsupported", "failed"]
     scores: list[HorizonScore]
+    ade_m: float | None = Field(
+        None,
+        description="Mean error over the PAIRED target times (comparable across models); "
+        "null if there are none",
+    )
 
 
 class ForecastEvaluation(BaseModel):
-    """Truth and errors for one forecast; returned separately and only on request."""
+    """Truth and errors for one forecast; returned separately and only on request.
+
+    Every target time is reported for every model (no silent drops). A target time without
+    truth is not evaluable for any model, with the truth reason; where truth exists but a model
+    produced no forecast, that model's score is `model_failed`. `paired` marks the target times
+    where every model is evaluable, the set to compare models on."""
 
     model_config = ConfigDict(extra="forbid")
 
     forecast_id: str
+    dataset_id: str
+    vessel_id: str
+    as_of: AwareDatetime
+    data_version: str
     truth_region: str
     max_bracket_gap_minutes: float
+    target_times: list[AwareDatetime]
     truth: list[TrackPoint | None] = Field(description="Per target time; null if not evaluable")
+    truth_reasons: list[NotEvaluableReason | None] = Field(
+        description="Per target time: why truth is missing; null where truth exists"
+    )
+    paired: list[bool] = Field(description="Per target time: every model is evaluable")
     models: list[ModelEvaluation]
+    warnings: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _complete(self) -> ForecastEvaluation:
-        if not self.truth:
+        n = len(self.target_times)
+        if not n:
             raise ValueError("an evaluation covers at least one target time")
+        if any(t <= self.as_of for t in self.target_times):
+            raise ValueError("target times must be after as_of")
+        if not (len(self.truth) == len(self.truth_reasons) == len(self.paired) == n):
+            raise ValueError("truth, truth_reasons and paired have one entry per target time")
+        for tr, why, t in zip(self.truth, self.truth_reasons, self.target_times, strict=True):
+            if (tr is None) == (why is None):
+                raise ValueError("a target time has either truth or a not-evaluable reason")
+            if tr is not None and tr.timestamp != t:
+                raise ValueError("truth timestamps must match target_times")
         for m in self.models:
-            if len(m.scores) != len(self.truth):
+            if len(m.scores) != n:
                 raise ValueError(f"{m.model_id}: one score per target time (no silent drops)")
-            for sc, tr in zip(m.scores, self.truth, strict=True):
-                if sc.evaluable != (tr is not None):
-                    raise ValueError(f"{m.model_id}: evaluable only where truth exists")
+            for sc, tr, why in zip(m.scores, self.truth, self.truth_reasons, strict=True):
+                if tr is None and (sc.evaluable or sc.reason != why):
+                    raise ValueError(f"{m.model_id}: no truth means the truth's reason")
+                if tr is not None and not sc.evaluable and sc.reason != "model_failed":
+                    raise ValueError(f"{m.model_id}: truth exists, so only model_failed applies")
+        want = [all(m.scores[i].evaluable for m in self.models) and bool(self.models)
+                for i in range(n)]  # fmt: skip
+        if self.paired != want:
+            raise ValueError("paired must mark exactly the target times every model scored")
         return self

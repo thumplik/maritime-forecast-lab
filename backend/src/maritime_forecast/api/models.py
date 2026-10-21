@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+import math
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from maritime_forecast.schemas.benchmark import (
+    BenchmarkRun,
+    DroppedCell,
+    ModelRef,
+    ProtocolRef,
+    Stat,
+)
 
 
 class Health(BaseModel):
@@ -139,3 +148,88 @@ class ModelList(BaseModel):
         None, description="Protocol whose TRAIN-split fit supplies fitted parameters"
     )
     models: list[ModelInfo]
+
+
+# -- benchmarks ---------------------------------------------------------------------------
+class BenchmarkRequest(BaseModel):
+    """A paired benchmark (build plan §6) run by the API in a local background process."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dataset_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+    protocol: Literal["P-known", "P-unseen"]
+    model_ids: list[str] = Field(
+        default_factory=list, max_length=10, description="Empty = every product model"
+    )
+    horizons_hours: list[Annotated[float, Field(gt=0, le=72)]] = Field(
+        default_factory=lambda: [1, 2, 3, 6, 12, 24], min_length=1, max_length=12
+    )
+    step_minutes: int = Field(10, ge=1, le=60)
+    history_hours: float = Field(24, gt=0, le=168)
+    seed: int = Field(20230601, ge=0, lt=2**32)
+    n_boot: int = Field(1000, ge=100, le=5000)
+    max_cutoffs_per_set: int | None = Field(
+        None, ge=1, description="Smoke runs only; null = every sampled cutoff"
+    )
+
+    @model_validator(mode="after")
+    def _grid(self) -> BenchmarkRequest:
+        for h in self.horizons_hours:
+            steps = h * 60 / self.step_minutes
+            if not math.isclose(steps, round(steps), abs_tol=1e-9):
+                raise ValueError("every horizon must be a whole number of step_minutes")
+        if len(set(self.horizons_hours)) != len(self.horizons_hours):
+            raise ValueError("horizons must be distinct")
+        return self
+
+
+class BenchmarkStatus(BaseModel):
+    run_id: str
+    status: Literal["running", "incomplete", "queued", "succeeded", "failed"]
+    message: str | None = None
+    run: BenchmarkRun | None = Field(
+        None, description="The immutable run record, once finalized (checksums verified)"
+    )
+
+
+class SummaryModelCell(BaseModel):
+    median_error_m: Stat
+    p90_error_m: float
+    n_failed: int = Field(description="Evaluable samples this model failed (excluded for all)")
+    failure_rate: float
+    skill_vs_best_baseline: Stat | None = None
+
+
+class SummaryCell(BaseModel):
+    """One stratum x horizon cell, every model side by side on the same paired samples."""
+
+    stratum: str
+    horizon_minutes: float
+    admission: Literal["first_class", "experimental"]
+    headline: bool
+    n_evaluable: int
+    n_paired: int
+    n_vessels: int
+    sample_set_sha256: str
+    best_baseline_id: str | None
+    models: dict[str, SummaryModelCell]
+
+
+class BenchmarkSummary(BaseModel):
+    run_id: str
+    status: Literal["succeeded", "failed"]
+    created_at: datetime
+    git_sha: str
+    dataset_id: str
+    data_provenance: str
+    protocol: ProtocolRef
+    models: list[ModelRef]
+    horizons_minutes: list[float]
+    n_cutoffs: int | None
+    seed: int | None
+    max_cutoffs_per_set: int | None = Field(description="Set only for smoke runs")
+    cells: list[SummaryCell]
+    not_evaluable: dict[str, dict[str, int]]
+    dropped_cells: list[DroppedCell] = Field(description="Unscored cells (same stratum filter)")
+    warnings: list[str]
+    error: str | None

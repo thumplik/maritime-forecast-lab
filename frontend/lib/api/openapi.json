@@ -37,6 +37,92 @@
         "title": "Admission",
         "type": "object"
       },
+      "BenchmarkRequest": {
+        "additionalProperties": false,
+        "description": "A paired benchmark (build plan \u00a76) run by the API in a local background process.",
+        "properties": {
+          "dataset_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$",
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "history_hours": {
+            "default": 24,
+            "exclusiveMinimum": 0.0,
+            "maximum": 168.0,
+            "title": "History Hours",
+            "type": "number"
+          },
+          "horizons_hours": {
+            "items": {
+              "exclusiveMinimum": 0.0,
+              "maximum": 72.0,
+              "type": "number"
+            },
+            "maxItems": 12,
+            "minItems": 1,
+            "title": "Horizons Hours",
+            "type": "array"
+          },
+          "max_cutoffs_per_set": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Smoke runs only; null = every sampled cutoff",
+            "title": "Max Cutoffs Per Set"
+          },
+          "model_ids": {
+            "description": "Empty = every product model",
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Model Ids",
+            "type": "array"
+          },
+          "n_boot": {
+            "default": 1000,
+            "maximum": 5000.0,
+            "minimum": 100.0,
+            "title": "N Boot",
+            "type": "integer"
+          },
+          "protocol": {
+            "enum": [
+              "P-known",
+              "P-unseen"
+            ],
+            "title": "Protocol",
+            "type": "string"
+          },
+          "seed": {
+            "default": 20230601,
+            "exclusiveMaximum": 4294967296.0,
+            "minimum": 0.0,
+            "title": "Seed",
+            "type": "integer"
+          },
+          "step_minutes": {
+            "default": 10,
+            "maximum": 60.0,
+            "minimum": 1.0,
+            "title": "Step Minutes",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "dataset_id",
+          "protocol"
+        ],
+        "title": "BenchmarkRequest",
+        "type": "object"
+      },
       "BenchmarkRun": {
         "additionalProperties": false,
         "properties": {
@@ -71,7 +157,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Error"
           },
           "git_sha": {
@@ -165,6 +250,201 @@
         "title": "BenchmarkRun",
         "type": "object"
       },
+      "BenchmarkStatus": {
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/BenchmarkRun"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The immutable run record, once finalized (checksums verified)"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "incomplete",
+              "queued",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status"
+        ],
+        "title": "BenchmarkStatus",
+        "type": "object"
+      },
+      "BenchmarkSummary": {
+        "properties": {
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/SummaryCell"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "data_provenance": {
+            "title": "Data Provenance",
+            "type": "string"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "dropped_cells": {
+            "description": "Unscored cells (same stratum filter)",
+            "items": {
+              "$ref": "#/components/schemas/DroppedCell"
+            },
+            "title": "Dropped Cells",
+            "type": "array"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "git_sha": {
+            "title": "Git Sha",
+            "type": "string"
+          },
+          "horizons_minutes": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Horizons Minutes",
+            "type": "array"
+          },
+          "max_cutoffs_per_set": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set only for smoke runs",
+            "title": "Max Cutoffs Per Set"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelRef"
+            },
+            "title": "Models",
+            "type": "array"
+          },
+          "n_cutoffs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N Cutoffs"
+          },
+          "not_evaluable": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "integer"
+              },
+              "type": "object"
+            },
+            "title": "Not Evaluable",
+            "type": "object"
+          },
+          "protocol": {
+            "$ref": "#/components/schemas/ProtocolRef"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "seed": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Seed"
+          },
+          "status": {
+            "enum": [
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "run_id",
+          "status",
+          "created_at",
+          "git_sha",
+          "dataset_id",
+          "data_provenance",
+          "protocol",
+          "models",
+          "horizons_minutes",
+          "n_cutoffs",
+          "seed",
+          "max_cutoffs_per_set",
+          "cells",
+          "not_evaluable",
+          "dropped_cells",
+          "warnings",
+          "error"
+        ],
+        "title": "BenchmarkSummary",
+        "type": "object"
+      },
       "CandidateTrajectory": {
         "description": "One candidate path (e.g. a retrieved route). `similarity` is NOT a probability.",
         "properties": {
@@ -227,14 +507,13 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "description": "Baseline with the lowest median error in this cell",
             "title": "Best Baseline Id"
           },
           "failure_rate": {
             "description": "n_failed / (n_paired + n_failed)",
-            "maximum": 1,
-            "minimum": 0,
+            "maximum": 1.0,
+            "minimum": 0.0,
             "title": "Failure Rate",
             "type": "number"
           },
@@ -259,7 +538,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Median Abs Along Track M"
           },
           "median_abs_cross_track_m": {
@@ -271,7 +549,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Median Abs Cross Track M"
           },
           "median_ade_m": {
@@ -283,7 +560,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "description": "Median of per-sample ADE over paired grid points up to the horizon",
             "title": "Median Ade M"
           },
@@ -307,7 +583,7 @@
           },
           "n_failed": {
             "description": "Samples this model failed; excluded for every model in the cell",
-            "minimum": 0,
+            "minimum": 0.0,
             "title": "N Failed",
             "type": "integer"
           },
@@ -338,7 +614,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "description": "1 - median error / best baseline's median error, with a PAIRED bootstrap CI (same vessel resamples). Null unless every registered baseline is in the run, or when the best baseline's error is ~0 (undefined)"
           },
           "stratum": {
@@ -630,8 +905,21 @@
       },
       "ForecastEvaluation": {
         "additionalProperties": false,
-        "description": "Truth and errors for one forecast; returned separately and only on request.",
+        "description": "Truth and errors for one forecast; returned separately and only on request.\n\nEvery target time is reported for every model (no silent drops). A target time without\ntruth is not evaluable for any model, with the truth reason; where truth exists but a model\nproduced no forecast, that model's score is `model_failed`. `paired` marks the target times\nwhere every model is evaluable, the set to compare models on.",
         "properties": {
+          "as_of": {
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "data_version": {
+            "title": "Data Version",
+            "type": "string"
+          },
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
           "forecast_id": {
             "title": "Forecast Id",
             "type": "string"
@@ -645,6 +933,22 @@
               "$ref": "#/components/schemas/ModelEvaluation"
             },
             "title": "Models",
+            "type": "array"
+          },
+          "paired": {
+            "description": "Per target time: every model is evaluable",
+            "items": {
+              "type": "boolean"
+            },
+            "title": "Paired",
+            "type": "array"
+          },
+          "target_times": {
+            "items": {
+              "format": "date-time",
+              "type": "string"
+            },
+            "title": "Target Times",
             "type": "array"
           },
           "truth": {
@@ -662,16 +966,58 @@
             "title": "Truth",
             "type": "array"
           },
+          "truth_reasons": {
+            "description": "Per target time: why truth is missing; null where truth exists",
+            "items": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "no_report_before",
+                    "no_report_after",
+                    "truth_gap",
+                    "insufficient_history",
+                    "model_failed",
+                    "outside_truth_region",
+                    "feed_outage"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Truth Reasons",
+            "type": "array"
+          },
           "truth_region": {
             "title": "Truth Region",
             "type": "string"
+          },
+          "vessel_id": {
+            "title": "Vessel Id",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
           }
         },
         "required": [
           "forecast_id",
+          "dataset_id",
+          "vessel_id",
+          "as_of",
+          "data_version",
           "truth_region",
           "max_bracket_gap_minutes",
+          "target_times",
           "truth",
+          "truth_reasons",
+          "paired",
           "models"
         ],
         "title": "ForecastEvaluation",
@@ -894,7 +1240,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Along Track M"
           },
           "cross_track_m": {
@@ -906,7 +1251,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Cross Track M"
           },
           "error_m": {
@@ -918,7 +1262,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Error M"
           },
           "evaluable": {
@@ -947,7 +1290,6 @@
                 "type": "null"
               }
             ],
-            "default": null,
             "title": "Reason"
           }
         },
@@ -1074,6 +1416,18 @@
       },
       "ModelEvaluation": {
         "properties": {
+          "ade_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Mean error over the PAIRED target times (comparable across models); null if there are none",
+            "title": "Ade M"
+          },
           "model_id": {
             "title": "Model Id",
             "type": "string"
@@ -1084,10 +1438,20 @@
             },
             "title": "Scores",
             "type": "array"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "unsupported",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
           }
         },
         "required": [
           "model_id",
+          "status",
           "scores"
         ],
         "title": "ModelEvaluation",
@@ -1412,6 +1776,117 @@
         "title": "Stat",
         "type": "object"
       },
+      "SummaryCell": {
+        "description": "One stratum x horizon cell, every model side by side on the same paired samples.",
+        "properties": {
+          "admission": {
+            "enum": [
+              "first_class",
+              "experimental"
+            ],
+            "title": "Admission",
+            "type": "string"
+          },
+          "best_baseline_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Baseline Id"
+          },
+          "headline": {
+            "title": "Headline",
+            "type": "boolean"
+          },
+          "horizon_minutes": {
+            "title": "Horizon Minutes",
+            "type": "number"
+          },
+          "models": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SummaryModelCell"
+            },
+            "title": "Models",
+            "type": "object"
+          },
+          "n_evaluable": {
+            "title": "N Evaluable",
+            "type": "integer"
+          },
+          "n_paired": {
+            "title": "N Paired",
+            "type": "integer"
+          },
+          "n_vessels": {
+            "title": "N Vessels",
+            "type": "integer"
+          },
+          "sample_set_sha256": {
+            "title": "Sample Set Sha256",
+            "type": "string"
+          },
+          "stratum": {
+            "title": "Stratum",
+            "type": "string"
+          }
+        },
+        "required": [
+          "stratum",
+          "horizon_minutes",
+          "admission",
+          "headline",
+          "n_evaluable",
+          "n_paired",
+          "n_vessels",
+          "sample_set_sha256",
+          "best_baseline_id",
+          "models"
+        ],
+        "title": "SummaryCell",
+        "type": "object"
+      },
+      "SummaryModelCell": {
+        "properties": {
+          "failure_rate": {
+            "title": "Failure Rate",
+            "type": "number"
+          },
+          "median_error_m": {
+            "$ref": "#/components/schemas/Stat"
+          },
+          "n_failed": {
+            "description": "Evaluable samples this model failed (excluded for all)",
+            "title": "N Failed",
+            "type": "integer"
+          },
+          "p90_error_m": {
+            "title": "P90 Error M",
+            "type": "number"
+          },
+          "skill_vs_best_baseline": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Stat"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "median_error_m",
+          "p90_error_m",
+          "n_failed",
+          "failure_rate"
+        ],
+        "title": "SummaryModelCell",
+        "type": "object"
+      },
       "Track": {
         "properties": {
           "dataset_id": {
@@ -1509,14 +1984,14 @@
       "TrackPoint": {
         "properties": {
           "latitude_deg": {
-            "maximum": 90,
-            "minimum": -90,
+            "maximum": 90.0,
+            "minimum": -90.0,
             "title": "Latitude Deg",
             "type": "number"
           },
           "longitude_deg": {
-            "maximum": 180,
-            "minimum": -180,
+            "maximum": 180.0,
+            "minimum": -180.0,
             "title": "Longitude Deg",
             "type": "number"
           },
@@ -1801,6 +2276,286 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/benchmarks": {
+      "post": {
+        "description": "Start an unattended paired benchmark in a background process; poll its status.",
+        "operationId": "start_benchmark_benchmarks_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BenchmarkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "dataset_not_found / vessel_not_found / manifest_not_found / run_not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "benchmark_busy / run_not_finished / run_tampered"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "too_many_points"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "invalid_parameter / window_too_large / unknown_model / benchmark_refused"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "run_inconsistent (a run record breaks pairing)"
+          }
+        },
+        "summary": "Start Benchmark",
+        "tags": [
+          "benchmarks"
+        ]
+      }
+    },
+    "/benchmarks/{run_id}": {
+      "get": {
+        "description": "Status, and once finalized the full immutable run record (checksums verified).",
+        "operationId": "benchmark_benchmarks__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "dataset_not_found / vessel_not_found / manifest_not_found / run_not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "benchmark_busy / run_not_finished / run_tampered"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "too_many_points"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "invalid_parameter / window_too_large / unknown_model / benchmark_refused"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "run_inconsistent (a run record breaks pairing)"
+          }
+        },
+        "summary": "Benchmark",
+        "tags": [
+          "benchmarks"
+        ]
+      }
+    },
+    "/benchmarks/{run_id}/summary": {
+      "get": {
+        "description": "Model x horizon x stratum table: medians with CIs and skill, side by side per\npaired cell.",
+        "operationId": "benchmark_summary_benchmarks__run_id__summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stratum",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 50,
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Stratum"
+            }
+          },
+          {
+            "in": "query",
+            "name": "headline_only",
+            "required": false,
+            "schema": {
+              "default": false,
+              "title": "Headline Only",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "dataset_not_found / vessel_not_found / manifest_not_found / run_not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "benchmark_busy / run_not_finished / run_tampered"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "too_many_points"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "invalid_parameter / window_too_large / unknown_model / benchmark_refused"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "run_inconsistent (a run record breaks pairing)"
+          }
+        },
+        "summary": "Benchmark Summary",
+        "tags": [
+          "benchmarks"
+        ]
+      }
+    },
     "/datasets": {
       "get": {
         "operationId": "datasets_datasets_get",
@@ -1854,7 +2609,17 @@
                 }
               }
             },
-            "description": "dataset_not_found / vessel_not_found"
+            "description": "dataset_not_found / vessel_not_found / manifest_not_found / run_not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "benchmark_busy / run_not_finished / run_tampered"
           },
           "413": {
             "content": {
@@ -1874,10 +2639,102 @@
                 }
               }
             },
-            "description": "invalid_parameter / window_too_large"
+            "description": "invalid_parameter / window_too_large / unknown_model / benchmark_refused"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "run_inconsistent (a run record breaks pairing)"
           }
         },
         "summary": "Forecasts",
+        "tags": [
+          "models"
+        ]
+      }
+    },
+    "/forecasts/evaluation": {
+      "post": {
+        "description": "Withheld truth and per-target-time errors for the forecast this request produces.\n\nThe forecast is the one `POST /forecasts` serves (same `forecast_id`); truth is read\nonly after it is made, from the truth region, never bridged across gaps.",
+        "operationId": "forecast_evaluation_forecasts_evaluation_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForecastRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForecastEvaluation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "dataset_not_found / vessel_not_found / manifest_not_found / run_not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "benchmark_busy / run_not_finished / run_tampered"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "too_many_points"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "invalid_parameter / window_too_large / unknown_model / benchmark_refused"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "run_inconsistent (a run record breaks pairing)"
+          }
+        },
+        "summary": "Forecast Evaluation",
         "tags": [
           "models"
         ]
@@ -2071,7 +2928,17 @@
                 }
               }
             },
-            "description": "dataset_not_found / vessel_not_found"
+            "description": "dataset_not_found / vessel_not_found / manifest_not_found / run_not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "benchmark_busy / run_not_finished / run_tampered"
           },
           "413": {
             "content": {
@@ -2091,7 +2958,17 @@
                 }
               }
             },
-            "description": "invalid_parameter / window_too_large"
+            "description": "invalid_parameter / window_too_large / unknown_model / benchmark_refused"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "run_inconsistent (a run record breaks pairing)"
           }
         },
         "summary": "Vessels",
@@ -2184,7 +3061,17 @@
                 }
               }
             },
-            "description": "dataset_not_found / vessel_not_found"
+            "description": "dataset_not_found / vessel_not_found / manifest_not_found / run_not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "benchmark_busy / run_not_finished / run_tampered"
           },
           "413": {
             "content": {
@@ -2204,7 +3091,17 @@
                 }
               }
             },
-            "description": "invalid_parameter / window_too_large"
+            "description": "invalid_parameter / window_too_large / unknown_model / benchmark_refused"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "run_inconsistent (a run record breaks pairing)"
           }
         },
         "summary": "Track",

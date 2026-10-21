@@ -59,6 +59,10 @@ class RunStore:
             raise ValueError(f"invalid run id {run_id!r}")
         return self.root / run_id
 
+    def path(self, run_id: str) -> Path:
+        """The run's directory (validated id; it may not exist)."""
+        return self._dir(run_id)
+
     def create(self, run_id: str) -> Path:
         d = self._dir(run_id)
         self.root.mkdir(parents=True, exist_ok=True)

@@ -162,24 +162,44 @@ def predict_all(cfg, store, cutoffs, grid_steps, ctx: ModelContext):
 
 
 def truth_grid(cfg, store, cutoffs, grid_steps, truth_until: datetime | None = None):
+    """Truth for every (cutoff, step) of a benchmark; see truth_on_grid."""
+    return truth_on_grid(
+        store, cfg.dataset_id, cutoffs, grid_steps, cfg.step_minutes,
+        cfg.max_bracket_gap_minutes, truth_until,
+    )  # fmt: skip
+
+
+def truth_on_grid(
+    store: ParquetStore,
+    dataset_id: str,
+    cutoffs: pl.DataFrame,
+    grid_steps: int,
+    step_minutes: float,
+    max_bracket_gap_minutes: float,
+    truth_until: datetime | None = None,
+) -> dict[str, np.ndarray]:
     """Truth for every (cutoff, step): arrays [N,S] of lat, lon, course, evaluable, reason.
 
-    `truth_until` caps the observations truth may use (exclusive). Fitting on a non-test split
-    passes that split's period end, so truth never brackets with a report from a later split,
-    whatever the purge gap is."""
-    step = timedelta(minutes=cfg.step_minutes)
+    `cutoffs` has cutoff_id (0..N-1), vessel_id, observed_at (the as_of). Step k is at
+    as_of + k * step, k = 1..grid_steps. `truth_until` caps the observations truth may use
+    (exclusive). Fitting on a non-test split passes that split's period end, so truth never
+    brackets with a report from a later split, whatever the purge gap is."""
+    step = timedelta(minutes=step_minutes)
     targets = (
         cutoffs.select("cutoff_id", "vessel_id", "observed_at")
         .join(pl.DataFrame({"k": np.arange(1, grid_steps + 1)}), how="cross")
         .with_columns(target_t=pl.col("observed_at") + pl.col("k") * step)
         .drop("observed_at")
     )
-    lo = cutoffs["observed_at"].min()
-    hi = cutoffs["observed_at"].max() + timedelta(hours=max(cfg.horizons_h), minutes=60)
+    # Start one bracket gap (plus a report's margin for the spike filter's lag) before the
+    # first cutoff: an API as_of between reports still finds the report bracketing its first
+    # targets, and that report's spike test sees its predecessor, as inside a benchmark.
+    lo = cutoffs["observed_at"].min() - timedelta(minutes=max_bracket_gap_minutes + 10)
+    hi = cutoffs["observed_at"].max() + grid_steps * step + timedelta(minutes=60)
     if truth_until is not None:
         hi = min(hi, truth_until)
     con = store.con
-    obs = store.scan(cfg.dataset_id, lo, hi, vessel_ids=cutoffs["vessel_id"].unique().to_list())
+    obs = store.scan(dataset_id, lo, hi, vessel_ids=cutoffs["vessel_id"].unique().to_list())
     con.register("_bench_obs", obs.to_arrow())
     truth_box = default_region("truth_region")  # truth only from inside the truth region
     con.execute(
@@ -195,7 +215,7 @@ def truth_grid(cfg, store, cutoffs, grid_steps, truth_until: datetime | None = N
     tsql = truth_sql(
         "_bench_targets",
         "_bench_truth_obs",
-        cfg.max_bracket_gap_minutes,
+        max_bracket_gap_minutes,
         prev_cols=("cog_deg", "sog_knots"),
     )
     t = con.execute(
@@ -241,38 +261,54 @@ def _strata(row: dict) -> list[str]:
     return out
 
 
-def run_benchmark(
-    cfg: BenchmarkConfig, store: ParquetStore, runs: RunStore, run_id: str | None = None
-) -> BenchmarkRun:
-    started = datetime.now(UTC).replace(microsecond=0)
+def benchmark_context(
+    cfg: BenchmarkConfig, store: ParquetStore
+) -> tuple[SplitManifest, ModelContext]:
+    """The split manifest and the protocol-scoped model context a benchmark runs under."""
     manifest = SplitManifest.model_validate_json(Path(cfg.manifest_path).read_text())
     if manifest.dataset_id != cfg.dataset_id:
         raise ValueError(f"manifest is for {manifest.dataset_id}, not {cfg.dataset_id}")
     if manifest.region_split is not None:
         raise NotImplementedError("P-region benchmarks need context positions; not in slice 2")
-    run_id = run_id or f"{manifest.protocol}_{cfg.dataset_id}_{started:%Y%m%dT%H%M%SZ}"
     ctx = ModelContext(
         store=store,
         dataset_id=cfg.dataset_id,
         protocol=manifest.protocol,
         manifest_sha256=_sha256_file(Path(cfg.manifest_path)),
     )
-    for m in cfg.models():  # fail before creating a run, not halfway through it
-        caps = get_model(m, ctx).capabilities()
-        fitted_on = get_model(m, ctx).config.get("fit_split")
+    return manifest, ctx
+
+
+def preflight(cfg: BenchmarkConfig, ctx: ModelContext) -> None:
+    """Refuse a benchmark that could not produce an honest run (raises ValueError)."""
+    known = set(model_ids())
+    unknown = [m for m in cfg.models() if m not in known]
+    if unknown:
+        raise ValueError(f"unknown model(s) {unknown}")
+    for m in cfg.models():
+        model = get_model(m, ctx)
+        caps = model.capabilities()
+        fitted_on = model.config.get("fit_split")
         if fitted_on is not None and fitted_on == cfg.split:
             raise ValueError(
                 f"{m} was fitted on the {cfg.split!r} split; scoring it there would be in-sample"
             )
         if not caps.installed:
-            raise ValueError(
-                f"{m} is not installed/fitted for {manifest.protocol} on {cfg.dataset_id}"
-            )
+            raise ValueError(f"{m} is not installed/fitted for {ctx.protocol} on {cfg.dataset_id}")
         if caps.max_horizon_hours < max(cfg.horizons_h):
             raise ValueError(
                 f"{m} supports horizons up to {caps.max_horizon_hours} h; "
                 f"requested {max(cfg.horizons_h)} h"
             )
+
+
+def run_benchmark(
+    cfg: BenchmarkConfig, store: ParquetStore, runs: RunStore, run_id: str | None = None
+) -> BenchmarkRun:
+    started = datetime.now(UTC).replace(microsecond=0)
+    manifest, ctx = benchmark_context(cfg, store)
+    run_id = run_id or f"{manifest.protocol}_{cfg.dataset_id}_{started:%Y%m%dT%H%M%SZ}"
+    preflight(cfg, ctx)  # fail before creating a run, not halfway through it
     runs.create(run_id)
     base_record = dict(
         run_id=run_id,
@@ -519,7 +555,12 @@ def _run(cfg, store, runs, run_id, manifest, base_record, ctx) -> BenchmarkRun:
         not_evaluable=not_eval,
         results=results,
         dropped_cells=dropped,
-    )
+        warnings=(
+            [f"smoke run: at most {cfg.max_cutoffs_per_set} cutoffs per motion set; "
+             "not a full benchmark"]
+            if cfg.max_cutoffs_per_set is not None else []
+        ),
+    )  # fmt: skip
     runs.write_table(run_id, "cutoffs", cutoffs)
     runs.write_table(run_id, "records", records)
     runs.write_text(run_id, "report.md", render_report(run))

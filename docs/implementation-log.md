@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 2 — Baselines and the evaluator** (in progress: slices 1–3 done). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 2 — Baselines and the evaluator** (in progress: slices 1–4 done). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -479,3 +479,56 @@ make lint
 - navigable-water mask and feasibility flags;
 - GeoJSON export from the CLI;
 - then the milestone check.
+
+## 2026-10-21 — Milestone 2 slice 4: forecast evaluation and benchmark endpoints
+
+**Milestone:** 2 — baselines and the evaluator
+**Done:**
+- `POST /forecasts/evaluation` (`api/app.py`, `evaluation/forecast_eval.py`). It takes the same `ForecastRequest` as `POST /forecasts` and scores the forecast that endpoint serves (same `forecast_id` and cache, shared `_forecast` helper).
+  - Truth is read only after the forecast exists, with the benchmark's rule. `runner.truth_grid` is generalized to `truth_on_grid`.
+  - Every target time is reported for every model: the truth reason where there is no truth, `model_failed` where truth exists but a model gave nothing.
+  - `paired` marks the target times every model scored; `ade_m` averages only those.
+- `ForecastEvaluation` contract (`schemas/forecast.py`) gains `target_times`, `truth_reasons`, `paired`, per-model `status` and `ade_m`. Its validators reject silent drops, a mis-stated `paired`, and truth/reason mismatches.
+- `POST /benchmarks` → 202 + `Location`. It runs the runner's `benchmark_context` + `preflight` synchronously (both extracted from `run_benchmark`), so anything the CLI refuses is a 422 `benchmark_refused` before a process starts.
+  - The run is `run_benchmark` in a spawned daemon process (`api/jobs.py`), one at a time (409 `benchmark_busy`, guarded by a lock).
+- `GET /benchmarks/{id}`: `running` / `incomplete` / `succeeded` / `failed`, with the full record (checksums verified on every read; 409 `run_tampered`).
+- `GET /benchmarks/{id}/summary?stratum&headline_only`: one row per paired cell, every model side by side. It includes median + CI, p90, `n_failed`, failure rate, skill + paired CI, admission, headline, filtered dropped cells and `max_cutoffs_per_set`. A cell whose shared fields differ between models is refused (500 `run_inconsistent`).
+- The runner labels smoke runs (`max_cutoffs_per_set`) in `run.warnings`. `RunStore.path()` added.
+- `export_openapi.py` no longer publishes contracts separately (all are served). TS types regenerated; new types exported from `frontend/lib/api/client.ts`. `docs/architecture.md` updated.
+- Tests: `test_api.py` (evaluation: exact persistence error, gaps, model failures, mid-gap `as_of`, no truth in forecasts), `test_api_benchmarks.py` (status, summary pivot, tampering, refusals, a real spawned background run, smoke label), `test_contracts.py`.
+
+**Leakage review (leakage-reviewer subagent):** no leakage. Fixed:
+1. Truth scan started at the cutoff, so an API `as_of` between reports lost the report bracketing its first targets (and that report's spike test lost its predecessor). It now starts one bracket gap + 10 min earlier. The new regression test was verified to fail without the fix. Benchmark results are unchanged (below).
+2. `evaluate_forecast` asserts the target grid is `as_of + k·step` (the grid truth is read on).
+3. A warning when the vessel has no report in the truth region before any target (e.g. a non-Gulf dataset).
+4. Smoke runs are labelled in the run and the summary.
+5. The summary carries dropped cells, `n_evaluable` and per-model `n_failed`.
+6. The summary checks cell fields are identical across models.
+7. A lock around the busy check in `BenchmarkJobs.start`.
+
+Not changed:
+- `preflight` accepts an explicit `calibration_only` model, as the CLI does.
+- Truth is filtered to the region after segmentation, so a vessel that leaves the region for < 30 min is bracketed across its absence. This is pre-existing and affects both paths.
+
+**Commands run:**
+```bash
+cd backend && uv run pytest -q          # 233 passed, 3 deselected, 1 xfailed
+make lint && make gen-api && make web-test
+make benchmark PROTOCOL=P-known         # 95 s, after the truth-window fix
+make benchmark PROTOCOL=P-unseen        # 28 s
+```
+Real-data smoke through the app (scratch script, not committed):
+- `/forecasts/evaluation` on a transiting cutoff: 6 h, 3 models, 0.14–0.18 s, 36/36 paired.
+- `POST /benchmarks` P-unseen with `max_cutoffs_per_set=200`: succeeded in the background in 12 s.
+- The smoke run was deleted.
+
+**Results:** the post-fix re-runs are identical to the kept runs `P-known_noaa_us_gulf_2023-06_20261021T021006Z` and `P-unseen_noaa_us_gulf_2023-06_20261021T021141Z`: every cell (508 / 500), records, cutoffs, dropped cells and not-evaluable counts. They were duplicates, so they were deleted; `docs/benchmarks.md` is unchanged.
+
+**Blockers / open questions:** none.
+- Processes use `spawn`: an ad-hoc script that drives the app needs a `__main__` guard (documented in `api/jobs.py`).
+- The truth region is the default `us_gulf` for every dataset. A per-dataset truth region is needed before evaluating imported non-Gulf data.
+
+**Next step:** remaining Milestone 2 items:
+- navigable-water mask and feasibility flags;
+- GeoJSON export from the benchmark CLI;
+- then `/milestone-check`.

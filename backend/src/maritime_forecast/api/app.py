@@ -1,4 +1,4 @@
-"""FastAPI application (build plan §8): read-only endpoints over the Parquet store.
+"""FastAPI application (build plan §8): data, forecasts, forecast evaluation and benchmarks.
 
 Run:  make api      (uvicorn maritime_forecast.api.app:app --reload --port 8000)
 Docs: http://localhost:8000/docs
@@ -9,6 +9,7 @@ Docs: http://localhost:8000/docs
 import hashlib
 import json
 import re
+import secrets
 from collections import OrderedDict
 from collections.abc import Iterator
 from dataclasses import dataclass, field
@@ -18,15 +19,19 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Query, Request
+from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi import Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import AwareDatetime
 
 from maritime_forecast.api import errors
 from maritime_forecast.api.errors import ApiError, dataset_not_found, invalid
+from maritime_forecast.api.jobs import BenchmarkJobs
 from maritime_forecast.api.models import (
     Admission,
+    BenchmarkRequest,
+    BenchmarkStatus,
+    BenchmarkSummary,
     DatasetList,
     DatasetSummary,
     Gap,
@@ -35,6 +40,8 @@ from maritime_forecast.api.models import (
     ModelInfo,
     ModelList,
     Segment,
+    SummaryCell,
+    SummaryModelCell,
     Track,
     TrackPoints,
     VesselPage,
@@ -46,15 +53,23 @@ from maritime_forecast.data.segment import (
     gap_segments,
     segments_and_gaps,
 )
+from maritime_forecast.evaluation.forecast_eval import evaluate_forecast
+from maritime_forecast.evaluation.runner import BenchmarkConfig, benchmark_context, preflight
 from maritime_forecast.models.base import ForecastHorizon, ModelContext, history_from_store
 from maritime_forecast.models.registry import get_model, model_ids
 from maritime_forecast.provenance import git_sha
 from maritime_forecast.schemas.dataset import DatasetManifest
-from maritime_forecast.schemas.forecast import ForecastRequest, ForecastResponse
+from maritime_forecast.schemas.forecast import (
+    ForecastEvaluation,
+    ForecastRequest,
+    ForecastResponse,
+)
 from maritime_forecast.storage.parquet_store import CANONICAL_ROOT, ParquetStore, connect
+from maritime_forecast.storage.run_store import RunStore
 
 DATASET_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
 VESSEL_ID_PATTERN = r"^[A-Za-z0-9_-]{1,32}$"
+RUN_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
 
 
 @dataclass
@@ -69,6 +84,9 @@ class ApiSettings:
     # Fitted parameters for the API come from this protocol's TRAIN split (deployment fit).
     deployment_protocol: str = "P-known"
     forecast_cache_size: int = 256
+    # Truth for POST /forecasts/evaluation: the benchmark's bracketing rule (§6.1 step 4).
+    max_bracket_gap_minutes: float = 30.0
+    max_running_benchmarks: int = 1
     cors_origins: list[str] = field(
         default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"]
     )
@@ -82,6 +100,8 @@ class Context:
         self.settings = settings
         self.base = connect()
         self.base.execute("SET enable_progress_bar=false")
+        self.runs = RunStore(settings.runs_dir / "benchmarks")
+        self.jobs = BenchmarkJobs(self.runs, settings.store_root, settings.max_running_benchmarks)
 
     @cached_property
     def git_sha(self) -> str:
@@ -391,8 +411,8 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
 
     cache: OrderedDict[str, ForecastResponse] = OrderedDict()
 
-    @app.post("/forecasts", response_model=ForecastResponse, responses=R, tags=["models"])
-    def forecasts(store: StoreDep, req: ForecastRequest) -> ForecastResponse:
+    def _forecast(store: ParquetStore, req: ForecastRequest) -> ForecastResponse:
+        """The causal forecast for a request, cached by request, models, data and code."""
         _partitions(store, req.dataset_id)
         unknown = [m for m in req.model_ids if m not in model_ids()]
         if unknown:
@@ -414,15 +434,9 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
             default=str,
         )
         forecast_id = hashlib.sha256(key_basis.encode()).hexdigest()[:24]
-        warnings = []
-        if req.show_ground_truth:
-            warnings.append(
-                "show_ground_truth: the evaluation endpoint is not available yet; "
-                "truth is never part of a forecast response"
-            )
         if forecast_id in cache:
             cache.move_to_end(forecast_id)
-            return cache[forecast_id].model_copy(update={"warnings": warnings})
+            return cache[forecast_id]
         as_of = req.as_of.astimezone(UTC)
         history = history_from_store(store, req.dataset_id, req.vessel_id, as_of, req.history_hours)
         horizon = ForecastHorizon(as_of, req.horizon_hours, req.step_minutes)
@@ -448,9 +462,161 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         cache[forecast_id] = resp  # request-independent: no per-request warnings inside
         if len(cache) > settings.forecast_cache_size:
             cache.popitem(last=False)
+        return resp
+
+    @app.post("/forecasts", response_model=ForecastResponse, responses=R, tags=["models"])
+    def forecasts(store: StoreDep, req: ForecastRequest) -> ForecastResponse:
+        resp = _forecast(store, req)
+        warnings = []
+        if req.show_ground_truth:
+            warnings.append(
+                "show_ground_truth: truth is never part of a forecast response; "
+                "POST the same request to /forecasts/evaluation"
+            )
         return resp.model_copy(update={"warnings": warnings})
 
+    @app.post(
+        "/forecasts/evaluation", response_model=ForecastEvaluation, responses=R, tags=["models"]
+    )
+    def forecast_evaluation(store: StoreDep, req: ForecastRequest) -> ForecastEvaluation:
+        """Withheld truth and per-target-time errors for the forecast this request produces.
+
+        The forecast is the one `POST /forecasts` serves (same `forecast_id`); truth is read
+        only after it is made, from the truth region, never bridged across gaps."""
+        resp = _forecast(store, req)
+        return evaluate_forecast(store, resp, req.step_minutes, settings.max_bracket_gap_minutes)
+
+    # -- benchmarks ------------------------------------------------------------------------
+    @app.post(
+        "/benchmarks", response_model=BenchmarkStatus, status_code=202, responses=R,
+        tags=["benchmarks"],
+    )  # fmt: skip
+    def start_benchmark(
+        store: StoreDep, ctx: CtxDep, req: BenchmarkRequest, response: Response
+    ) -> BenchmarkStatus:
+        """Start an unattended paired benchmark in a background process; poll its status."""
+        _partitions(store, req.dataset_id)
+        mpath = settings.manifest_dir / "splits" / f"{req.protocol}__{req.dataset_id}.json"
+        if not mpath.exists():
+            raise ApiError(
+                404, "manifest_not_found",
+                f"no {req.protocol} split manifest for {req.dataset_id!r}; run make splits",
+            )  # fmt: skip
+        cfg = BenchmarkConfig(
+            dataset_id=req.dataset_id,
+            manifest_path=mpath,
+            model_ids=tuple(req.model_ids),
+            horizons_h=tuple(req.horizons_hours),
+            step_minutes=req.step_minutes,
+            history_hours=req.history_hours,
+            seed=req.seed,
+            n_boot=req.n_boot,
+            max_cutoffs_per_set=req.max_cutoffs_per_set,
+        )
+        try:  # the runner's own checks, before anything is started
+            _, mctx = benchmark_context(cfg, store)
+            preflight(cfg, mctx)
+        except (ValueError, NotImplementedError) as e:
+            raise ApiError(422, "benchmark_refused", str(e)) from None
+        started = datetime.now(UTC)
+        run_id = f"{req.protocol}_{req.dataset_id}_{started:%Y%m%dT%H%M%SZ}_{secrets.token_hex(3)}"
+        ctx.jobs.start(cfg, run_id)
+        response.headers["Location"] = f"/benchmarks/{run_id}"
+        return BenchmarkStatus(run_id=run_id, status="running")
+
+    RunIdP = Annotated[str, PathParam(pattern=RUN_ID_PATTERN)]
+
+    @app.get(
+        "/benchmarks/{run_id}", response_model=BenchmarkStatus, responses=R, tags=["benchmarks"]
+    )
+    def benchmark(ctx: CtxDep, run_id: RunIdP) -> BenchmarkStatus:
+        """Status, and once finalized the full immutable run record (checksums verified)."""
+        return ctx.jobs.status(run_id)
+
+    @app.get(
+        "/benchmarks/{run_id}/summary", response_model=BenchmarkSummary, responses=R,
+        tags=["benchmarks"],
+    )  # fmt: skip
+    def benchmark_summary(
+        ctx: CtxDep,
+        run_id: RunIdP,
+        stratum: Annotated[list[str] | None, Query(max_length=50)] = None,
+        headline_only: bool = False,
+    ) -> BenchmarkSummary:
+        """Model x horizon x stratum table: medians with CIs and skill, side by side per
+        paired cell."""
+        st = ctx.jobs.status(run_id)
+        if st.run is None:
+            raise ApiError(
+                409, "run_not_finished", f"run {run_id!r} is {st.status}",
+                {"status": st.status},
+            )  # fmt: skip
+        return summarize(st.run, set(stratum) if stratum else None, headline_only)
+
     return app
+
+
+def summarize(run, strata: set[str] | None = None, headline_only: bool = False):
+    """Pivot a run's per-model CellResults into one row per (stratum, horizon) cell."""
+    cells: dict[tuple[str, float], list] = {}
+    for r in run.results:
+        if strata is not None and r.stratum not in strata:
+            continue
+        cells.setdefault((r.stratum, r.horizon_minutes), []).append(r)
+    rows = []
+    for (stratum, h), rs in sorted(cells.items()):
+        first = rs[0]
+        shared = ("headline", "admission", "n_evaluable", "n_paired", "n_vessels",
+                  "sample_set_sha256", "best_baseline_id")  # fmt: skip
+        if any(getattr(r, k) != getattr(first, k) for r in rs for k in shared):
+            raise ApiError(
+                500, "run_inconsistent", f"cell {stratum} @ {h} min differs between models",
+                {"run_id": run.run_id},
+            )  # fmt: skip
+        if headline_only and not first.headline:
+            continue
+        rows.append(
+            SummaryCell(
+                stratum=stratum,
+                horizon_minutes=h,
+                admission=first.admission,
+                headline=first.headline,
+                n_evaluable=first.n_evaluable,
+                n_paired=first.n_paired,
+                n_vessels=first.n_vessels,
+                sample_set_sha256=first.sample_set_sha256,
+                best_baseline_id=first.best_baseline_id,
+                models={
+                    r.model_id: SummaryModelCell(
+                        median_error_m=r.median_error_m,
+                        p90_error_m=r.p90_error_m,
+                        n_failed=r.n_failed,
+                        failure_rate=r.failure_rate,
+                        skill_vs_best_baseline=r.skill_vs_best_baseline,
+                    )
+                    for r in rs
+                },
+            )
+        )
+    return BenchmarkSummary(
+        run_id=run.run_id,
+        status=run.status,
+        created_at=run.created_at,
+        git_sha=run.git_sha,
+        dataset_id=run.dataset_id,
+        data_provenance=run.data_provenance,
+        protocol=run.protocol,
+        models=run.models,
+        horizons_minutes=run.horizons_minutes,
+        n_cutoffs=run.sampler.get("n_cutoffs"),
+        seed=run.sampler.get("seed"),
+        max_cutoffs_per_set=run.sampler.get("max_cutoffs_per_set"),
+        cells=rows,
+        not_evaluable=run.not_evaluable,
+        dropped_cells=[d for d in run.dropped_cells if strata is None or d.stratum in strata],
+        warnings=run.warnings,
+        error=run.error,
+    )
 
 
 def __getattr__(name: str):  # lazy module-level app for `uvicorn maritime_forecast.api.app:app`

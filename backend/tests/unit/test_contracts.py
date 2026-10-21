@@ -181,15 +181,27 @@ def test_scores_and_evaluations_are_complete():
         with pytest.raises(ValidationError):
             HorizonScore(horizon_minutes=10, **bad)
     pt = {"timestamp": TIMES[0], "latitude_deg": 29, "longitude_deg": -94}
-    good = {"forecast_id": "f", "truth_region": "us_gulf", "max_bracket_gap_minutes": 30,
-            "truth": [pt, None],
-            "models": [{"model_id": "cv", "scores": [
-                {"horizon_minutes": 10, "evaluable": True, "error_m": 1.0},
-                {"horizon_minutes": 20, "evaluable": False, "reason": "truth_gap"}]}]}  # fmt: skip
+    s_ok = {"horizon_minutes": 10, "evaluable": True, "error_m": 1.0}
+    s_gap = {"horizon_minutes": 20, "evaluable": False, "reason": "truth_gap"}
+    good = {"forecast_id": "f", "dataset_id": "d", "vessel_id": "v", "as_of": AS_OF,
+            "data_version": "x", "truth_region": "us_gulf", "max_bracket_gap_minutes": 30,
+            "target_times": TIMES[:2], "truth": [pt, None], "truth_reasons": [None, "truth_gap"],
+            "paired": [True, False],
+            "models": [{"model_id": "cv", "status": "ok", "scores": [s_ok, s_gap]}]}  # fmt: skip
     ForecastEvaluation(**good)
-    with pytest.raises(ValidationError):  # silent per-horizon drop
-        ForecastEvaluation(
-            **(good | {"models": [{"model_id": "cv", "scores": good["models"][0]["scores"][:1]}]})
-        )
-    with pytest.raises(ValidationError):
-        ForecastEvaluation(**(good | {"truth": [], "models": []}))
+    failed = {"model_id": "dv", "status": "unsupported",
+              "scores": [{"horizon_minutes": 10, "evaluable": False, "reason": "model_failed"},
+                         s_gap]}  # fmt: skip
+    ForecastEvaluation(**(good | {"models": good["models"] + [failed], "paired": [False, False]}))
+    bad_cases = [
+        {"models": [{"model_id": "cv", "status": "ok", "scores": [s_ok]}]},  # silent drop
+        {"truth": [], "truth_reasons": [], "paired": [], "target_times": [], "models": []},
+        {"paired": [True, True]},  # claims a pair where truth is missing
+        {"models": good["models"] + [failed]},  # paired ignores the failed model
+        {"truth_reasons": [None, None]},  # missing truth without a reason
+        {"models": [{"model_id": "cv", "status": "ok", "scores": [  # truth exists: no truth_gap
+            {"horizon_minutes": 10, "evaluable": False, "reason": "truth_gap"}, s_gap]}]},
+    ]  # fmt: skip
+    for bad in bad_cases:
+        with pytest.raises(ValidationError):
+            ForecastEvaluation(**(good | bad))

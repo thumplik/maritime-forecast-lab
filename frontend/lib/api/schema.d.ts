@@ -4,6 +4,67 @@
  */
 
 export interface paths {
+    "/benchmarks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start Benchmark
+         * @description Start an unattended paired benchmark in a background process; poll its status.
+         */
+        post: operations["start_benchmark_benchmarks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/benchmarks/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Benchmark
+         * @description Status, and once finalized the full immutable run record (checksums verified).
+         */
+        get: operations["benchmark_benchmarks__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/benchmarks/{run_id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Benchmark Summary
+         * @description Model x horizon x stratum table: medians with CIs and skill, side by side per
+         *     paired cell.
+         */
+        get: operations["benchmark_summary_benchmarks__run_id__summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/datasets": {
         parameters: {
             query?: never;
@@ -32,6 +93,29 @@ export interface paths {
         put?: never;
         /** Forecasts */
         post: operations["forecasts_forecasts_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/forecasts/evaluation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Forecast Evaluation
+         * @description Withheld truth and per-target-time errors for the forecast this request produces.
+         *
+         *     The forecast is the one `POST /forecasts` serves (same `forecast_id`); truth is read
+         *     only after it is made, from the truth region, never bridged across gaps.
+         */
+        post: operations["forecast_evaluation_forecasts_evaluation_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -131,6 +215,51 @@ export interface components {
                 };
             };
         };
+        /**
+         * BenchmarkRequest
+         * @description A paired benchmark (build plan §6) run by the API in a local background process.
+         */
+        BenchmarkRequest: {
+            /** Dataset Id */
+            dataset_id: string;
+            /**
+             * History Hours
+             * @default 24
+             */
+            history_hours: number;
+            /** Horizons Hours */
+            horizons_hours?: number[];
+            /**
+             * Max Cutoffs Per Set
+             * @description Smoke runs only; null = every sampled cutoff
+             */
+            max_cutoffs_per_set?: number | null;
+            /**
+             * Model Ids
+             * @description Empty = every product model
+             */
+            model_ids?: string[];
+            /**
+             * N Boot
+             * @default 1000
+             */
+            n_boot: number;
+            /**
+             * Protocol
+             * @enum {string}
+             */
+            protocol: "P-known" | "P-unseen";
+            /**
+             * Seed
+             * @default 20230601
+             */
+            seed: number;
+            /**
+             * Step Minutes
+             * @default 10
+             */
+            step_minutes: number;
+        };
         /** BenchmarkRun */
         BenchmarkRun: {
             /**
@@ -150,11 +279,8 @@ export interface components {
              * @description Never silent: every unscored (stratum, horizon)
              */
             dropped_cells?: components["schemas"]["DroppedCell"][];
-            /**
-             * Error
-             * @default null
-             */
-            error: string | null;
+            /** Error */
+            error?: string | null;
             /** Git Sha */
             git_sha: string;
             /** Horizons Minutes */
@@ -197,6 +323,72 @@ export interface components {
             /** Warnings */
             warnings?: string[];
         };
+        /** BenchmarkStatus */
+        BenchmarkStatus: {
+            /** Message */
+            message?: string | null;
+            /** @description The immutable run record, once finalized (checksums verified) */
+            run?: components["schemas"]["BenchmarkRun"] | null;
+            /** Run Id */
+            run_id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "running" | "incomplete" | "queued" | "succeeded" | "failed";
+        };
+        /** BenchmarkSummary */
+        BenchmarkSummary: {
+            /** Cells */
+            cells: components["schemas"]["SummaryCell"][];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Data Provenance */
+            data_provenance: string;
+            /** Dataset Id */
+            dataset_id: string;
+            /**
+             * Dropped Cells
+             * @description Unscored cells (same stratum filter)
+             */
+            dropped_cells: components["schemas"]["DroppedCell"][];
+            /** Error */
+            error: string | null;
+            /** Git Sha */
+            git_sha: string;
+            /** Horizons Minutes */
+            horizons_minutes: number[];
+            /**
+             * Max Cutoffs Per Set
+             * @description Set only for smoke runs
+             */
+            max_cutoffs_per_set: number | null;
+            /** Models */
+            models: components["schemas"]["ModelRef"][];
+            /** N Cutoffs */
+            n_cutoffs: number | null;
+            /** Not Evaluable */
+            not_evaluable: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
+            protocol: components["schemas"]["ProtocolRef"];
+            /** Run Id */
+            run_id: string;
+            /** Seed */
+            seed: number | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "succeeded" | "failed";
+            /** Warnings */
+            warnings: string[];
+        };
         /**
          * CandidateTrajectory
          * @description One candidate path (e.g. a retrieved route). `similarity` is NOT a probability.
@@ -230,9 +422,8 @@ export interface components {
             /**
              * Best Baseline Id
              * @description Baseline with the lowest median error in this cell
-             * @default null
              */
-            best_baseline_id: string | null;
+            best_baseline_id?: string | null;
             /**
              * Failure Rate
              * @description n_failed / (n_paired + n_failed)
@@ -246,22 +437,15 @@ export interface components {
             /** Horizon Minutes */
             horizon_minutes: number;
             mean_error_m: components["schemas"]["Stat"];
-            /**
-             * Median Abs Along Track M
-             * @default null
-             */
-            median_abs_along_track_m: number | null;
-            /**
-             * Median Abs Cross Track M
-             * @default null
-             */
-            median_abs_cross_track_m: number | null;
+            /** Median Abs Along Track M */
+            median_abs_along_track_m?: number | null;
+            /** Median Abs Cross Track M */
+            median_abs_cross_track_m?: number | null;
             /**
              * Median Ade M
              * @description Median of per-sample ADE over paired grid points up to the horizon
-             * @default null
              */
-            median_ade_m: number | null;
+            median_ade_m?: number | null;
             median_error_m: components["schemas"]["Stat"];
             /** Model Id */
             model_id: string;
@@ -295,11 +479,8 @@ export interface components {
              * @description SHA-256 of the sorted 'vessel_id|as_of|horizon' keys scored in this cell; identical for every model in the cell and comparable across runs
              */
             sample_set_sha256: string;
-            /**
-             * @description 1 - median error / best baseline's median error, with a PAIRED bootstrap CI (same vessel resamples). Null unless every registered baseline is in the run, or when the best baseline's error is ~0 (undefined)
-             * @default null
-             */
-            skill_vs_best_baseline: components["schemas"]["Stat"] | null;
+            /** @description 1 - median error / best baseline's median error, with a PAIRED bootstrap CI (same vessel resamples). Null unless every registered baseline is in the run, or when the best baseline's error is ~0 (undefined) */
+            skill_vs_best_baseline?: components["schemas"]["Stat"] | null;
             /** Stratum */
             stratum: string;
         };
@@ -405,8 +586,22 @@ export interface components {
         /**
          * ForecastEvaluation
          * @description Truth and errors for one forecast; returned separately and only on request.
+         *
+         *     Every target time is reported for every model (no silent drops). A target time without
+         *     truth is not evaluable for any model, with the truth reason; where truth exists but a model
+         *     produced no forecast, that model's score is `model_failed`. `paired` marks the target times
+         *     where every model is evaluable, the set to compare models on.
          */
         ForecastEvaluation: {
+            /**
+             * As Of
+             * Format: date-time
+             */
+            as_of: string;
+            /** Data Version */
+            data_version: string;
+            /** Dataset Id */
+            dataset_id: string;
             /** Forecast Id */
             forecast_id: string;
             /** Max Bracket Gap Minutes */
@@ -414,12 +609,28 @@ export interface components {
             /** Models */
             models: components["schemas"]["ModelEvaluation"][];
             /**
+             * Paired
+             * @description Per target time: every model is evaluable
+             */
+            paired: boolean[];
+            /** Target Times */
+            target_times: string[];
+            /**
              * Truth
              * @description Per target time; null if not evaluable
              */
             truth: (components["schemas"]["TrackPoint"] | null)[];
+            /**
+             * Truth Reasons
+             * @description Per target time: why truth is missing; null where truth exists
+             */
+            truth_reasons: (("no_report_before" | "no_report_after" | "truth_gap" | "insufficient_history" | "model_failed" | "outside_truth_region" | "feed_outage") | null)[];
             /** Truth Region */
             truth_region: string;
+            /** Vessel Id */
+            vessel_id: string;
+            /** Warnings */
+            warnings?: string[];
         };
         /** ForecastRequest */
         ForecastRequest: {
@@ -530,30 +741,18 @@ export interface components {
         };
         /** HorizonScore */
         HorizonScore: {
-            /**
-             * Along Track M
-             * @default null
-             */
-            along_track_m: number | null;
-            /**
-             * Cross Track M
-             * @default null
-             */
-            cross_track_m: number | null;
-            /**
-             * Error M
-             * @default null
-             */
-            error_m: number | null;
+            /** Along Track M */
+            along_track_m?: number | null;
+            /** Cross Track M */
+            cross_track_m?: number | null;
+            /** Error M */
+            error_m?: number | null;
             /** Evaluable */
             evaluable: boolean;
             /** Horizon Minutes */
             horizon_minutes: number;
-            /**
-             * Reason
-             * @default null
-             */
-            reason: ("no_report_before" | "no_report_after" | "truth_gap" | "insufficient_history" | "model_failed" | "outside_truth_region" | "feed_outage") | null;
+            /** Reason */
+            reason?: ("no_report_before" | "no_report_after" | "truth_gap" | "insufficient_history" | "model_failed" | "outside_truth_region" | "feed_outage") | null;
         };
         /** IngestTotals */
         IngestTotals: {
@@ -597,10 +796,20 @@ export interface components {
         };
         /** ModelEvaluation */
         ModelEvaluation: {
+            /**
+             * Ade M
+             * @description Mean error over the PAIRED target times (comparable across models); null if there are none
+             */
+            ade_m?: number | null;
             /** Model Id */
             model_id: string;
             /** Scores */
             scores: components["schemas"]["HorizonScore"][];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "unsupported" | "failed";
         };
         /** ModelForecast */
         ModelForecast: {
@@ -735,6 +944,51 @@ export interface components {
             ci_low: number;
             /** Estimate */
             estimate: number;
+        };
+        /**
+         * SummaryCell
+         * @description One stratum x horizon cell, every model side by side on the same paired samples.
+         */
+        SummaryCell: {
+            /**
+             * Admission
+             * @enum {string}
+             */
+            admission: "first_class" | "experimental";
+            /** Best Baseline Id */
+            best_baseline_id: string | null;
+            /** Headline */
+            headline: boolean;
+            /** Horizon Minutes */
+            horizon_minutes: number;
+            /** Models */
+            models: {
+                [key: string]: components["schemas"]["SummaryModelCell"];
+            };
+            /** N Evaluable */
+            n_evaluable: number;
+            /** N Paired */
+            n_paired: number;
+            /** N Vessels */
+            n_vessels: number;
+            /** Sample Set Sha256 */
+            sample_set_sha256: string;
+            /** Stratum */
+            stratum: string;
+        };
+        /** SummaryModelCell */
+        SummaryModelCell: {
+            /** Failure Rate */
+            failure_rate: number;
+            median_error_m: components["schemas"]["Stat"];
+            /**
+             * N Failed
+             * @description Evaluable samples this model failed (excluded for all)
+             */
+            n_failed: number;
+            /** P90 Error M */
+            p90_error_m: number;
+            skill_vs_best_baseline?: components["schemas"]["Stat"] | null;
         };
         /** Track */
         Track: {
@@ -879,6 +1133,212 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    start_benchmark_benchmarks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BenchmarkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkStatus"];
+                };
+            };
+            /** @description dataset_not_found / vessel_not_found / manifest_not_found / run_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description benchmark_busy / run_not_finished / run_tampered */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description too_many_points */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description invalid_parameter / window_too_large / unknown_model / benchmark_refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description run_inconsistent (a run record breaks pairing) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    benchmark_benchmarks__run_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkStatus"];
+                };
+            };
+            /** @description dataset_not_found / vessel_not_found / manifest_not_found / run_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description benchmark_busy / run_not_finished / run_tampered */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description too_many_points */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description invalid_parameter / window_too_large / unknown_model / benchmark_refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description run_inconsistent (a run record breaks pairing) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    benchmark_summary_benchmarks__run_id__summary_get: {
+        parameters: {
+            query?: {
+                stratum?: string[] | null;
+                headline_only?: boolean;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkSummary"];
+                };
+            };
+            /** @description dataset_not_found / vessel_not_found / manifest_not_found / run_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description benchmark_busy / run_not_finished / run_tampered */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description too_many_points */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description invalid_parameter / window_too_large / unknown_model / benchmark_refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description run_inconsistent (a run record breaks pairing) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
     datasets_datasets_get: {
         parameters: {
             query?: never;
@@ -921,8 +1381,17 @@ export interface operations {
                     "application/json": components["schemas"]["ForecastResponse"];
                 };
             };
-            /** @description dataset_not_found / vessel_not_found */
+            /** @description dataset_not_found / vessel_not_found / manifest_not_found / run_not_found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description benchmark_busy / run_not_finished / run_tampered */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -939,8 +1408,86 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description invalid_parameter / window_too_large */
+            /** @description invalid_parameter / window_too_large / unknown_model / benchmark_refused */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description run_inconsistent (a run record breaks pairing) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    forecast_evaluation_forecasts_evaluation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForecastRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ForecastEvaluation"];
+                };
+            };
+            /** @description dataset_not_found / vessel_not_found / manifest_not_found / run_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description benchmark_busy / run_not_finished / run_tampered */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description too_many_points */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description invalid_parameter / window_too_large / unknown_model / benchmark_refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description run_inconsistent (a run record breaks pairing) */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1030,8 +1577,17 @@ export interface operations {
                     "application/json": components["schemas"]["VesselPage"];
                 };
             };
-            /** @description dataset_not_found / vessel_not_found */
+            /** @description dataset_not_found / vessel_not_found / manifest_not_found / run_not_found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description benchmark_busy / run_not_finished / run_tampered */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1048,8 +1604,17 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description invalid_parameter / window_too_large */
+            /** @description invalid_parameter / window_too_large / unknown_model / benchmark_refused */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description run_inconsistent (a run record breaks pairing) */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1086,8 +1651,17 @@ export interface operations {
                     "application/json": components["schemas"]["Track"];
                 };
             };
-            /** @description dataset_not_found / vessel_not_found */
+            /** @description dataset_not_found / vessel_not_found / manifest_not_found / run_not_found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description benchmark_busy / run_not_finished / run_tampered */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1104,8 +1678,17 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorBody"];
                 };
             };
-            /** @description invalid_parameter / window_too_large */
+            /** @description invalid_parameter / window_too_large / unknown_model / benchmark_refused */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description run_inconsistent (a run record breaks pairing) */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };
