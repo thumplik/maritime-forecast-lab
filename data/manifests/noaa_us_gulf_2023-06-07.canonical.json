@@ -1,0 +1,1175 @@
+{
+  "dataset_id": "noaa_us_gulf_2023-06-07",
+  "source_id": "noaa_marinecadastre",
+  "mapping_id": "noaa_marinecadastre@v1",
+  "canonical_version": "canonical-v2",
+  "ingest_version": "ingest-v1",
+  "region": null,
+  "static_fields_provenance": "backfilled",
+  "inputs": [
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-01/part-0.parquet",
+      "bytes": 30028744,
+      "sha256": "8493728699d13ead16f1e11bc912a71a49114df022d1f5fa1143e19baac04f18",
+      "report": {
+        "rows_in": 3082135,
+        "dropped": {},
+        "duplicates_removed": 58,
+        "outside_region": 0,
+        "rows_out": 3082077,
+        "flags": {
+          "bad_mmsi": 2601,
+          "sog_implausible": 3,
+          "sog_sentinel": 2894
+        }
+      },
+      "ingested_at": "2026-10-21T17:26:29Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-02/part-0.parquet",
+      "bytes": 30365116,
+      "sha256": "f787124fe722f5d89d76732192172822d724fc4e2212119e9dbd5e5ad4bec32c",
+      "report": {
+        "rows_in": 3100713,
+        "dropped": {},
+        "duplicates_removed": 66,
+        "outside_region": 0,
+        "rows_out": 3100647,
+        "flags": {
+          "bad_mmsi": 2183,
+          "sog_implausible": 7,
+          "sog_sentinel": 3165
+        }
+      },
+      "ingested_at": "2026-10-21T17:26:35Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-03/part-0.parquet",
+      "bytes": 25866208,
+      "sha256": "08d89c59535df3497641875844009b57168a1fae09c29b0268bdfbbe2c9416a1",
+      "report": {
+        "rows_in": 2633828,
+        "dropped": {},
+        "duplicates_removed": 33,
+        "outside_region": 0,
+        "rows_out": 2633795,
+        "flags": {
+          "bad_mmsi": 2372,
+          "sog_implausible": 8,
+          "sog_sentinel": 2873
+        }
+      },
+      "ingested_at": "2026-10-21T17:26:40Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-04/part-0.parquet",
+      "bytes": 29084124,
+      "sha256": "66792b4da075cd4205758ce7ce67947f96521174afb4e55e977e086df00fd87b",
+      "report": {
+        "rows_in": 2991549,
+        "dropped": {},
+        "duplicates_removed": 79,
+        "outside_region": 0,
+        "rows_out": 2991470,
+        "flags": {
+          "bad_mmsi": 1704,
+          "sog_implausible": 1,
+          "sog_sentinel": 3957
+        }
+      },
+      "ingested_at": "2026-10-21T17:26:46Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-05/part-0.parquet",
+      "bytes": 29294209,
+      "sha256": "b1ab5f4e0918c9906e81161032d8a37bc461980ddb317aa65570d1b939a720b3",
+      "report": {
+        "rows_in": 3031979,
+        "dropped": {},
+        "duplicates_removed": 117,
+        "outside_region": 0,
+        "rows_out": 3031862,
+        "flags": {
+          "bad_mmsi": 1359,
+          "sog_implausible": 11,
+          "sog_sentinel": 3856
+        }
+      },
+      "ingested_at": "2026-10-21T17:26:53Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-06/part-0.parquet",
+      "bytes": 27978148,
+      "sha256": "17c043f3416deec3830eba5afaf0b19fe4fa9563478d90076a8f486628adc0f2",
+      "report": {
+        "rows_in": 2866142,
+        "dropped": {},
+        "duplicates_removed": 60,
+        "outside_region": 0,
+        "rows_out": 2866082,
+        "flags": {
+          "bad_mmsi": 1255,
+          "sog_implausible": 7,
+          "sog_sentinel": 4426
+        }
+      },
+      "ingested_at": "2026-10-21T17:26:58Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-07/part-0.parquet",
+      "bytes": 29776491,
+      "sha256": "3f13706a5df579e04c966713c93f5ffabf4eb7b532f22d507013fbb02edc7835",
+      "report": {
+        "rows_in": 3079529,
+        "dropped": {},
+        "duplicates_removed": 62,
+        "outside_region": 0,
+        "rows_out": 3079467,
+        "flags": {
+          "bad_mmsi": 1459,
+          "sog_implausible": 26,
+          "sog_sentinel": 5031
+        }
+      },
+      "ingested_at": "2026-10-21T17:27:05Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-08/part-0.parquet",
+      "bytes": 30723235,
+      "sha256": "9d81197011b4f4631a67ee02708360b77dc940aea010376b480bdc3abb417124",
+      "report": {
+        "rows_in": 3120928,
+        "dropped": {},
+        "duplicates_removed": 63,
+        "outside_region": 0,
+        "rows_out": 3120865,
+        "flags": {
+          "bad_mmsi": 1697,
+          "sog_implausible": 17,
+          "sog_sentinel": 3679
+        }
+      },
+      "ingested_at": "2026-10-21T17:27:11Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-09/part-0.parquet",
+      "bytes": 29127876,
+      "sha256": "fcc42d0e0babb826e5091dd915a141f6260e49ebac3cb14d8fc15e1a978bcafb",
+      "report": {
+        "rows_in": 2935395,
+        "dropped": {},
+        "duplicates_removed": 68,
+        "outside_region": 0,
+        "rows_out": 2935327,
+        "flags": {
+          "bad_mmsi": 1820,
+          "sog_implausible": 47,
+          "sog_sentinel": 2496
+        }
+      },
+      "ingested_at": "2026-10-21T17:27:17Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-10/part-0.parquet",
+      "bytes": 20510820,
+      "sha256": "e3ee8b824b987a189dd142fb6c02ecf1aa2daab5f6e30deb4b11b8cd888a2390",
+      "report": {
+        "rows_in": 2090845,
+        "dropped": {},
+        "duplicates_removed": 56,
+        "outside_region": 0,
+        "rows_out": 2090789,
+        "flags": {
+          "bad_mmsi": 552,
+          "sog_implausible": 8,
+          "sog_sentinel": 1940
+        }
+      },
+      "ingested_at": "2026-10-21T17:27:21Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-11/part-0.parquet",
+      "bytes": 25479435,
+      "sha256": "cf29949351c58ce7e168d8c3874c5143de8a41d57040160707b3785ab222447e",
+      "report": {
+        "rows_in": 2611043,
+        "dropped": {},
+        "duplicates_removed": 82,
+        "outside_region": 0,
+        "rows_out": 2610961,
+        "flags": {
+          "bad_mmsi": 591,
+          "sog_implausible": 3,
+          "sog_sentinel": 2384
+        }
+      },
+      "ingested_at": "2026-10-21T17:27:27Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-12/part-0.parquet",
+      "bytes": 31259198,
+      "sha256": "5ea43c744d45f2d2ddd7f0a6384cd498e78658a4963c752d77d7f3e69cf0ddbf",
+      "report": {
+        "rows_in": 3178397,
+        "dropped": {},
+        "duplicates_removed": 92,
+        "outside_region": 0,
+        "rows_out": 3178305,
+        "flags": {
+          "bad_mmsi": 1826,
+          "sog_implausible": 6,
+          "sog_sentinel": 3279
+        }
+      },
+      "ingested_at": "2026-10-21T17:27:33Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-13/part-0.parquet",
+      "bytes": 29069435,
+      "sha256": "42f70217448fbcf9a53943d84480ae5a9afa51e932937e94df902ab41f5974d9",
+      "report": {
+        "rows_in": 2952789,
+        "dropped": {},
+        "duplicates_removed": 76,
+        "outside_region": 0,
+        "rows_out": 2952713,
+        "flags": {
+          "bad_mmsi": 1310,
+          "sog_implausible": 7,
+          "sog_sentinel": 3563
+        }
+      },
+      "ingested_at": "2026-10-21T17:27:39Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-14/part-0.parquet",
+      "bytes": 30917902,
+      "sha256": "f26060ab0c0617ed2768925dc73bfbee3f33848b59a8f6f480d0840fbadf7495",
+      "report": {
+        "rows_in": 3159403,
+        "dropped": {},
+        "duplicates_removed": 59,
+        "outside_region": 0,
+        "rows_out": 3159344,
+        "flags": {
+          "bad_mmsi": 1720,
+          "sog_implausible": 3,
+          "sog_sentinel": 3667
+        }
+      },
+      "ingested_at": "2026-10-21T17:27:46Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-15/part-0.parquet",
+      "bytes": 28018137,
+      "sha256": "e7908a9a838f855f9633a1cacebe0c84e53ae65fe8c07271c834932e913d8480",
+      "report": {
+        "rows_in": 2818797,
+        "dropped": {},
+        "duplicates_removed": 112,
+        "outside_region": 0,
+        "rows_out": 2818685,
+        "flags": {
+          "bad_mmsi": 2148,
+          "sog_implausible": 26,
+          "sog_sentinel": 3139
+        }
+      },
+      "ingested_at": "2026-10-21T17:27:51Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-16/part-0.parquet",
+      "bytes": 29169301,
+      "sha256": "7bf51cf1a303bddb3dce7006ded503c3cf7a89a192aaf2efd918c72a1fe331dc",
+      "report": {
+        "rows_in": 2927652,
+        "dropped": {},
+        "duplicates_removed": 73,
+        "outside_region": 0,
+        "rows_out": 2927579,
+        "flags": {
+          "bad_mmsi": 2352,
+          "sog_implausible": 15,
+          "sog_sentinel": 4129
+        }
+      },
+      "ingested_at": "2026-10-21T17:27:57Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-17/part-0.parquet",
+      "bytes": 30406194,
+      "sha256": "fc68238ca38c7d618babc646c9f7156eb440fb4ddf3502670642c8c1729ca01d",
+      "report": {
+        "rows_in": 3080749,
+        "dropped": {},
+        "duplicates_removed": 42,
+        "outside_region": 0,
+        "rows_out": 3080707,
+        "flags": {
+          "bad_mmsi": 2356,
+          "sog_implausible": 10,
+          "sog_sentinel": 5186
+        }
+      },
+      "ingested_at": "2026-10-21T17:28:04Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-18/part-0.parquet",
+      "bytes": 27030764,
+      "sha256": "5c9f4cc64d2fd6897fdd93154cafc778e77b551b9bf2d61d5e04ea50ab7b2ad0",
+      "report": {
+        "rows_in": 2761469,
+        "dropped": {},
+        "duplicates_removed": 49,
+        "outside_region": 0,
+        "rows_out": 2761420,
+        "flags": {
+          "bad_mmsi": 2085,
+          "sog_implausible": 9,
+          "sog_sentinel": 4592
+        }
+      },
+      "ingested_at": "2026-10-21T17:28:09Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-19/part-0.parquet",
+      "bytes": 27155147,
+      "sha256": "60071c37f8c6ed1fdf6c58ab4e33b096c9dfe4c6aa90d8fb13169376f3bbea08",
+      "report": {
+        "rows_in": 2782304,
+        "dropped": {},
+        "duplicates_removed": 65,
+        "outside_region": 0,
+        "rows_out": 2782239,
+        "flags": {
+          "bad_mmsi": 1777,
+          "sog_implausible": 8,
+          "sog_sentinel": 3374
+        }
+      },
+      "ingested_at": "2026-10-21T17:28:15Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-20/part-0.parquet",
+      "bytes": 28922112,
+      "sha256": "0c0f7fc2879043802685897265bec41a2b65af6d0c59789ea0ef9b2afc4c791d",
+      "report": {
+        "rows_in": 2956024,
+        "dropped": {},
+        "duplicates_removed": 38,
+        "outside_region": 0,
+        "rows_out": 2955986,
+        "flags": {
+          "bad_mmsi": 2715,
+          "sog_implausible": 14,
+          "sog_sentinel": 3487
+        }
+      },
+      "ingested_at": "2026-10-21T17:28:21Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-21/part-0.parquet",
+      "bytes": 29954225,
+      "sha256": "5fb969e9d45f9e351cd68b7bc6d1335dfcf4d4d3f570b4f21eef973f74446b5b",
+      "report": {
+        "rows_in": 3029950,
+        "dropped": {},
+        "duplicates_removed": 71,
+        "outside_region": 0,
+        "rows_out": 3029879,
+        "flags": {
+          "bad_mmsi": 2858,
+          "sog_implausible": 9,
+          "sog_sentinel": 3057
+        }
+      },
+      "ingested_at": "2026-10-21T17:28:27Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-22/part-0.parquet",
+      "bytes": 31199696,
+      "sha256": "4768fc4cccc8016b3b6e363fbff288e1f12094a08aabd7e43454f55ec65a61e3",
+      "report": {
+        "rows_in": 3157284,
+        "dropped": {},
+        "duplicates_removed": 52,
+        "outside_region": 0,
+        "rows_out": 3157232,
+        "flags": {
+          "bad_mmsi": 900,
+          "sog_implausible": 39,
+          "sog_sentinel": 2721
+        }
+      },
+      "ingested_at": "2026-10-21T17:28:34Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-23/part-0.parquet",
+      "bytes": 30416531,
+      "sha256": "08e0aa85c57822eac441ac3e20ae199d521fc99af6f43d5c6e27670a08948028",
+      "report": {
+        "rows_in": 3078987,
+        "dropped": {},
+        "duplicates_removed": 54,
+        "outside_region": 0,
+        "rows_out": 3078933,
+        "flags": {
+          "bad_mmsi": 869,
+          "sog_implausible": 25,
+          "sog_sentinel": 3089
+        }
+      },
+      "ingested_at": "2026-10-21T17:28:40Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-24/part-0.parquet",
+      "bytes": 22782693,
+      "sha256": "555ea8225c97d31311bafd43e866d8d28e401bf3bcc8c925c50c9c82a7395eda",
+      "report": {
+        "rows_in": 2292406,
+        "dropped": {},
+        "duplicates_removed": 29,
+        "outside_region": 0,
+        "rows_out": 2292377,
+        "flags": {
+          "bad_mmsi": 720,
+          "sog_implausible": 19,
+          "sog_sentinel": 2563
+        }
+      },
+      "ingested_at": "2026-10-21T17:28:45Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-25/part-0.parquet",
+      "bytes": 23778605,
+      "sha256": "25fb1d4dd2295a1d5097d3be334aaa3bb65baf0af2b3b18d8a4bb52e9fd46370",
+      "report": {
+        "rows_in": 2450054,
+        "dropped": {},
+        "duplicates_removed": 62,
+        "outside_region": 0,
+        "rows_out": 2449992,
+        "flags": {
+          "bad_mmsi": 199,
+          "sog_implausible": 20,
+          "sog_sentinel": 2490
+        }
+      },
+      "ingested_at": "2026-10-21T17:28:50Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-26/part-0.parquet",
+      "bytes": 30110961,
+      "sha256": "e1f658984c101985d92344884aaf24781d52a30d04c66d018bd365b5a2f65f91",
+      "report": {
+        "rows_in": 3108554,
+        "dropped": {},
+        "duplicates_removed": 76,
+        "outside_region": 0,
+        "rows_out": 3108478,
+        "flags": {
+          "bad_mmsi": 526,
+          "sog_implausible": 14,
+          "sog_sentinel": 3017
+        }
+      },
+      "ingested_at": "2026-10-21T17:28:56Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-27/part-0.parquet",
+      "bytes": 30674071,
+      "sha256": "f64170185ef9deab58b7ab4a3fbd95ee1308b9fa37e7834eec9192311c3076c7",
+      "report": {
+        "rows_in": 3132497,
+        "dropped": {},
+        "duplicates_removed": 72,
+        "outside_region": 0,
+        "rows_out": 3132425,
+        "flags": {
+          "bad_mmsi": 439,
+          "sog_implausible": 26,
+          "sog_sentinel": 2806
+        }
+      },
+      "ingested_at": "2026-10-21T17:29:02Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-28/part-0.parquet",
+      "bytes": 29117546,
+      "sha256": "bb1b64c867eff410e5977057c4dcb354611d92c6f0ed720752941c997db8dd4b",
+      "report": {
+        "rows_in": 2967518,
+        "dropped": {},
+        "duplicates_removed": 67,
+        "outside_region": 0,
+        "rows_out": 2967451,
+        "flags": {
+          "bad_mmsi": 520,
+          "sog_implausible": 40,
+          "sog_sentinel": 2534
+        }
+      },
+      "ingested_at": "2026-10-21T17:29:08Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-29/part-0.parquet",
+      "bytes": 28003878,
+      "sha256": "486ea35fac6aa97bd76402804d0c44a527b4b67b4e2ff6cad311a85d8a92c4fe",
+      "report": {
+        "rows_in": 2832512,
+        "dropped": {},
+        "duplicates_removed": 54,
+        "outside_region": 0,
+        "rows_out": 2832458,
+        "flags": {
+          "bad_mmsi": 281,
+          "sog_implausible": 21,
+          "sog_sentinel": 2426
+        }
+      },
+      "ingested_at": "2026-10-21T17:29:14Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-06-30/part-0.parquet",
+      "bytes": 31213192,
+      "sha256": "50054cf15dd75a1f083d44d0250b76f47953c39c76736a3a9e37c78f87dd3b30",
+      "report": {
+        "rows_in": 3168179,
+        "dropped": {},
+        "duplicates_removed": 95,
+        "outside_region": 0,
+        "rows_out": 3168084,
+        "flags": {
+          "bad_mmsi": 347,
+          "sog_implausible": 26,
+          "sog_sentinel": 3326
+        }
+      },
+      "ingested_at": "2026-10-21T17:29:21Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-01/part-0.parquet",
+      "bytes": 27368283,
+      "sha256": "5f4067b41b4c2b7211ff67cbfbdf5f924f58751564e94f52f89f819c06a35e1e",
+      "report": {
+        "rows_in": 2775908,
+        "dropped": {},
+        "duplicates_removed": 57,
+        "outside_region": 0,
+        "rows_out": 2775851,
+        "flags": {
+          "bad_mmsi": 322,
+          "sog_implausible": 12,
+          "sog_sentinel": 3115
+        }
+      },
+      "ingested_at": "2026-10-21T17:29:26Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-02/part-0.parquet",
+      "bytes": 25832898,
+      "sha256": "9f1c9022732c3b412ca30c2af357c454ca8d0de8365b5883cfa18bc8fbaad7b3",
+      "report": {
+        "rows_in": 2644321,
+        "dropped": {},
+        "duplicates_removed": 47,
+        "outside_region": 0,
+        "rows_out": 2644274,
+        "flags": {
+          "bad_mmsi": 330,
+          "sog_implausible": 15,
+          "sog_sentinel": 3646
+        }
+      },
+      "ingested_at": "2026-10-21T17:29:32Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-03/part-0.parquet",
+      "bytes": 27414390,
+      "sha256": "8a3c2241b8d838cf93ce22e5d0d86b0c0684829f504d8f03bb3d6c362dc15472",
+      "report": {
+        "rows_in": 2864687,
+        "dropped": {},
+        "duplicates_removed": 53,
+        "outside_region": 0,
+        "rows_out": 2864634,
+        "flags": {
+          "bad_mmsi": 187,
+          "sog_implausible": 17,
+          "sog_sentinel": 3465
+        }
+      },
+      "ingested_at": "2026-10-21T17:29:38Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-04/part-0.parquet",
+      "bytes": 28452768,
+      "sha256": "4b5b0112956e44dde65920cbb307005144e71cdc8b860c981b17a2dbd060fe32",
+      "report": {
+        "rows_in": 3006843,
+        "dropped": {},
+        "duplicates_removed": 43,
+        "outside_region": 0,
+        "rows_out": 3006800,
+        "flags": {
+          "bad_mmsi": 93,
+          "sog_implausible": 3,
+          "sog_sentinel": 3914
+        }
+      },
+      "ingested_at": "2026-10-21T17:29:44Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-05/part-0.parquet",
+      "bytes": 27277470,
+      "sha256": "bfc66d60881e8030a60b9010a5dbe327e104f94b40d63d21c3ba50b5dee775e5",
+      "report": {
+        "rows_in": 2864488,
+        "dropped": {},
+        "duplicates_removed": 51,
+        "outside_region": 0,
+        "rows_out": 2864437,
+        "flags": {
+          "bad_mmsi": 193,
+          "sog_implausible": 3,
+          "sog_sentinel": 4228
+        }
+      },
+      "ingested_at": "2026-10-21T17:29:50Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-06/part-0.parquet",
+      "bytes": 27685026,
+      "sha256": "a67b734f23edc3231ac5fe641a2669ab14c369f5bb8d2bd03931c5509165047f",
+      "report": {
+        "rows_in": 2854183,
+        "dropped": {},
+        "duplicates_removed": 53,
+        "outside_region": 0,
+        "rows_out": 2854130,
+        "flags": {
+          "bad_mmsi": 244,
+          "sog_implausible": 18,
+          "sog_sentinel": 3547
+        }
+      },
+      "ingested_at": "2026-10-21T17:29:55Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-07/part-0.parquet",
+      "bytes": 28134913,
+      "sha256": "55a11ea7aa8d4af2cf5efc210cb40e5611703471eda61e89566462d5bd40261b",
+      "report": {
+        "rows_in": 2893985,
+        "dropped": {},
+        "duplicates_removed": 45,
+        "outside_region": 0,
+        "rows_out": 2893940,
+        "flags": {
+          "bad_mmsi": 138,
+          "sog_implausible": 16,
+          "sog_sentinel": 2472
+        }
+      },
+      "ingested_at": "2026-10-21T17:30:01Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-08/part-0.parquet",
+      "bytes": 29082172,
+      "sha256": "0f27cb31f9ef7654aa364b9d671f0fa6fc14dfe5d969f52024730bde87962031",
+      "report": {
+        "rows_in": 2991569,
+        "dropped": {},
+        "duplicates_removed": 52,
+        "outside_region": 0,
+        "rows_out": 2991517,
+        "flags": {
+          "bad_mmsi": 105,
+          "sog_implausible": 25,
+          "sog_sentinel": 3183
+        }
+      },
+      "ingested_at": "2026-10-21T17:30:07Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-09/part-0.parquet",
+      "bytes": 27768911,
+      "sha256": "b6d5797cd045a8c5c48cc0fc0f0619b9ecb6fa8f85152721130ae509a6ce8871",
+      "report": {
+        "rows_in": 2927103,
+        "dropped": {},
+        "duplicates_removed": 82,
+        "outside_region": 0,
+        "rows_out": 2927021,
+        "flags": {
+          "bad_mmsi": 306,
+          "sog_implausible": 7,
+          "sog_sentinel": 2714
+        }
+      },
+      "ingested_at": "2026-10-21T17:30:13Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-10/part-0.parquet",
+      "bytes": 25718945,
+      "sha256": "c3d4708448ceaef3042238ca9e1160a8e82a753e80396f527e2230a363d1df65",
+      "report": {
+        "rows_in": 2698255,
+        "dropped": {},
+        "duplicates_removed": 67,
+        "outside_region": 0,
+        "rows_out": 2698188,
+        "flags": {
+          "bad_mmsi": 134,
+          "sog_implausible": 22,
+          "sog_sentinel": 2371
+        }
+      },
+      "ingested_at": "2026-10-21T17:30:19Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-11/part-0.parquet",
+      "bytes": 29249829,
+      "sha256": "c991a2d740a8cc399532beb5d84a159e121e1631f8b6ad6caa3ac8acfd9d8c60",
+      "report": {
+        "rows_in": 3022089,
+        "dropped": {},
+        "duplicates_removed": 41,
+        "outside_region": 0,
+        "rows_out": 3022048,
+        "flags": {
+          "bad_mmsi": 1087,
+          "sog_implausible": 21,
+          "sog_sentinel": 2786
+        }
+      },
+      "ingested_at": "2026-10-21T17:30:25Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-12/part-0.parquet",
+      "bytes": 29131634,
+      "sha256": "fbbaa17fb687ea8f880a02527a01916ecc769653537adc5cb053648a5f537b1a",
+      "report": {
+        "rows_in": 2993684,
+        "dropped": {},
+        "duplicates_removed": 139,
+        "outside_region": 0,
+        "rows_out": 2993545,
+        "flags": {
+          "bad_mmsi": 1652,
+          "sog_implausible": 4,
+          "sog_sentinel": 2816
+        }
+      },
+      "ingested_at": "2026-10-21T17:30:31Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-13/part-0.parquet",
+      "bytes": 29783583,
+      "sha256": "8fa5c25e3bc9a98ef0c1a3dc8ab2ea7842127bed988949761f8ce35980cb7bd1",
+      "report": {
+        "rows_in": 3047359,
+        "dropped": {},
+        "duplicates_removed": 105,
+        "outside_region": 0,
+        "rows_out": 3047254,
+        "flags": {
+          "bad_mmsi": 2540,
+          "sog_implausible": 43,
+          "sog_sentinel": 2673
+        }
+      },
+      "ingested_at": "2026-10-21T17:30:37Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-14/part-0.parquet",
+      "bytes": 29572517,
+      "sha256": "ed0cc0e04fcb0b1b1027dc1e68002db4644949a1f762bf5e2461fee6fd3f09aa",
+      "report": {
+        "rows_in": 3040402,
+        "dropped": {},
+        "duplicates_removed": 55,
+        "outside_region": 0,
+        "rows_out": 3040347,
+        "flags": {
+          "bad_mmsi": 1577,
+          "sog_implausible": 28,
+          "sog_sentinel": 2651
+        }
+      },
+      "ingested_at": "2026-10-21T17:30:43Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-15/part-0.parquet",
+      "bytes": 30515082,
+      "sha256": "70ce50df4dc46913ae26c67499b2a7aa1064008851140fc1e29e6cbc152f6fbe",
+      "report": {
+        "rows_in": 3107179,
+        "dropped": {},
+        "duplicates_removed": 84,
+        "outside_region": 0,
+        "rows_out": 3107095,
+        "flags": {
+          "bad_mmsi": 1758,
+          "sog_implausible": 8,
+          "sog_sentinel": 2695
+        }
+      },
+      "ingested_at": "2026-10-21T17:30:50Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-16/part-0.parquet",
+      "bytes": 31833669,
+      "sha256": "d4003f24460c09543545571a54453d881d764d7ac791d388c241bdb0599754fc",
+      "report": {
+        "rows_in": 3188537,
+        "dropped": {},
+        "duplicates_removed": 287,
+        "outside_region": 0,
+        "rows_out": 3188250,
+        "flags": {
+          "bad_mmsi": 1944,
+          "sog_implausible": 14,
+          "sog_sentinel": 4590
+        }
+      },
+      "ingested_at": "2026-10-21T17:30:56Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-17/part-0.parquet",
+      "bytes": 30931833,
+      "sha256": "37627a86ca31b24aca1fd78ce96b4887450df83d988949db1d1ac98a3dbf5f72",
+      "report": {
+        "rows_in": 3126727,
+        "dropped": {},
+        "duplicates_removed": 163,
+        "outside_region": 0,
+        "rows_out": 3126564,
+        "flags": {
+          "bad_mmsi": 1559,
+          "sog_implausible": 13,
+          "sog_sentinel": 6414
+        }
+      },
+      "ingested_at": "2026-10-21T17:31:02Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-18/part-0.parquet",
+      "bytes": 30911451,
+      "sha256": "0508a9dfba2174c1044954408927b7b36bf9e1ba66909d864bbcdc907681847c",
+      "report": {
+        "rows_in": 3132635,
+        "dropped": {},
+        "duplicates_removed": 98,
+        "outside_region": 0,
+        "rows_out": 3132537,
+        "flags": {
+          "bad_mmsi": 1502,
+          "sog_implausible": 18,
+          "sog_sentinel": 4841
+        }
+      },
+      "ingested_at": "2026-10-21T17:31:08Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-19/part-0.parquet",
+      "bytes": 30986109,
+      "sha256": "54dd01c5ad5b4f8e08150a5d4cb815f60f6da54b9020e8c4a42c116b71b4ffea",
+      "report": {
+        "rows_in": 3115314,
+        "dropped": {},
+        "duplicates_removed": 65,
+        "outside_region": 0,
+        "rows_out": 3115249,
+        "flags": {
+          "bad_mmsi": 1163,
+          "sog_implausible": 22,
+          "sog_sentinel": 3915
+        }
+      },
+      "ingested_at": "2026-10-21T17:31:14Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-20/part-0.parquet",
+      "bytes": 31169089,
+      "sha256": "e518b747fe43df70daed6c5b66fff4c796ebc80714845231929128af93ccd464",
+      "report": {
+        "rows_in": 3128053,
+        "dropped": {},
+        "duplicates_removed": 87,
+        "outside_region": 0,
+        "rows_out": 3127966,
+        "flags": {
+          "bad_mmsi": 1191,
+          "sog_implausible": 42,
+          "sog_sentinel": 3871
+        }
+      },
+      "ingested_at": "2026-10-21T17:31:20Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-21/part-0.parquet",
+      "bytes": 30990615,
+      "sha256": "8c08475f3db925b598b92ad0ef888abc33b3851ee568d3a21d23f1705df861c0",
+      "report": {
+        "rows_in": 3116788,
+        "dropped": {},
+        "duplicates_removed": 54,
+        "outside_region": 0,
+        "rows_out": 3116734,
+        "flags": {
+          "bad_mmsi": 1205,
+          "sog_implausible": 24,
+          "sog_sentinel": 4104
+        }
+      },
+      "ingested_at": "2026-10-21T17:31:26Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-22/part-0.parquet",
+      "bytes": 30160247,
+      "sha256": "f0ea50f5d752eabc8139bacdf1ba6a05f2bd0b009e5485f4fbcfe29bcf0a0da2",
+      "report": {
+        "rows_in": 3047251,
+        "dropped": {},
+        "duplicates_removed": 71,
+        "outside_region": 0,
+        "rows_out": 3047180,
+        "flags": {
+          "bad_mmsi": 1985,
+          "sog_implausible": 17,
+          "sog_sentinel": 3937
+        }
+      },
+      "ingested_at": "2026-10-21T17:31:32Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-23/part-0.parquet",
+      "bytes": 30375843,
+      "sha256": "f4af7a2368f66670d6393c64440dce7605858788fa0a8392170c75585f555a2f",
+      "report": {
+        "rows_in": 3077040,
+        "dropped": {},
+        "duplicates_removed": 74,
+        "outside_region": 0,
+        "rows_out": 3076966,
+        "flags": {
+          "bad_mmsi": 1791,
+          "sog_implausible": 23,
+          "sog_sentinel": 3513
+        }
+      },
+      "ingested_at": "2026-10-21T17:31:38Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-24/part-0.parquet",
+      "bytes": 30566548,
+      "sha256": "60a6956b036d484209c136c1ca647bd3eed5a5ffca61658ec4f078a811fee478",
+      "report": {
+        "rows_in": 3098440,
+        "dropped": {},
+        "duplicates_removed": 75,
+        "outside_region": 0,
+        "rows_out": 3098365,
+        "flags": {
+          "bad_mmsi": 1437,
+          "sog_implausible": 4,
+          "sog_sentinel": 3687
+        }
+      },
+      "ingested_at": "2026-10-21T17:31:44Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-25/part-0.parquet",
+      "bytes": 30527554,
+      "sha256": "06f3df79a2b9a1963eef1c9286b36df81cc0bebb65baca7bd2e3b3ee0927aaa5",
+      "report": {
+        "rows_in": 3118721,
+        "dropped": {},
+        "duplicates_removed": 88,
+        "outside_region": 0,
+        "rows_out": 3118633,
+        "flags": {
+          "bad_mmsi": 1536,
+          "sog_implausible": 25,
+          "sog_sentinel": 3546
+        }
+      },
+      "ingested_at": "2026-10-21T17:31:50Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-26/part-0.parquet",
+      "bytes": 30774648,
+      "sha256": "92b6f7d7f3c14cc17af2c7a32464394399209546ba8a1b2df682364b642e7cd0",
+      "report": {
+        "rows_in": 3118321,
+        "dropped": {},
+        "duplicates_removed": 71,
+        "outside_region": 0,
+        "rows_out": 3118250,
+        "flags": {
+          "bad_mmsi": 1770,
+          "sog_implausible": 2,
+          "sog_sentinel": 3658
+        }
+      },
+      "ingested_at": "2026-10-21T17:31:56Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-27/part-0.parquet",
+      "bytes": 29625610,
+      "sha256": "de6e9a4e0441e6bbb0077fcdca7c8ad1ed667b7b17bd5ca92da84ba63d142052",
+      "report": {
+        "rows_in": 3011329,
+        "dropped": {},
+        "duplicates_removed": 56,
+        "outside_region": 0,
+        "rows_out": 3011273,
+        "flags": {
+          "bad_mmsi": 937,
+          "sog_implausible": 26,
+          "sog_sentinel": 3800
+        }
+      },
+      "ingested_at": "2026-10-21T17:32:02Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-28/part-0.parquet",
+      "bytes": 30988863,
+      "sha256": "b4dd7fcb7b643bc23047c66365ae116dbebf463ca486bd2ee5903869e1b4f401",
+      "report": {
+        "rows_in": 3133564,
+        "dropped": {},
+        "duplicates_removed": 58,
+        "outside_region": 0,
+        "rows_out": 3133506,
+        "flags": {
+          "bad_mmsi": 722,
+          "sog_implausible": 3,
+          "sog_sentinel": 3785
+        }
+      },
+      "ingested_at": "2026-10-21T17:32:08Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-29/part-0.parquet",
+      "bytes": 30823088,
+      "sha256": "9fd6686f1adb0e0ec8af34572c357eddd38a9871b364913e0d11068ccbcaf1f8",
+      "report": {
+        "rows_in": 3124725,
+        "dropped": {},
+        "duplicates_removed": 59,
+        "outside_region": 0,
+        "rows_out": 3124666,
+        "flags": {
+          "bad_mmsi": 430,
+          "sog_implausible": 9,
+          "sog_sentinel": 4546
+        }
+      },
+      "ingested_at": "2026-10-21T17:32:14Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-30/part-0.parquet",
+      "bytes": 27856214,
+      "sha256": "68639131bdf4d207554541ef81a3173f1bf6366fb6ba66dc429b59d98ff51c3f",
+      "report": {
+        "rows_in": 2802481,
+        "dropped": {},
+        "duplicates_removed": 54,
+        "outside_region": 0,
+        "rows_out": 2802427,
+        "flags": {
+          "bad_mmsi": 399,
+          "sog_implausible": 14,
+          "sog_sentinel": 4261
+        }
+      },
+      "ingested_at": "2026-10-21T17:32:20Z"
+    },
+    {
+      "path": "data/raw/noaa_us_gulf/date=2023-07-31/part-0.parquet",
+      "bytes": 31471895,
+      "sha256": "292711d4e68d2a1f5fc2f44a1c05691ec0b8a722fe88ade266c23d7a7eace6ec",
+      "report": {
+        "rows_in": 3247872,
+        "dropped": {},
+        "duplicates_removed": 123384,
+        "outside_region": 0,
+        "rows_out": 3124488,
+        "flags": {
+          "bad_mmsi": 718,
+          "sog_implausible": 10,
+          "sog_sentinel": 4971
+        }
+      },
+      "ingested_at": "2026-10-21T17:32:27Z"
+    }
+  ],
+  "partitions": {
+    "2023-06-01": 3082077,
+    "2023-06-02": 3100647,
+    "2023-06-03": 2633795,
+    "2023-06-04": 2991470,
+    "2023-06-05": 3031862,
+    "2023-06-06": 2866082,
+    "2023-06-07": 3079467,
+    "2023-06-08": 3120865,
+    "2023-06-09": 2935327,
+    "2023-06-10": 2090789,
+    "2023-06-11": 2610961,
+    "2023-06-12": 3178305,
+    "2023-06-13": 2952713,
+    "2023-06-14": 3159344,
+    "2023-06-15": 2818685,
+    "2023-06-16": 2927579,
+    "2023-06-17": 3080707,
+    "2023-06-18": 2761420,
+    "2023-06-19": 2782239,
+    "2023-06-20": 2955986,
+    "2023-06-21": 3029879,
+    "2023-06-22": 3157232,
+    "2023-06-23": 3078933,
+    "2023-06-24": 2292377,
+    "2023-06-25": 2449992,
+    "2023-06-26": 3108478,
+    "2023-06-27": 3132425,
+    "2023-06-28": 2967451,
+    "2023-06-29": 2832458,
+    "2023-06-30": 3168084,
+    "2023-07-01": 2775851,
+    "2023-07-02": 2644274,
+    "2023-07-03": 2864634,
+    "2023-07-04": 3006800,
+    "2023-07-05": 2864437,
+    "2023-07-06": 2854130,
+    "2023-07-07": 2893940,
+    "2023-07-08": 2991517,
+    "2023-07-09": 2927021,
+    "2023-07-10": 2698188,
+    "2023-07-11": 3022048,
+    "2023-07-12": 2993545,
+    "2023-07-13": 3047254,
+    "2023-07-14": 3040347,
+    "2023-07-15": 3107095,
+    "2023-07-16": 3188250,
+    "2023-07-17": 3126564,
+    "2023-07-18": 3132537,
+    "2023-07-19": 3115249,
+    "2023-07-20": 3127966,
+    "2023-07-21": 3116734,
+    "2023-07-22": 3047180,
+    "2023-07-23": 3076966,
+    "2023-07-24": 3098365,
+    "2023-07-25": 3118633,
+    "2023-07-26": 3118250,
+    "2023-07-27": 3011273,
+    "2023-07-28": 3133506,
+    "2023-07-29": 3124666,
+    "2023-07-30": 2802427,
+    "2023-07-31": 3124488
+  },
+  "notes": "NOAA MarineCadastre raw, region us_gulf",
+  "git_sha": "55fd6f58a5dd6faa6b3f1409b7da08e649295f18-dirty",
+  "updated_at": "2026-10-21T17:32:27Z"
+}

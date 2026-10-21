@@ -54,6 +54,7 @@ from maritime_forecast.data.segment import (
     segments_and_gaps,
 )
 from maritime_forecast.evaluation.forecast_eval import evaluate_forecast
+from maritime_forecast.evaluation.holdout import is_holdout, touches_test
 from maritime_forecast.evaluation.runner import BenchmarkConfig, benchmark_context, preflight
 from maritime_forecast.geo.navigable_mask import MaskMismatchError, load_navigable_mask
 from maritime_forecast.models.base import ForecastHorizon, ModelContext, history_from_store
@@ -65,6 +66,7 @@ from maritime_forecast.schemas.forecast import (
     ForecastRequest,
     ForecastResponse,
 )
+from maritime_forecast.schemas.manifest import SplitManifest
 from maritime_forecast.storage.parquet_store import CANONICAL_ROOT, ParquetStore, connect
 from maritime_forecast.storage.run_store import RunStore
 
@@ -484,8 +486,19 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
 
         The forecast is the one `POST /forecasts` serves (same `forecast_id`); truth is read
         only after it is made, from the truth region, never bridged across gaps."""
-        resp = _forecast(store, req)
         as_of = req.as_of.astimezone(UTC)
+        mpath = (settings.manifest_dir / "splits"
+                 / f"{settings.deployment_protocol}__{req.dataset_id}.json")  # fmt: skip
+        if mpath.exists() and touches_test(
+            SplitManifest.model_validate_json(mpath.read_bytes()), as_of,
+            as_of + timedelta(hours=req.horizon_hours, minutes=settings.max_bracket_gap_minutes),
+        ):  # fmt: skip
+            raise ApiError(
+                403, "holdout_test_period",
+                f"{req.dataset_id} holds out this period as an untouched test set; its truth is "
+                "scored only by a confirmed benchmark (docs/evaluation-protocol.md)",
+            )  # fmt: skip
+        resp = _forecast(store, req)
         hist = history_from_store(store, req.dataset_id, req.vessel_id, as_of, req.history_hours)
         anchor = None
         if hist.reports.height:
@@ -551,7 +564,12 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
             max_cutoffs_per_set=req.max_cutoffs_per_set,
         )
         try:  # the runner's own checks, before anything is started
-            _, mctx = benchmark_context(cfg, store)
+            manifest, mctx = benchmark_context(cfg, store)
+            if is_holdout(manifest):
+                raise ValueError(
+                    f"{req.dataset_id} has a held-out test period; it is scored only by a "
+                    "confirmed CLI benchmark (run_benchmark.py --confirm-test), never by the API"
+                )
             preflight(cfg, mctx)
         except (ValueError, NotImplementedError) as e:
             raise ApiError(422, "benchmark_refused", str(e)) from None

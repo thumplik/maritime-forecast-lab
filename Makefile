@@ -5,6 +5,10 @@ UV  := uv
 PY  := $(UV) run --project backend python
 START ?= 2023-06-01
 END   ?= 2023-06-30
+# Dataset for splits/fit/mask/benchmark: the June dataset, or noaa_us_gulf_2023-06-07 (June +
+# July: dev window and the fresh July test). SPLIT=dev benchmarks the dev window.
+DS    ?= noaa_us_gulf_2023-06
+SPLIT ?= test
 
 NPM := npm --prefix frontend
 
@@ -58,22 +62,22 @@ import:  ## Import other-provider AIS files: make import MAPPING=dma_denmark DAT
 	$(PY) scripts/import_ais.py --mapping $(MAPPING) --dataset-id $(DATASET) $(FILES)
 
 splits:  ## Materialize split manifests into data/manifests/splits/
-	$(PY) scripts/make_splits.py
+	$(PY) scripts/make_splits.py --dataset-id $(DS)
 
 fit:  ## Fit damped-velocity tau on a protocol's train split: make fit PROTOCOL=P-known
-	$(PY) scripts/fit_damped_velocity.py --protocol $(PROTOCOL)
+	$(PY) scripts/fit_damped_velocity.py --protocol $(PROTOCOL) --dataset-id $(DS)
 
 fetch-land:  ## OSM land polygons for the truth region (~0.9 GB transfer, deleted after filtering)
 	$(PY) scripts/fetch_land_polygons.py
 
 mask:  ## Navigable-water mask from TRAIN-split traffic: make mask PROTOCOL=P-known
-	$(PY) scripts/build_navigable_mask.py --protocol $(PROTOCOL)
+	$(PY) scripts/build_navigable_mask.py --protocol $(PROTOCOL) --dataset-id $(DS)
 
 index:  ## Retrieval segment index (completed segments + regular tracks) for the June dataset
 	$(PY) scripts/build_segment_index.py
 
-benchmark:  ## Paired baseline benchmark: make benchmark PROTOCOL=P-known (or P-unseen)
-	$(PY) scripts/run_benchmark.py --protocol $(PROTOCOL)
+benchmark:  ## Paired benchmark: make benchmark PROTOCOL=P-known [DS=noaa_us_gulf_2023-06-07 SPLIT=dev]
+	$(PY) scripts/run_benchmark.py --protocol $(PROTOCOL) --dataset-id $(DS) --split $(SPLIT)
 
 api:  ## Run the read API on http://localhost:8000 (docs at /docs)
 	cd backend && $(UV) run uvicorn maritime_forecast.api.app:app --reload --port 8000

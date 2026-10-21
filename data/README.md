@@ -25,3 +25,5 @@ Other providers: write a mapping in `config/sources/` (see docs/data-contracts.m
 - **OpenStreetMap land polygons** (`land-polygons-split-4326` from osmdata.openstreetmap.de), © OpenStreetMap contributors, ODbL 1.0. Attribute OSM in anything shown. Only polygons near the truth region are kept (`processed/geo/osm_land_us_gulf.parquet`). The source zip's SHA-256 and Last-Modified are in `manifests/osm_land_us_gulf.json`. Navigable masks built from it plus train-split traffic are `processed/geo/navigable_<protocol>__<dataset>.npz`; their sidecars, `manifests/masks/*.json`, are committed.
 
 To reproduce: `make fetch && make canonical`. Checksums of every source zip are in the manifest.
+
+**Held-out test access ledger:** `data/manifests/test_access/<dataset>.json` (committed). Every benchmark of a held-out test split (splits-v2 manifests, e.g. July 2023 in `noaa_us_gulf_2023-06-07`) is appended here before it is scored. See `evaluation/holdout.py`.

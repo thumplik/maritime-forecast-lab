@@ -4,7 +4,7 @@ Research workbench for forecasting where an AIS-tracked vessel will be 1 h – 3
 
 ## Where we are
 
-**Current milestone: 3 — historical-route retrieval** (Milestone 2 completed 2026-10-21). API serves data, forecasts, forecast evaluation and benchmarks (`make api`); minimal web explorer; CI; `make dev` runs both. Baselines B0, the paired evaluator, feasibility (navigable mask) and calibration are in place. Milestone 3: segment index and `route_retrieval_v1` built and benchmarked (P-known, P-unseen); failure review next.
+**Current milestone: 3 — historical-route retrieval** (Milestone 2 completed 2026-10-21). API serves data, forecasts, forecast evaluation and benchmarks (`make api`); minimal web explorer; CI; `make dev` runs both. Baselines B0, the paired evaluator, feasibility (navigable mask) and calibration are in place. Milestone 3: segment index and `route_retrieval_v1` built and benchmarked (P-known, P-unseen); failure review in `docs/failure-review.md`. Open for the milestone: P-region eligibility and benchmark.
 Status, blockers and next step live in [docs/implementation-log.md](docs/implementation-log.md) — read it first, append to it last.
 
 ## Commands
@@ -18,7 +18,7 @@ make web-test     # frontend typecheck + vitest
 make gen-api      # after any API change: regenerate openapi.json + TS types (CI checks drift)
 make test         # unit tests (no network, no local data)
 make lint         # ruff check + format check
-make fetch        # download June 2023 NOAA AIS, filtered to the Gulf truth region (~10 GB transfer, resumable)
+make fetch        # download June 2023 NOAA AIS, filtered to the Gulf truth region (~10 GB transfer, resumable); START=/END= for other months (July 2023 is fetched)
 make canonical    # raw NOAA parquet -> canonical §4 schema in data/processed/
 make audit        # Milestone 0 coverage audit -> data/runs/coverage_audit/
 make calibrate    # §6.6 golden-number check against the calibration paper
@@ -28,6 +28,9 @@ make fetch-dma DAYS="2023-06-01"   # Danish AIS; range-reads one day from monthl
 make api          # read API on :8000, OpenAPI docs at /docs
 make fit PROTOCOL=P-known         # damped-velocity tau on the TRAIN split -> data/model_params/ (commit it)
 make benchmark PROTOCOL=P-known   # unattended paired benchmark of product models -> data/runs/benchmarks/<run_id>/ (immutable) + GeoJSON export
+make benchmark PROTOCOL=P-known DS=noaa_us_gulf_2023-06-07 SPLIT=dev   # June+July dataset: develop on the dev window (Jun 18-22)
+#   SPLIT=test on that dataset is the fresh July hold-out: only for a design frozen on dev (docs/evaluation-protocol.md)
+uv run --project backend python scripts/failure_review.py --protocol P-known   # retrieval failure categories on a kept run
 make fetch-land && make mask PROTOCOL=P-known   # OSM land + train-split traffic -> navigable mask for feasibility
 ```
 

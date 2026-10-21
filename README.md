@@ -59,7 +59,7 @@ flowchart LR
 
 ## Results so far
 
-All numbers come from immutable runs on the June 2023 NOAA test period (Jun 23–30); run ids and checksums are in [docs/benchmarks.md](docs/benchmarks.md).
+All numbers come from immutable runs on the June 2023 NOAA test period (Jun 23–30); run ids and checksums are in [docs/benchmarks.md](docs/benchmarks.md). Since then, the June test results have been read for a [failure review](docs/failure-review.md), so they are no longer an untouched hold-out for later models. July 2023 has been fetched as a fresh test period, and the next model comparison will be reported on it.
 - **Skill** is the paired reduction in median error against the best of persistence, constant velocity and damped velocity in that cell, with a 95% vessel-bootstrap CI.
 - **Transiting** means cargo, tanker and passenger ships that have been underway for the last 30 minutes.
 - The evaluator itself is calibrated: paper-mode constant velocity gives 4.03 / 9.65 / 16.16 km at 1 / 2 / 3 h, against the published 3.69 / 9.03 / 15.33 km (+9% / +7% / +5%, within the 10% tolerance).
@@ -114,7 +114,7 @@ The success condition for every model is the same: **beat the best of persistenc
 | 0 | Data spike & coverage audit: what horizons can the data support? | ✓ |
 | 1 | Contracts, data pipeline, read API, track explorer, CI | ✓ |
 | 2 | Baselines & the evaluator: paired benchmark, calibration, invariance, feasibility, benchmark API | ✓ |
-| 3 | **Historical-route retrieval:** kNN over train-period segments, aligned and continued along real routes | ← *now* (index and `route_retrieval_v1` benchmarked; failure review next) |
+| 3 | **Historical-route retrieval:** kNN over train-period segments, aligned and continued along real routes | ← *now* (index, `route_retrieval_v1` benchmarked, [failure review](docs/failure-review.md) done; P-region next) |
 | 4 | Conformal uncertainty: calibrated displacement radii per stratum | |
 | 5 | Workbench UI: forecast comparison, truth overlay, benchmark dashboard | |
 | 6 | Timestral zero-shot adapter (position, velocity, velocity + retrieved route) | |

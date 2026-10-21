@@ -253,3 +253,44 @@ def test_vectorized_window_splits_match_scalar():
         slow = [m.window_split(v, s, e) for v, s, e in zip(vessels, starts, ends, strict=True)]
         assert fast == slow, m.protocol
         assert len({x for x in fast if x}) >= 1
+
+
+# -- June + July manifests (dev window, fresh July test) -------------------------------------
+def test_june_july_periods_purged_and_train_unchanged():
+    from maritime_forecast.evaluation.splits import JUNE_2023_PERIODS, JUNE_JULY_DATASET
+
+    for build in (p_known, p_unseen):
+        m = build(JUNE_JULY_DATASET)
+        assert m.version == "splits-v2"
+        by = {p.split: p for p in m.periods}
+        assert set(by) == {"train", "dev", "calibration", "test"}
+        assert by["train"] == JUNE_2023_PERIODS[0]  # retrieval index period unchanged
+        assert by["dev"].start == JUNE_2023_PERIODS[1].start  # old calibration -> dev
+        assert by["calibration"].start == JUNE_2023_PERIODS[2].start  # old test -> calibration
+        assert by["test"].start == datetime(2023, 7, 2, tzinfo=UTC)  # fresh: July only
+        ps = sorted(m.periods, key=lambda p: p.start)
+        assert all(b.start - a.end >= timedelta(hours=24) for a, b in zip(ps, ps[1:], strict=False))
+        # Nothing in June is test any more.
+        assert all(m.time_split(t) != "test" for t in TIMES)
+    assert p_known("noaa_us_gulf_2023-06").version == "splits-v1"  # June-only is untouched
+
+
+def test_june_july_p_unseen_keeps_train_and_test_vessels():
+    from maritime_forecast.evaluation.splits import JUNE_JULY_DATASET
+
+    v1, v2 = p_unseen("noaa_us_gulf_2023-06"), p_unseen(JUNE_JULY_DATASET)
+    seen = set()
+    for v in MMSIS:
+        a, b = v1.vessel_assignment.assign(v), v2.vessel_assignment.assign(v)
+        seen.add(b)
+        if a in ("train", "test"):
+            assert a == b
+        else:
+            assert b in ("dev", "calibration")
+    assert seen == {"train", "dev", "calibration", "test"}
+    july = datetime(2023, 7, 10, tzinfo=UTC)
+    dev_day = datetime(2023, 6, 19, tzinfo=UTC)
+    for v in MMSIS[:500]:
+        b = v2.vessel_assignment.assign(v)
+        assert v2.split_of(v, july) == ("test" if b == "test" else None)
+        assert v2.split_of(v, dev_day) == ("dev" if b == "dev" else None)

@@ -32,6 +32,7 @@ from maritime_forecast.data.cutoffs import (
     transiting_expr,
 )
 from maritime_forecast.data.segment import segmented_sql
+from maritime_forecast.evaluation import holdout
 from maritime_forecast.evaluation.admission import DEFAULT_ADMISSION, admit_by_stratum
 from maritime_forecast.evaluation.bootstrap import paired_vessel_bootstrap
 from maritime_forecast.evaluation.feasibility import FeasibilityConfig, feasibility_flags
@@ -74,6 +75,10 @@ class BenchmarkConfig:
     n_boot: int = 1000
     max_bracket_gap_minutes: float = 30
     max_cutoffs_per_set: int | None = None  # for smoke runs; None = all sampled cutoffs
+    # Held-out test periods (evaluation.holdout): explicit confirmation, provenance, re-runs.
+    confirm_test: bool = False
+    informed_by: tuple[str, ...] = ()
+    test_rerun_reason: str | None = None
     min_cell_samples: int = 20
     feasibility: FeasibilityConfig = field(default_factory=FeasibilityConfig)
     samplers: dict[str, SamplerConfig] = field(
@@ -334,13 +339,28 @@ def run_benchmark(
 ) -> BenchmarkRun:
     started = datetime.now(UTC).replace(microsecond=0)
     manifest, ctx = benchmark_context(cfg, store)
-    run_id = run_id or f"{manifest.protocol}_{cfg.dataset_id}_{started:%Y%m%dT%H%M%SZ}"
+    split_tag = "" if cfg.split == "test" else f"_{cfg.split}"
+    run_id = run_id or f"{manifest.protocol}_{cfg.dataset_id}{split_tag}_{started:%Y%m%dT%H%M%SZ}"
     preflight(cfg, ctx)  # fail before creating a run, not halfway through it
+    model_refs = [
+        {
+            "model_id": m,
+            "model_version": get_model(m, ctx).capabilities().model_version,
+            "config": get_model(m, ctx).config,
+        }
+        for m in cfg.models()
+    ]
+    sha = git_sha()
+    holdout.check_test_access(manifest, cfg.split, cfg.confirm_test, sha, model_refs,
+                              cfg.test_rerun_reason)  # fmt: skip
     runs.create(run_id)
+    if holdout.is_holdout(manifest) and cfg.split == "test":  # recorded before it is scored
+        holdout.record_test_access(manifest, run_id, sha, model_refs, list(cfg.informed_by),
+                                   cfg.test_rerun_reason)  # fmt: skip
     base_record = dict(
         run_id=run_id,
         created_at=started,
-        git_sha=git_sha(),
+        git_sha=sha,
         dataset_id=cfg.dataset_id,
         data_provenance=_provenance(cfg),
         protocol={
@@ -349,14 +369,7 @@ def run_benchmark(
             "dataset_id": manifest.dataset_id,
             "manifest_sha256": _sha256_file(Path(cfg.manifest_path)),
         },
-        models=[
-            {
-                "model_id": m,
-                "model_version": get_model(m, ctx).capabilities().model_version,
-                "config": get_model(m, ctx).config,
-            }
-            for m in cfg.models()
-        ],
+        models=model_refs,
         horizons_minutes=[h * 60 for h in cfg.horizons_h],
     )
     try:
@@ -386,7 +399,10 @@ def _run(cfg, store, runs, run_id, manifest, base_record, ctx) -> BenchmarkRun:
     grid_steps = round(max(cfg.horizons_h) * 60 / step_min)
     h_steps = {h: round(h * 60 / step_min) for h in cfg.horizons_h}
     preds = predict_all(cfg, store, cutoffs, grid_steps, ctx)
-    truth = truth_grid(cfg, store, cutoffs, grid_steps)
+    # Non-test splits: truth never reads past the split's own period (a later split's data).
+    ends = [p.end for p in manifest.periods or [] if p.split == cfg.split]
+    truth = truth_grid(cfg, store, cutoffs, grid_steps,
+                       max(ends) if ends and cfg.split != "test" else None)  # fmt: skip
     models = list(cfg.models())
 
     # -- feasibility flags, cumulative over the grid (a flag at step k: anywhere in 1..k) ---
@@ -666,7 +682,8 @@ def render_report(run: BenchmarkRun) -> str:
         "",
         f"Protocol **{run.protocol.protocol}** "
         f"(manifest sha256 `{run.protocol.manifest_sha256[:12]}…`), "
-        f"dataset `{run.dataset_id}` ({run.data_provenance}), git `{run.git_sha[:12]}`, "
+        f"dataset `{run.dataset_id}` ({run.data_provenance}), split **{run.sampler['split']}**, "
+        f"git `{run.git_sha[:12]}`, "
         f"{run.sampler['n_cutoffs']:,} cutoffs, seed {run.sampler['seed']}.",
         "",
         "Paired: every model is scored on the same samples in each cell. Errors are median km; "

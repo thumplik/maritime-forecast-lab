@@ -23,7 +23,7 @@ The full specification is [docs/build-plan.md](docs/build-plan.md); section numb
     - the figures (`scripts/make_readme_figures.py`, pointed at the new run ids);
     - the roadmap status.
 
-    Every README number must come from an immutable run listed in [docs/benchmarks.md](docs/benchmarks.md). Never use diagnostic, smoke or calibration-split runs. Report losses as plainly as wins: if the new model does not beat the best baseline in a stratum or at a horizon, the README says so.
+    Every README number must come from an immutable run listed in [docs/benchmarks.md](docs/benchmarks.md). Never use diagnostic, smoke, dev-split or calibration-split runs. Report losses as plainly as wins: if the new model does not beat the best baseline in a stratum or at a horizon, the README says so.
 
 ## Leakage invariants (§6.2) — violating any of these is a bug
 

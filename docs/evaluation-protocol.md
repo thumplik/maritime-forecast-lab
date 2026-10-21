@@ -27,6 +27,33 @@ Membership: `manifest.split_of(vessel, t[, lat, lon])` for a point and `manifest
 
 The P-unseen calibration split is small: 4 days and 164 vessels in the cutoff region. Per-stratum conformal radii (Milestone 4) may need pooled strata or a longer period.
 
+### June + July 2023 (`noaa_us_gulf_2023-06-07`, manifests `splits-v2`)
+
+Added 2026-10-21, after the Milestone 3 failure review read the June test results. From then on, the June test period is no longer an untouched held-out set for retrieval (see [failure-review.md](failure-review.md#test-set-use)).
+
+| Split | Period | Use |
+|---|---|---|
+| train | [06-01, 06-17) | Unchanged: fitted parameters, navigable mask, and the frozen retrieval index period |
+| dev | [06-18, 06-22) | Model development and tuning (the old calibration period; only one 600-cutoff retrieval diagnostic ever looked at it) |
+| calibration | [06-23, 07-01) | Milestone 4 conformal radii. Under P-known this is the old June test, which informed the failure review, so it is never reported as held-out |
+| test | [07-02, 07-31) | **Fresh and untouched.** The held-out set for any model developed after the review. It ends Jul 31 00:00 because the data end on Jul 31 |
+
+- **Purges:** 24 h between all periods (06-17, 06-22, 07-01). Benchmarks of dev or calibration cap truth at their period's end.
+- **P-unseen:** the same salt, so the train and test vessels are exactly those of the June manifests. The old calibration bucket [700, 800) is split into dev [700, 750) and calibration [750, 800).
+  - Its calibration split (Jun 23–30 × bucket [750, 800)) is **not** the old June test: those vessel-days were excluded under v1 and never read. The old June test vessels have no split for those days.
+  - Its July test vessels **are** the vessels the June failure review examined (same buckets). July is fresh in time, not in vessels, and this is stated next to any P-unseen July result.
+  - Dev and calibration are 5% of vessels each (78 and about 105 in the cutoff region). Decisions are taken on P-known dev; P-unseen dev is a sanity check and is reported with its sample counts.
+- **Reading benchmarks:**
+  - `make benchmark PROTOCOL=… DS=noaa_us_gulf_2023-06-07 SPLIT=dev` is for development.
+  - `SPLIT=test` is the July held-out result. Runs on the June-only dataset stay valid as the record of what the June test showed, but are not compared as held-out against later models.
+- **Rule:** a model version is benchmarked on the July test only once its design is frozen on dev. This is **enforced** (`evaluation/holdout.py`):
+  - `run_benchmark.py --confirm-test` and a clean committed tree are required.
+  - Each run is appended, before scoring, to the committed ledger `data/manifests/test_access/noaa_us_gulf_2023-06-07.json`, with run id, git SHA, model versions and config hashes, and `--informed-by`.
+  - The same model version and config cannot be scored on July twice without `--test-rerun-reason`.
+  - The API refuses benchmarks on this dataset and forecast evaluation whose targets reach into July. `failure_review.py` refuses July runs unless `--allow-holdout` is given, after the results are reported.
+  - Non-test runs carry the split in their run id (`…_dev_…`) and report header.
+- **Conformal (Milestone 4):** radii fitted on the calibration split are judged by their **empirical coverage on July**, per stratum and per July week. Calibration and July are not exchangeable for retrieval: the frozen pool ends Jun 17, so calibration cutoffs are 6–14 days past it and July cutoffs are 15–44 days past it.
+
 ## Leakage invariance (§10, Milestone 2 done-when)
 
 `evaluation/invariance.py` runs every registered model on each cutoff, both on scoped data and on copies where every report after `as_of`, **for every vessel**, has been perturbed. The perturbations are:

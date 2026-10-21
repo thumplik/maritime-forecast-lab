@@ -13,6 +13,8 @@ data/manifests/*
 !data/manifests/masks/*.json
 !data/manifests/segment_index/
 !data/manifests/segment_index/*.json
+!data/manifests/test_access/
+!data/manifests/test_access/*.json
 
 # Models, checkpoints, caches
 *.ckpt

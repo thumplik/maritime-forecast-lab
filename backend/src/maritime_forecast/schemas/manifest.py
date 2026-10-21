@@ -16,7 +16,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 Protocol = Literal["P-known", "P-unseen", "P-paper", "P-region"]
-SplitName = Literal["train", "calibration", "test"]
+# "dev": model development and tuning (e.g. retrieval v2), kept apart from "calibration", which
+# Milestone 4 reserves for conformal radii (§5 U1). Only the June+July manifests use it.
+SplitName = Literal["train", "dev", "calibration", "test"]
 MANIFEST_VERSION = "splits-v1"
 
 

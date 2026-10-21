@@ -1,0 +1,37 @@
+{
+  "protocol": "P-unseen",
+  "dataset_id": "noaa_us_gulf_2023-06-07",
+  "manifest_sha256": "9fa81dec5c706190a966c62c3c02d7985dae3b2fc0dc116fb1dd4e437b8e50c3",
+  "region": "us_gulf",
+  "grid": {
+    "lat0": 23.5,
+    "lon0": -98.0,
+    "cell_deg": 0.001,
+    "ny": 7500,
+    "nx": 17000
+  },
+  "land_source": "osm_land_us_gulf@e8224df7b334",
+  "traffic": {
+    "min_vessels": 2,
+    "dilate_cells": 1,
+    "cell_deg": 0.001,
+    "split": "train",
+    "periods": [
+      [
+        "2023-06-01T00:00:00+00:00",
+        "2023-06-17T00:00:00+00:00"
+      ]
+    ],
+    "data_until": "2023-06-17T00:00:00+00:00",
+    "vessel_disjoint": true,
+    "n_vessels_permitted": 5634,
+    "cells_with_reports": 2483768,
+    "cells_kept": 1776900
+  },
+  "land_cells": 31660965,
+  "infeasible_cells": 31485252,
+  "source_id": "osm_land_us_gulf@e8224df7b334+traffic[P-unseen:train,>=2v,dilate1]",
+  "mask_sha256": "a58c92cfcfbf1a5325610cac822b5f66a62db574ea71737d7056fa7e6f3e8caf",
+  "created_at": "2026-10-21T18:44:06+00:00",
+  "git_sha": "55fd6f58a5dd6faa6b3f1409b7da08e649295f18-dirty"
+}

@@ -8,6 +8,8 @@ Usage:
     uv run --project backend python scripts/run_benchmark.py --protocol P-known
     uv run --project backend python scripts/run_benchmark.py --protocol P-unseen \\
         --models persistence_v1 constant_velocity_v1 --horizons 1 2 3 6 12 24
+    uv run --project backend python scripts/run_benchmark.py --protocol P-known \
+        --dataset-id noaa_us_gulf_2023-06-07 --split dev      # model development (dev window)
 """
 
 from __future__ import annotations
@@ -32,6 +34,29 @@ def main() -> None:
     ap.add_argument("--history-hours", type=float, default=24)
     ap.add_argument("--seed", type=int, default=20230601)
     ap.add_argument("--n-boot", type=int, default=1000)
+    ap.add_argument(
+        "--split",
+        default="test",
+        choices=["test", "dev"],
+        help="dev: model development on the dev window (June+July manifests only)",
+    )
+    ap.add_argument(
+        "--confirm-test",
+        action="store_true",
+        help="score a HELD-OUT test split (splits-v2 manifests): design frozen on dev, "
+        "clean tree; the run is recorded in data/manifests/test_access/ first",
+    )
+    ap.add_argument(
+        "--informed-by",
+        nargs="*",
+        default=[],
+        help="run/review ids whose results shaped the models (recorded in the ledger)",
+    )
+    ap.add_argument(
+        "--test-rerun-reason",
+        default=None,
+        help="required to score an already-scored model version on a held-out test",
+    )
     ap.add_argument("--max-cutoffs-per-set", type=int, default=None, help="smoke runs only")
     ap.add_argument("--no-geojson", action="store_true", help="skip the GeoJSON export")
     args = ap.parse_args()
@@ -46,6 +71,10 @@ def main() -> None:
         seed=args.seed,
         n_boot=args.n_boot,
         max_cutoffs_per_set=args.max_cutoffs_per_set,
+        split=args.split,
+        confirm_test=args.confirm_test,
+        informed_by=tuple(args.informed_by),
+        test_rerun_reason=args.test_rerun_reason,
     )
     t0 = time.time()
     run = run_benchmark(cfg, ParquetStore(), RunStore())

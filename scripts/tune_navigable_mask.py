@@ -44,6 +44,8 @@ def main() -> None:
 
     raw = (MANIFEST_DIR / "splits" / f"{args.protocol}__{args.dataset_id}.json").read_bytes()
     manifest = SplitManifest.model_validate_json(raw)
+    # splits-v2 reserves "calibration" for conformal radii: tune on the dev window there.
+    tune_split = "dev" if any(p.split == "dev" for p in manifest.periods or []) else "calibration"
     store = ParquetStore()
     box = default_region("truth_region")
     grid, land = load_land_raster(box)
@@ -55,7 +57,7 @@ def main() -> None:
         for dl in (0, 1, 2):
             m = NavigableMask.build(grid, land, traffic_raster(cells, grid, mv, dl), "tuning")
             r = infeasible_report_rates(
-                store, args.dataset_id, manifest, m, cutoff_box, "calibration",
+                store, args.dataset_id, manifest, m, cutoff_box, tune_split,
                 args.n_sample, args.seed,
             )  # fmt: skip
             kept = float(m.infeasible.sum() / land.sum())
@@ -64,7 +66,7 @@ def main() -> None:
                   f"underway {r['underway']:.2%} land kept {kept:.1%}")  # fmt: skip
     land_only = infeasible_report_rates(
         store, args.dataset_id, manifest, NavigableMask.build(grid, land, None, "land"),
-        cutoff_box, "calibration", args.n_sample, args.seed,
+        cutoff_box, tune_split, args.n_sample, args.seed,
     )  # fmt: skip
     print(f"OSM land only: stationary {land_only['stationary']:.2%} "
           f"underway {land_only['underway']:.2%}")  # fmt: skip
@@ -73,7 +75,7 @@ def main() -> None:
     out.write_text(json.dumps({
         "protocol": args.protocol, "dataset_id": args.dataset_id,
         "manifest_sha256": hashlib.sha256(raw).hexdigest(), "fit_on": cover,
-        "scored_on": {"split": "calibration", "region": cutoff_box.name},
+        "scored_on": {"split": tune_split, "region": cutoff_box.name},
         "land_source": land_source_id(box.name), "n_sample": args.n_sample, "seed": args.seed,
         "land_only": land_only, "table": rows, "git_sha": git_sha(),
         "created_at": datetime.now(UTC).isoformat(timespec="seconds"),

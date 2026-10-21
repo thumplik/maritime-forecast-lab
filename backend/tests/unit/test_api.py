@@ -370,3 +370,24 @@ def test_evaluation_land_flags_null_inside_the_masks_training_window(client, mon
     e = client.post("/forecasts/evaluation", json=_ev_req()).json()
     assert e["feasibility_mask"] == "SYNTHETIC"
     assert all(m["feasibility"]["land_point"] == [False] * 6 for m in e["models"])
+
+
+def test_holdout_test_period_is_not_evaluable_or_benchmarkable(client, tmp_path):
+    from maritime_forecast.evaluation.splits import HOLDOUT_MANIFEST_VERSION
+    from maritime_forecast.schemas.manifest import Period, SplitManifest
+
+    m = SplitManifest(
+        protocol="P-known", version=HOLDOUT_MANIFEST_VERSION, dataset_id="syn",
+        description="SYNTHETIC holdout",
+        periods=[Period(split="train", start=T0 - timedelta(days=10), end=T0 - timedelta(days=2)),
+                 Period(split="test", start=T0, end=T0 + timedelta(days=5))],
+    )  # fmt: skip
+    d = tmp_path / "manifests" / "splits"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "P-known__syn.json").write_text(m.model_dump_json())
+    req = _req(model_ids=["persistence_v1"])
+    err(client.post("/forecasts/evaluation", json=req), 403, "holdout_test_period")
+    assert client.post("/forecasts", json=req).status_code == 200  # forecasts stay available
+    e = err(client.post("/benchmarks", json={"dataset_id": "syn", "protocol": "P-known"}),
+            422, "benchmark_refused")  # fmt: skip
+    assert "held-out" in e["message"]

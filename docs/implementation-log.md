@@ -750,3 +750,125 @@ uv run --project backend python scripts/make_readme_figures.py   # RUN -> new P-
 - new geography (`no_references`).
 
 That needs a "held steps" share per cell. Then decide on a stationary/departure gate (e.g. persistence below a speed threshold, as a labelled variant). P-region is still to be built.
+
+## 2026-10-21 — Milestone 3 slice 3: failure review of `route_retrieval_v1`
+
+**Milestone:** 3 — historical-route retrieval
+**Done:**
+- `evaluation/failure_review.py` and `scripts/failure_review.py`. The script re-runs retrieval on a kept run's cutoffs and refuses to continue unless it reproduces the run's predictions exactly. It then flags every paired sample with fixed categories and compares it with the run's own best baseline for the cell (`best_baseline_id`). No losses are scored where the run has no skill reference (< 10 m).
+  - Categories: `references_exhausted`, `branch_disagreement`, `wrong_branch` and its `wrong_branch_control`, `departure`, `false_departure`, `sparse_history`, `new_geography` and `timing_dominated`.
+  - `wrong_branch` is an oracle over candidates, never an accuracy. Its control applies the same oracle to the same candidates rotated by a random angle.
+  - Categories that select on truth are marked †.
+  - Output goes to `data/runs/reviews/<run_id>/` with a `review.json` sidecar (thresholds, run digest, git SHA).
+- `route_retrieval.py`: `WARN_RADIUS_FALLBACK` constant; `context_xy` is now public. Forecasts are unchanged (the reviews reproduce the runs).
+- 4 unit tests (`test_failure_review.py`, hand-built synthetic records).
+- `docs/failure-review.md` (findings and the ordered next experiments); `architecture.md`; `docs/README.md` index; README roadmap; `CLAUDE.md` status.
+
+**Commands run:**
+```bash
+uv run --project backend python scripts/failure_review.py --protocol P-unseen   # 26,557 paired (cutoff, horizon) samples, 195 s
+uv run --project backend python scripts/failure_review.py --protocol P-known    # 120,612 samples
+make test && make lint                                                         # 275 passed
+# after the leakage review's fixes, both reviews were re-run with the commands above
+```
+The first attempt at both reviews crashed on a `ProtocolRef` attribute access in the script. It was fixed and both were re-run.
+
+**Results:** reviews of `P-known_noaa_us_gulf_2023-06_20261021T152618Z` and `P-unseen_noaa_us_gulf_2023-06_20261021T153929Z`. Details are in `docs/failure-review.md`.
+- **Stationary loss is false departures:**
+  - 11–15% of stationary cutoffs (P-known), every one a loss, with a median excess of +4.2 km at 1 h and +12.4 km at 24 h.
+  - Real departures: retrieval ties persistence.
+- **Wrong branch at junctions** (oracle diagnostic): 26–40% of pooled underway samples, against 14–19% for the rotated control. In transit: 21–40% against 7–11%. The real excess is 14–29 points: a bounded lever.
+- **Timing:** about 40% of underway samples have an error over 1 km that is mostly along-track. Retrieval still beats the baseline median on them up to 12 h.
+- **References exhausted:** ≤ 6% up to 12 h, about 61–65% at 24 h. Held samples in transit still beat damped velocity at 24 h.
+- **By class:** fishing loses to constant velocity at 1 h (skill −1.45 [−2.53, −0.36]); tugs and "other" lose at 24 h. Tanker, cargo and passenger are strong.
+- **Weather-driven turns:** not assessable (no archived weather).
+
+**Leakage review (leakage-reviewer subagent):** no leakage, and nothing truth-selected is reported as accuracy. Fixed:
+1. The review now uses the run's own best baseline and scores no losses where the run has none. It had been scoring stationary 1–6 h "losses" against a 0 m persistence.
+2. All truth-conditioned categories are marked †, and the tautological 100% loss rate of false departures is no longer shown as a finding.
+3. Added a rotated-candidate control for the `wrong_branch` oracle (§5 N1). The doc now claims only the excess over it.
+4. Corrected doc and log claims: fishing's reference is CV; unique sample counts; P-unseen false departures are 15–19%; claims the review does not compute were removed.
+5. `sparse_history`'s documented stale limit now matches the code (30 min).
+6. Test-set reuse: `docs/failure-review.md` § "Test-set use" sets the `informed_by` labelling and records a pending human decision (a fresh test month vs. a dev window carved from calibration).
+
+**Blockers / open questions:**
+- **Human decision needed (AGENTS.md rule 12, data download):** a fresh untouched test period (e.g. July 2023, about 10 GB) for the claim of any retrieval v2 against v1, and a dev window carved from the calibration period for development. See `docs/failure-review.md`.
+- Milestone 3 lists P-region benchmarks, but P-region eligibility (side-aware) and P-region benchmarks are not built. The runner and `eligible()` refuse them. This is the remaining Milestone 3 task.
+
+**Next step:**
+1. P-region retrieval eligibility and benchmark (needs context positions for the side test). Then `/milestone-check` for Milestone 3.
+2. Retrieval v2 experiments on the **calibration split**, in the order given in `docs/failure-review.md`: stationary handling, speed-matched continuation, branch choice.
+
+## 2026-10-21 — Fresh July test period and a dev window (user decision)
+
+**Milestone:** 3 — historical-route retrieval
+**Decision (user, 2026-10-21):** fetch July 2023 as a fresh, untouched test period, and carve a dev window out of the calibration period for retrieval v2 development. Reason: the failure review read the June test results, so June can no longer serve as held-out for anything that review motivates.
+
+**Done:**
+- Fetched July 2023: 31 days, filtered to the Gulf truth region. Manifest `data/manifests/noaa_us_gulf_2023-07-01_2023-07-31.json`.
+- New combined dataset `noaa_us_gulf_2023-06-07` (June + July). Its June days are identical to `noaa_us_gulf_2023-06`: 87,377,629 rows, symmetric difference 0 excluding `source`.
+- Split schema: a new `dev` split name.
+  - `evaluation/splits.py`: `JUNE_JULY_2023_PERIODS`. Train [06-01, 06-17) is unchanged; dev is [06-18, 06-22) (the old calibration period); calibration is [06-23, 07-01) (the old June test, for Milestone 4 conformal radii); test is [07-02, 08-01), fresh. Every period is separated by a 24 h purge.
+  - `P_UNSEEN_ASSIGNMENT_V2`: the same salt, train and test vessels; the old calibration bucket is halved into dev and calibration. Manifest version `splits-v2`.
+  - The June-only manifests are unchanged (`splits-v1`).
+- `run_benchmark.py --split {test,dev}`. Makefile `DS=` / `SPLIT=` for splits, fit, mask and benchmark.
+- 2 new unit tests in `test_splits.py`: periods and purges, train unchanged, no June test, P-unseen train and test vessels identical to v1.
+- **Rebuilt for the new dataset:** manifests, damped-velocity fits, navigable masks.
+  - τ and masks are identical to the June-only ones (same train data).
+  - Dev reference benchmarks for both protocols.
+- **Docs and rules:**
+  - Docs: `evaluation-protocol.md` (June+July section and rules), `failure-review.md` (decision recorded), `benchmarks.md`, `CLAUDE.md`.
+  - `AGENTS.md` rule 13 now also excludes dev-split runs from the README.
+
+**Commands run:**
+```bash
+uv run --project backend python scripts/fetch_noaa.py --start 2023-07-01 --end 2023-07-31   # ~31 min, 31 days ok
+uv run --project backend python scripts/canonicalize.py --start 2023-06-01 --end 2023-07-31 --dataset-id noaa_us_gulf_2023-06-07
+make splits DS=noaa_us_gulf_2023-06-07
+make fit PROTOCOL=P-known DS=noaa_us_gulf_2023-06-07 && make mask PROTOCOL=P-known DS=noaa_us_gulf_2023-06-07   # and P-unseen
+make benchmark PROTOCOL=P-known DS=noaa_us_gulf_2023-06-07 SPLIT=dev    # 250 s
+make benchmark PROTOCOL=P-unseen DS=noaa_us_gulf_2023-06-07 SPLIT=dev   # 67 s
+make test && make lint
+```
+
+**Results:**
+- **Dev runs (final):** `P-known_noaa_us_gulf_2023-06-07_dev_20261021T184406Z` (7,372 cutoffs) and `P-unseen_noaa_us_gulf_2023-06-07_dev_20261021T184833Z` (366 cutoffs). Digests and the skill table are in `docs/benchmarks.md`.
+  - They supersede the first dev runs (`…_20261021T182911Z`, `…_20261021T183325Z`), made before the review fixes below.
+  - The same cutoffs and predictions; 30 P-known records lost truth to the dev truth cap.
+- **P-known dev** reproduces the June-test pattern:
+  - transiting: +0.61 / +0.74 / +0.70 at 1 / 3 / 6 h, a tie at 24 h;
+  - stationary: losses from 6 h.
+- **P-unseen dev** is too small to decide on (78 dev vessels in the cutoff region).
+- **Split vessel counts in the cutoff region (P-known):** train 2,498; dev 1,622; calibration 2,066; test 3,282.
+
+**Blockers / open questions:**
+- P-unseen dev and calibration are small: 5% of vessels each, over 4 and 8 days. Conformal radii under P-unseen (Milestone 4) may need pooled strata.
+- P-region retrieval eligibility and benchmark are still not built (the remaining Milestone 3 task).
+
+**Next step:**
+1. P-region retrieval eligibility and benchmark, then `/milestone-check` for Milestone 3.
+2. Retrieval v2 on P-known dev, in the order given in `docs/failure-review.md`. July is benchmarked only when a v2 design is frozen, as one run of the baselines plus v1 plus v2.
+
+**Leakage review of the split change (leakage-reviewer subagent):** no data path leaks into July (purge and containment, the frozen pool, train-only τ and masks all checked). The process could touch July without a record, so the following were added:
+1. `evaluation/holdout.py` enforcement:
+   - `--confirm-test` and a clean tree are required.
+   - A committed access ledger (`data/manifests/test_access/`) is appended before scoring.
+   - Re-scoring the same model version and config needs a reason.
+   - The API refuses benchmarks and forecast evaluation that touch July (403 `holdout_test_period`).
+   - `failure_review.py` refuses July runs without `--allow-holdout`, and picks the latest run by dataset and split.
+2. Non-test runs carry the split in their run id and report header.
+3. Benchmarks of dev and calibration cap truth at their period's end.
+4. The test period ends Jul 31 00:00, where the data end. Manifests, fits and masks were regenerated: τ and masks are unchanged, and the dev runs were re-made.
+5. `tune_navigable_mask.py` tunes on dev for splits-v2 manifests.
+6. Docs:
+   - P-unseen calibration is not the old June test.
+   - P-unseen July vessels are the reviewed vessels (fresh in time only).
+   - Milestone 4 conformal coverage is judged on July, per stratum and week; calibration and July are not exchangeable because pool staleness differs.
+7. Tests: `test_holdout.py` (4, including P-region × dev) and an API holdout test.
+   - The suggestion to use a new P-unseen salt was not taken. It would change train vessels and every train fit; the limitation is documented instead.
+
+```bash
+make splits DS=noaa_us_gulf_2023-06-07 && make fit/mask PROTOCOL={P-known,P-unseen} DS=noaa_us_gulf_2023-06-07
+make benchmark PROTOCOL={P-known,P-unseen} DS=noaa_us_gulf_2023-06-07 SPLIT=dev
+make test   # 282 passed
+```

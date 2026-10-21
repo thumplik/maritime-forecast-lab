@@ -216,3 +216,31 @@ All baseline numbers match the earlier runs on the cells they share. Retrieval's
 - **Feasibility, underway pooled, P-known:**
   - Retrieval puts a point on land in 8.7% → 29.5% of paths (1 → 24 h). Damped is at 26–29% and CV at 61–88%.
   - Retrieval's path-crossing rate is 28% → 66%: chords between 10-min points cut channel bends.
+
+## 2026-10-21 — Dev-window reference runs, June+July dataset (B0 + `route_retrieval_v1`)
+
+Dataset `noaa_us_gulf_2023-06-07` (June + July 2023), manifests `splits-v2` ([evaluation-protocol.md](evaluation-protocol.md#june--july-2023-noaa_us_gulf_2023-06-07-manifests-splits-v2)), **split = dev** (Jun 18–22). These are **development references** for retrieval v2, not held-out results, and are not used in the README.
+- The June days of this dataset are identical to `noaa_us_gulf_2023-06`: 87,377,629 rows, zero differences outside `source`.
+- The train-split damped-velocity τ and the navigable masks are identical to the June-only ones (same train period).
+- **July (the test split) has not been benchmarked.** It stays unseen until a v2 design is frozen on dev.
+
+| | P-known | P-unseen |
+|---|---|---|
+| Run id | `P-known_noaa_us_gulf_2023-06-07_dev_20261021T184406Z` | `P-unseen_noaa_us_gulf_2023-06-07_dev_20261021T184833Z` |
+| files.json SHA-256 | `d386f4b31be35237b8d3aade4f8583e947159993d0320257e90aad5359fe5f2f` | `a74fe230823b92a85d54b03e677f83f7d29ebf6950e8b629e2abfca945662140` |
+| Cutoffs | 7,372 | 366 (78 dev vessels in the cutoff region: too small for a transiting stratum) |
+| Wall time | 265 s | 66 s |
+
+These replace the first dev runs, `P-known_noaa_us_gulf_2023-06-07_20261021T182911Z` and `P-unseen_noaa_us_gulf_2023-06-07_20261021T183325Z`. Those were made before the test period's end moved to Jul 31 00:00 (which changes the manifest hash) and before dev truth was capped at the dev period's end.
+- The same cutoffs and identical predictions.
+- 30 P-known records (5 cutoffs × 6 models, 24 h targets just before Jun 22 00:00) are now `no_report_after`.
+
+**Retrieval skill vs best baseline on dev, P-known** (same pattern as the June test):
+
+| Stratum | 1 h | 3 h | 6 h | 24 h |
+|---|---|---|---|---|
+| Transiting | +0.61 [0.49, 0.67] | +0.74 [0.69, 0.79] | +0.70 [0.61, 0.77] | −0.08 [−0.32, 0.19] |
+| Underway pooled | +0.60 [0.54, 0.64] | +0.47 [0.40, 0.55] | +0.30 [0.19, 0.41] | −0.04 [−0.17, 0.09] |
+| Stationary | n/a (< 10 m) | n/a | −19.3 [−25.4, −14.7] | −15.3 [−23.7, −9.6] |
+
+P-unseen dev is too small to decide anything (pooled underway CIs span zero at every horizon). It is a sanity check only; v2 is developed on P-known dev.
