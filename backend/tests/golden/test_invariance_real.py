@@ -33,7 +33,17 @@ def _cases(n_per_group: int = 2):
 
 def test_registered_models_invariant_on_real_cutoffs(tmp_path):
     cases = _cases()
-    rep = check_invariance(registry_factories(), ParquetStore(), DATASET, cases,
+    from maritime_forecast.models.damped_velocity import DampedVelocityFit, fit_path
+
+    fp = fit_path("P-known", DATASET)
+    if not fp.exists():
+        pytest.skip("needs the P-known damped-velocity fit (make fit PROTOCOL=P-known)")
+    params = {
+        "damped_velocity_v1": {
+            "taus_hours": DampedVelocityFit.model_validate_json(fp.read_text()).taus_hours
+        }
+    }
+    rep = check_invariance(registry_factories(params), ParquetStore(), DATASET, cases,
                            history_hours=24, workdir=tmp_path)  # fmt: skip
     assert rep.cases == len(cases) >= 4
     assert rep.ok, rep.violations

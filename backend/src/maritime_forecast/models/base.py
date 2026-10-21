@@ -154,6 +154,12 @@ class ModelCapabilities(BaseModel):
         description="True if the model uses data other than the target's own history (retrieval "
         "index, neighbours, fitted parameters). Required: no default, so it cannot be forgotten."
     )
+    uses_store_at_predict: bool = Field(
+        False,
+        description="Queries the store while predicting (e.g. a retrieval index). The "
+        "invariance harness then scopes the whole dataset; models that only use fixed fitted "
+        "parameters set reads_beyond_own_history but not this",
+    )
     installed: bool = True
     calibration_only: bool = Field(
         False,

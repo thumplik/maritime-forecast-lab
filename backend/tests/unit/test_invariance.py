@@ -70,7 +70,7 @@ class Peeking(BaseForecaster):
 
     def capabilities(self) -> ModelCapabilities:
         return ModelCapabilities(model_id=self.model_id, model_version="0", description="leaks",
-                                 reads_beyond_own_history=True)  # fmt: skip
+                                 reads_beyond_own_history=True, uses_store_at_predict=True)  # fmt: skip
 
     def _predict(self, history: AISHistory, horizon: ForecastHorizon):
         future = self.store.track(self.dataset_id, history.vessel_id, history.as_of,
@@ -111,7 +111,7 @@ class OpensRealArchive(BaseForecaster):
 
     def capabilities(self) -> ModelCapabilities:
         return ModelCapabilities(model_id=self.model_id, model_version="0", description="bypass",
-                                 reads_beyond_own_history=True)  # fmt: skip
+                                 reads_beyond_own_history=True, uses_store_at_predict=True)  # fmt: skip
 
     def _predict(self, history: AISHistory, horizon: ForecastHorizon):
         ParquetStore(self.path)  # must be refused while the harness runs
@@ -138,7 +138,7 @@ class CachedByKey(BaseForecaster):
 
     def capabilities(self) -> ModelCapabilities:
         return ModelCapabilities(model_id=self.model_id, model_version="0", description="cache",
-                                 reads_beyond_own_history=True)  # fmt: skip
+                                 reads_beyond_own_history=True, uses_store_at_predict=True)  # fmt: skip
 
     def _predict(self, history: AISHistory, horizon: ForecastHorizon):
         key = (history.vessel_id, history.as_of, len(horizon.target_times))

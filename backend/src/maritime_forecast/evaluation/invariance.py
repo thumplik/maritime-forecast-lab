@@ -16,8 +16,8 @@ What the harness enforces:
     must actually change the target's future. Cases where it can't (no future reports in
     scope) are reported as `vacuous`, never counted as passes.
   * Boundary spikes at +1 µs, +1 ms and +1 s after as_of; several horizon/step grids.
-  * Models that read beyond their own history get the whole dataset as scope (lookback and
-    look-ahead), so an index built from the scoped store is realistic.
+  * Models that query the store while predicting (uses_store_at_predict) get the whole dataset
+    as scope (lookback and look-ahead), so an index built from the scoped store is realistic.
 
 What it cannot see: protocol leakage (P-unseen exclusion, index period, parameters fitted on
 test). Those need dedicated tests (build plan §10 "Protocol leakage").
@@ -169,7 +169,7 @@ def check_invariance(
     """Run every model on every case and grid: perturbed runs first, then the reference."""
     report = InvarianceReport()
     wide = any(
-        f(store, dataset_id).capabilities().reads_beyond_own_history for f in factories.values()
+        f(store, dataset_id).capabilities().uses_store_at_predict for f in factories.values()
     )
     tmp = Path(tempfile.mkdtemp(prefix="invariance_", dir=workdir))
     try:

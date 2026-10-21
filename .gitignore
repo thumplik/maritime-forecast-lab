@@ -46,3 +46,6 @@ node_modules/
 .claude/settings.local.json
 research/notebooks/*.ipynb
 data/processed/.duckdb_tmp/
+
+# DuckDB spill directory (default temp_directory is ./.tmp)
+.tmp/
