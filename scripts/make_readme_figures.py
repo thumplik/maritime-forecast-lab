@@ -370,7 +370,11 @@ def land_figure(th, name):
         loc="left",
     )
     fig.text(
-        0.01, 0.01, f"P-known July hold-out, paired samples. Run {RUN}.", color=th["text2"], fontsize=7
+        0.01,
+        0.01,
+        f"P-known July hold-out, paired samples. Run {RUN}.",
+        color=th["text2"],
+        fontsize=7,
     )
     fig.tight_layout(rect=(0, 0.03, 1, 1))
     fig.savefig(OUT / f"on-land-{name}.png", facecolor=th["surface"])
