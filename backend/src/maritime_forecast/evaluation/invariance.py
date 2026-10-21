@@ -110,6 +110,13 @@ class InvarianceReport:
     cases: int = 0
     checks: int = 0
     ok_comparisons: int = 0  # perturbed comparisons whose reference forecast had status ok
+    ok_by_model: dict[str, int] = field(default_factory=dict)
+    checks_by_model: dict[str, int] = field(default_factory=dict)
+
+    def ok_fraction(self, model_id: str) -> float:
+        n = self.checks_by_model.get(model_id, 0)
+        return self.ok_by_model.get(model_id, 0) / n if n else 0.0
+
     violations: list[Violation] = field(default_factory=list)
     vacuous: list[tuple[str, datetime, str]] = field(default_factory=list)
 
@@ -168,6 +175,9 @@ def check_invariance(
 ) -> InvarianceReport:
     """Run every model on every case and grid: perturbed runs first, then the reference."""
     report = InvarianceReport()
+    for m, f in factories.items():  # a model that cannot forecast would pass vacuously
+        if not f(store, dataset_id).capabilities().installed:
+            raise ValueError(f"{m} is not installed/fitted; supply its parameters")
     wide = any(
         f(store, dataset_id).capabilities().uses_store_at_predict for f in factories.values()
     )
@@ -232,6 +242,12 @@ def check_invariance(
                         for name, got in perturbed.items():
                             report.checks += 1
                             report.ok_comparisons += ref["status"] == "ok"
+                            report.checks_by_model[model_id] = (
+                                report.checks_by_model.get(model_id, 0) + 1
+                            )
+                            report.ok_by_model[model_id] = report.ok_by_model.get(model_id, 0) + (
+                                ref["status"] == "ok"
+                            )
                             if got != ref:
                                 diff = sorted(k for k in ref if ref[k] != got.get(k))
                                 report.violations.append(

@@ -26,7 +26,8 @@ make splits       # materialize P-known / P-unseen / P-paper manifests
 make import MAPPING=<preset|yaml> DATASET=<id> FILES="..."   # any provider via config/sources/
 make fetch-dma DAYS="2023-06-01"   # Danish AIS; range-reads one day from monthly zips
 make api          # read API on :8000, OpenAPI docs at /docs
-make benchmark PROTOCOL=P-known   # unattended paired benchmark -> data/runs/benchmarks/<run_id>/ (immutable)
+make fit PROTOCOL=P-known         # damped-velocity tau on the TRAIN split -> data/model_params/ (commit it)
+make benchmark PROTOCOL=P-known   # unattended paired benchmark of product models -> data/runs/benchmarks/<run_id>/ (immutable)
 ```
 
 Run one script directly: `uv run --project backend python scripts/<name>.py --help`.
@@ -55,6 +56,7 @@ Ad-hoc data questions: `uv run --project backend python -c "import duckdb; print
 
 ## Gotchas
 
+- DuckDB spills to ./.tmp (gitignored); a killed heavy query can leave GBs there — delete it.
 - DuckDB: run store queries as ONE bound statement (`con.execute(sql, params)`). Chaining `.aggregate()`/`.order()` on a relation built with `params=` re-materializes and was ~2000x slower. Never ASOF-join (or heavily join) against a registered Arrow/polars object — `CREATE TEMP TABLE ... AS SELECT * FROM <registered>` first (measured ~1800x faster). Cursors don't inherit `SET TimeZone` — `ParquetStore` sets it per connection.
 - Profile before optimizing: the benchmark's 50-min runtime looked like bootstrap cost but was the ASOF join above.
 - FastAPI: no `from __future__ import annotations` in `api/app.py` (routes use `Annotated` limits that reference `settings`).

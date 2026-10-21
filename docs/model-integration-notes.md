@@ -23,4 +23,34 @@ Holds the last reported position. It warns if that report is more than 30 min ol
 
 Limitation of both CV modes: no turns, channel geometry or land.
 
+`constant_velocity_paper_v1` is **calibration-only** (`calibration_only=True`). It is left out of product benchmarks, `product_model_ids()` and headline tables, because its typed failures on stationary cutoffs (last report without SOG/COG) would make whole cells non-headline.
+
+## Damped velocity (`damped_velocity_v1`)
+- **Model:** v(t) = SOG·e^(−t/τ) along COG from the standard-CV anchor, with lead measured from the anchor time. Distance saturates at SOG·τ. τ → ∞ is CV; τ → 0 is persistence.
+- **τ per vessel class:** fitted on the protocol's **train split only** (`models/fit_damped.py`, `make fit PROTOCOL=...`).
+  - Fit data: train cutoffs (underway sampler, at most 3,000 per class), causal histories, truth from the truth region.
+  - Objective: the mean over 1/2/3/6/12/24 h of the median error.
+  - Grid: 0.02 h to 48 h, plus ∞.
+  - Classes with fewer than 300 cutoffs use the pooled `default`. Classes whose best τ is the smallest grid value are listed in `at_grid_boundary`.
+- **Provenance:** fits are committed (`data/model_params/damped_velocity_v1/<protocol>__<dataset>.json`) with the manifest SHA-256. The model refuses a fit made for a different manifest and is then `not_fitted` / `installed=false`. The benchmark runner refuses uninstalled models up front.
+- **Capabilities:** `reads_beyond_own_history=True` (τ comes from other vessels' training data), `uses_store_at_predict=False`.
+- **Protocol-leakage tests** (`test_fit_damped.py`): perturbing test-period data (P-known) or test-vessel data (P-unseen) leaves the fit identical, and perturbing train data changes it.
+- `vessel_class` is NOAA back-filled, not as-of.
+- June 2023 fits:
+
+| Protocol | cargo | tanker | fishing | service | tug_tow | other | passenger | pleasure_sail | default |
+|---|---|---|---|---|---|---|---|---|---|
+| P-known | 3 | 2 | 0.5 | 0.15 | 0.15 | 0.05 | 0.05 | 0.02 (boundary) | 0.25 |
+| P-unseen | 3 | 2 | 0.5 | 0.15 | 0.15 | 0.1 | 0.02 (boundary) | 0.1 | 0.25 |
+
+  All values are τ in hours. Large ships keep moving; harbour craft effectively stop.
+
+## Constant turn rate (`constant_turn_rate_v1`)
+- **Turn rate:** the median wrapped ΔCOG/Δt over reports in the 10 min up to the anchor, with COG present and SOG ≥ 2 kn.
+- **Cap and decay:** capped at 0.05 °/s, decaying as e^(−t/20 min). Speed is the anchor SOG.
+- **Integration:** a local east-north frame in 30 s steps, mapped back with the geodesic direct problem (distance and azimuth from the anchor are exact, as in AEQD).
+- **Parameters:** untuned, fixed defaults. No data beyond the target's history is used.
+- **Result:** on June 2023 it is slightly worse than CV at every horizon and stratum. Holding the recent turn does not help on average at these horizons. It is kept as a reference, and tuning on train is a candidate for later.
+
+
 _Retrieval, conformal, Timestral and TrAISformer sections are added in Milestones 3–7._

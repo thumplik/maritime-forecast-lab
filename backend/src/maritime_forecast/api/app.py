@@ -408,6 +408,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
                 "configs": {m: built[m].config for m in req.model_ids},
                 "versions": {m: built[m].capabilities().model_version for m in req.model_ids},
                 "data_version": data_version,
+                "code": app.state.ctx.git_sha,
             },
             sort_keys=True,
             default=str,

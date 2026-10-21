@@ -62,6 +62,7 @@ class ConstantVelocity(BaseForecaster):
         return ModelCapabilities(
             model_id=self.model_id,
             reads_beyond_own_history=False,
+            uses_store_at_predict=False,
             model_version="1.0.0",
             min_history_reports=1,
             needs_sog_cog=True,
@@ -104,6 +105,7 @@ class ConstantVelocityPaper(BaseForecaster):
         return ModelCapabilities(
             model_id=self.model_id,
             reads_beyond_own_history=False,
+            uses_store_at_predict=False,
             model_version="1.0.0",
             min_history_reports=1,
             needs_sog_cog=True,

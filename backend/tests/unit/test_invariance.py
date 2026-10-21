@@ -57,7 +57,8 @@ def test_all_registered_models_are_invariant(store, tmp_path):
     assert rep.vacuous == []
     n = len(CASES) * len(registry_factories(PARAMS)) * 3  # 3 grids
     assert rep.checks == n * (len(PERTURBATIONS) + 1)
-    assert rep.ok_comparisons >= 0.8 * n * len(PERTURBATIONS)
+    for model_id in registry_factories(PARAMS):  # every model must really forecast
+        assert rep.ok_fraction(model_id) >= 0.8, (model_id, rep.ok_fraction(model_id))
 
 
 @dataclass
@@ -179,3 +180,16 @@ def test_vacuous_cases_are_reported_not_passed(store, tmp_path):
     vac = {p for _, _, p in rep.vacuous}
     assert {"delete_future", "shift_future", "flood_future"} <= vac
     assert not any(p.startswith("spike") for p in vac)  # spikes always add a future row
+
+
+def test_harness_refuses_models_that_cannot_forecast(store, tmp_path):
+    with pytest.raises(ValueError, match="not installed"):
+        check_invariance(
+            registry_factories(),
+            store,
+            "syn",
+            CASES[:1],
+            history_hours=3,
+            grids=[(2, 10)],
+            workdir=tmp_path,
+        )  # damped has no params here

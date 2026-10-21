@@ -26,6 +26,7 @@ class Persistence(BaseForecaster):
             min_history_reports=1,
             description="Last reported position held for every target time.",
             reads_beyond_own_history=False,
+            uses_store_at_predict=False,
         )
 
     def _predict(self, history: AISHistory, horizon: ForecastHorizon):

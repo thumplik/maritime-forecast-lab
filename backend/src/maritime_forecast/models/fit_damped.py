@@ -29,6 +29,7 @@ from maritime_forecast.models.damped_velocity import (
     DampedVelocityFit,
     damped_distance_m,
     fit_path,
+    history_vessel_class,
 )
 from maritime_forecast.provenance import git_sha
 from maritime_forecast.schemas.manifest import SplitManifest
@@ -73,6 +74,8 @@ def fit_damped_velocity(
         samplers={"underway": replace(cfg.sampler, seed=cfg.seed)},
     )
     cutoffs = select_cutoffs(bcfg, store, manifest)
+    if cutoffs.height == 0:
+        raise ValueError("no training cutoffs in the train split; nothing to fit tau on")
     # Cap each class (seeded) so frequent classes don't dominate fitting time.
     cutoffs = (
         pl.concat(
@@ -90,7 +93,9 @@ def fit_damped_velocity(
 
     n = cutoffs.height
     lat0, lon0, sog, cog, offset = (np.full(n, np.nan) for _ in range(5))
+    hist_class = np.full(n, "unknown", dtype=object)
     for cid, h in histories_for_cutoffs(store, dataset_id, cutoffs, cfg.history_hours):
+        hist_class[cid] = history_vessel_class(h)
         a, _ = select_anchor(h)
         if a is None:
             continue
@@ -99,12 +104,13 @@ def fit_damped_velocity(
         offset[cid] = (h.as_of - a["observed_at"]).total_seconds()
 
     grid_steps = round(max(cfg.horizons_h) * 60 / cfg.step_minutes)
-    truth = truth_grid(bcfg, store, cutoffs, grid_steps)
+    train_end = max(p.end for p in manifest.periods if p.split == "train")
+    truth = truth_grid(bcfg, store, cutoffs, grid_steps, truth_until=train_end)
     steps = [round(h * 60 / cfg.step_minutes) - 1 for h in cfg.horizons_h]
     t_lat, t_lon = truth["lat"][:, steps], truth["lon"][:, steps]
     ok = truth["evaluable"][:, steps] & np.isfinite(lat0)[:, None]
     lead = np.asarray(cfg.horizons_h)[None, :] * 3600.0 + offset[:, None]
-    classes = np.asarray(cutoffs["vessel_class"].fill_null("unknown").to_list())
+    classes = hist_class.astype(str)  # same rule the model uses at prediction time
 
     errors = {}
     for tau in TAU_GRID_H:
@@ -145,6 +151,7 @@ def fit_damped_velocity(
         dataset_id=dataset_id,
         manifest_sha256=hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
         split="train",
+        data_until=train_end,
         taus_hours=taus,
         n_cutoffs=counts,
         objective=objective_table,

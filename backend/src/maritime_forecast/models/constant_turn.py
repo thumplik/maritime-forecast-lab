@@ -73,6 +73,7 @@ class ConstantTurnRate(BaseForecaster):
             min_history_reports=1,
             needs_sog_cog=True,
             reads_beyond_own_history=False,
+            uses_store_at_predict=False,
             description="Recent median turn rate (capped, exponentially decaying) at anchor SOG.",
         )
 
@@ -97,6 +98,8 @@ class ConstantTurnRate(BaseForecaster):
             & r["cog_deg"].is_not_null()
             & (r["sog_knots"] >= c["min_sog_kn"])
         )
+        if "quality_flags" in recent.columns:
+            recent = recent.filter(~recent["quality_flags"].list.contains("sog_implausible"))
         times = np.array([(t - t_anchor).total_seconds() for t in recent["observed_at"]])
         rate = turn_rate_deg_s(times, recent["cog_deg"].to_numpy()) or 0.0
         cap = c["max_rate_deg_s"]

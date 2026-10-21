@@ -25,7 +25,7 @@ from datetime import datetime, timedelta
 from typing import Protocol, runtime_checkable
 
 import polars as pl
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from maritime_forecast.schemas.forecast import MAX_TARGET_STEPS, ModelForecast
 from maritime_forecast.storage.parquet_store import ParquetStore
@@ -141,6 +141,8 @@ class ForecastHorizon:
 
 
 class ModelCapabilities(BaseModel):
+    """What a model needs and does. The two data-access flags have no defaults on purpose."""
+
     model_id: str
     model_version: str
     description: str
@@ -155,10 +157,9 @@ class ModelCapabilities(BaseModel):
         "index, neighbours, fitted parameters). Required: no default, so it cannot be forgotten."
     )
     uses_store_at_predict: bool = Field(
-        False,
-        description="Queries the store while predicting (e.g. a retrieval index). The "
-        "invariance harness then scopes the whole dataset; models that only use fixed fitted "
-        "parameters set reads_beyond_own_history but not this",
+        description="Queries the store while predicting (e.g. a retrieval index); the invariance "
+        "harness then scopes the whole dataset. Required: no default, so it cannot be forgotten. "
+        "Implies reads_beyond_own_history"
     )
     installed: bool = True
     calibration_only: bool = Field(
@@ -166,6 +167,12 @@ class ModelCapabilities(BaseModel):
         description="Exists to reproduce a published protocol (§6.6); excluded from "
         "product benchmarks and headline tables by default",
     )
+
+    @model_validator(mode="after")
+    def _store_implies_beyond(self) -> ModelCapabilities:
+        if self.uses_store_at_predict and not self.reads_beyond_own_history:
+            raise ValueError("uses_store_at_predict implies reads_beyond_own_history")
+        return self
 
 
 @dataclass(frozen=True)

@@ -48,4 +48,6 @@ def test_registered_models_invariant_on_real_cutoffs(tmp_path):
     assert rep.cases == len(cases) >= 4
     assert rep.ok, rep.violations
     assert rep.vacuous == [], rep.vacuous  # every perturbation changed each target's future
-    assert rep.ok_comparisons >= 0.8 * (rep.checks - rep.checks // 7)  # mostly real forecasts
+    assert set(rep.ok_by_model) == set(registry_factories(params))
+    for model_id in rep.ok_by_model:
+        assert rep.ok_fraction(model_id) >= 0.8, (model_id, rep.ok_fraction(model_id))

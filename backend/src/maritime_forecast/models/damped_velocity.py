@@ -63,6 +63,10 @@ class DampedVelocityFit(BaseModel):
     dataset_id: str
     manifest_sha256: str
     split: str = Field(description="Split the fit used; always 'train'")
+    data_until: datetime = Field(
+        description="Latest observation time the fit could have read (end of the train period). "
+        "Forecasts with as_of before this would use parameters chosen with their own future."
+    )
     taus_hours: dict[str, float | None] = Field(
         description="vessel_class -> tau hours (null = no damping); 'default' for other classes"
     )
@@ -82,6 +86,15 @@ class DampedVelocityFit(BaseModel):
 
 def fit_path(protocol: str, dataset_id: str) -> Path:
     return FIT_DIR / f"{protocol}__{dataset_id}.json"
+
+
+def history_vessel_class(history: AISHistory) -> str:
+    """Vessel class of a history (most frequent non-null value; 'unknown' if none). Shared by
+    the model and the fit so both pick tau the same way. NOAA back-fills this field."""
+    if "vessel_class" not in history.reports.columns:
+        return "unknown"
+    c = history.reports["vessel_class"].drop_nulls()
+    return str(c.mode().sort()[0]) if c.len() else "unknown"
 
 
 def damped_distance_m(sog_knots, lead_s, tau_hours: float | None):
@@ -116,7 +129,9 @@ class DampedVelocity(BaseForecaster):
                     "run scripts/fit_damped_velocity.py"
                 )
             fit = DampedVelocityFit.model_validate_json(p.read_text())
-            if ctx.manifest_sha256 is not None and fit.manifest_sha256 != ctx.manifest_sha256:
+            if ctx.manifest_sha256 is None:
+                return cls(unfitted_reason="no split manifest to verify the fit against")
+            if fit.manifest_sha256 != ctx.manifest_sha256:
                 return cls(unfitted_reason="fit was made for a different split manifest")
             return cls(
                 config={
@@ -124,6 +139,7 @@ class DampedVelocity(BaseForecaster):
                     "fit_manifest_sha256": fit.manifest_sha256,
                     "fit_protocol": fit.protocol,
                     "fit_split": fit.split,
+                    "fit_data_until": fit.data_until.isoformat(),
                 },
                 fit=fit,
                 unfitted_reason="",
@@ -146,6 +162,7 @@ class DampedVelocity(BaseForecaster):
             min_history_reports=1,
             needs_sog_cog=True,
             reads_beyond_own_history=True,  # tau is fitted on other vessels' training data
+            uses_store_at_predict=False,  # tau is fixed; the store is never queried
             installed=not self.unfitted_reason,
             description="Speed decays exp(-t/tau) from the anchor SOG along COG; tau per vessel "
             "class fitted on the protocol's train split.",
@@ -154,6 +171,13 @@ class DampedVelocity(BaseForecaster):
     def _predict(self, history: AISHistory, horizon: ForecastHorizon):
         if self.unfitted_reason:
             return self.unsupported(horizon, "not_fitted", self.unfitted_reason)
+        if self.fit is not None and history.as_of < self.fit.data_until:
+            return self.unsupported(
+                horizon,
+                "fit_overlaps_as_of",
+                f"tau was fitted on data up to {self.fit.data_until.isoformat()}, after as_of; "
+                "using it would be hindsight",
+            )
         anchor, fell_back = select_anchor(history)
         if anchor is None:
             return self._result(
@@ -165,14 +189,7 @@ class DampedVelocity(BaseForecaster):
                     "message": "no report in the history has usable SOG/COG",
                 },
             )
-        classes = (
-            history.reports["vessel_class"] if "vessel_class" in history.reports.columns else None
-        )
-        cls = (
-            classes.drop_nulls().mode().sort()[0]
-            if classes is not None and classes.drop_nulls().len()
-            else "unknown"
-        )  # noqa: E501
+        cls = history_vessel_class(history)
         tau = self._taus.get(cls, self._taus["default"])
         leads = [(t - anchor["observed_at"]).total_seconds() for t in horizon.target_times]
         dist = damped_distance_m(anchor["sog_knots"], leads, tau)

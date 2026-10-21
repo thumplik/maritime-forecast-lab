@@ -172,7 +172,7 @@ def test_exceptions_and_non_finite_outputs_become_typed_failures():
 
         def capabilities(self):
             return ModelCapabilities(model_id=self.model_id, model_version="0", description="x",
-                                     reads_beyond_own_history=False)  # fmt: skip
+                                     reads_beyond_own_history=False, uses_store_at_predict=False)  # fmt: skip
 
         def _predict(self, history, horizon):
             if self.mode == "raise":
@@ -194,6 +194,18 @@ def test_capability_flag_must_be_declared():
 
     with pytest.raises(ValidationError):
         ModelCapabilities(model_id="x", model_version="0", description="x")
+    with pytest.raises(ValidationError):  # no default for the store flag either
+        ModelCapabilities(
+            model_id="x", model_version="0", description="x", reads_beyond_own_history=True
+        )
+    with pytest.raises(ValidationError):  # store use implies reading beyond own history
+        ModelCapabilities(
+            model_id="x",
+            model_version="0",
+            description="x",
+            reads_beyond_own_history=False,
+            uses_store_at_predict=True,
+        )
 
 
 def test_cv_standard_skips_implausible_sog_anchor():
@@ -242,6 +254,7 @@ def test_damped_refuses_unfitted_and_mismatched_fits(tmp_path, monkeypatch):
         dataset_id="d",
         manifest_sha256="a" * 64,
         split="train",
+        data_until=AS_OF - timedelta(days=1),
         taus_hours={"default": 2.0},
         n_cutoffs={},
         objective={},
@@ -288,3 +301,19 @@ def test_ctr_turns_with_history_and_caps():
     assert distance_m(a.latitude_deg, a.longitude_deg, b.latitude_deg, b.longitude_deg) > 500
     wild = [(-2, 29, -94, 10, 0), (-1, 29.001, -94, 10, 90), (0, 29.002, -94, 10, 180)]
     assert any("capped" in w for w in m.predict(hist(wild), H).warnings)
+
+
+def test_damped_refuses_cutoffs_inside_its_fit_window(tmp_path, monkeypatch):
+    import maritime_forecast.models.damped_velocity as dv
+
+    monkeypatch.setattr(dv, "FIT_DIR", tmp_path)
+    fit = dv.DampedVelocityFit(protocol="P-known", dataset_id="d", manifest_sha256="a" * 64,
+                               split="train", data_until=AS_OF + timedelta(hours=1),
+                               taus_hours={"default": 2.0}, n_cutoffs={}, objective={}, config={},
+                               data_provenance="x", git_sha="x", created_at=AS_OF)  # fmt: skip
+    dv.fit_path("P-known", "d").write_text(fit.model_dump_json())
+    ctx = ModelContext(dataset_id="d", protocol="P-known", manifest_sha256="a" * 64)
+    f = get_model("damped_velocity_v1", ctx).predict(hist([(0, 29, -94, 10, 90)]), H)
+    assert f.status == "unsupported" and f.error.code == "fit_overlaps_as_of" and not f.points
+    no_manifest = ModelContext(dataset_id="d", protocol="P-known", manifest_sha256=None)
+    assert not get_model("damped_velocity_v1", no_manifest).capabilities().installed

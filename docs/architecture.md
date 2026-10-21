@@ -28,8 +28,9 @@ Other providers: CSV/Parquet ── scripts/import_ais.py --mapping <config/sour
 | `maritime_forecast.geo.geodesic` | WGS84 direct/inverse problems, along/cross-track |
 | `maritime_forecast.models.baselines` | Pure array functions: persistence, constant velocity, last-two-point velocity |
 | `maritime_forecast.models.base` | Forecaster contract: `AISHistory` (rejects rows after as_of), `ForecastHorizon`, `ModelCapabilities`, `BaseForecaster` (typed failures) |
-| `maritime_forecast.models.{persistence,constant_velocity}` | B0 adapters: `persistence_v1`, `constant_velocity_v1`, `constant_velocity_paper_v1` |
-| `maritime_forecast.models.registry` | model_id -> factory, capabilities |
+| `maritime_forecast.models.{persistence,constant_velocity,damped_velocity,constant_turn}` | B0 adapters: `persistence_v1`, `constant_velocity_v1`, `constant_velocity_paper_v1` (calibration only), `damped_velocity_v1`, `constant_turn_rate_v1` |
+| `maritime_forecast.models.fit_damped` | Train-split τ fit for damped velocity |
+| `maritime_forecast.models.registry` | model_id -> factory(ModelContext), capabilities, `product_model_ids()` |
 | `maritime_forecast.evaluation.invariance` | Leakage-invariance harness |
 | `maritime_forecast.evaluation.windows` | Paper-style fixed windows for §6.6 calibration |
 | `maritime_forecast.evaluation.truth` | Bracketed ground truth that never bridges gaps |
@@ -50,6 +51,8 @@ Other providers: CSV/Parquet ── scripts/import_ais.py --mapping <config/sour
 | `GET /health` | Status, version, git SHA, dataset count, installed models (none yet) | — |
 | `GET /datasets` | Datasets from the store, joined with their manifests (mapping, provenance, rows, ingest report). Includes per-stratum horizon admission from the newest coverage audit of that dataset | — |
 | `GET /vessels?dataset_id&from&to&bbox&limit&offset` | Per-vessel summaries, ordered by id, with `total` for paging | Window ≤ 31 days (default: whole dataset). `limit` ≤ 1000. bbox is `lon_min,lat_min,lon_max,lat_max` |
+| `GET /models?dataset_id` | Registered models with capabilities, `calibration_only`, fit status and parameters in use | — |
+| `POST /forecasts` | `ForecastRequest` → `ForecastResponse`: causal history via `history_from_store`, every requested model, typed per-model failures, input coverage. Never contains truth | `ForecastRequest` limits (≤ 72 h, ≤ 1024 steps, ≤ 10 models) |
 | `GET /vessels/{id}/track?dataset_id&from&to` | Columnar points plus `segments` and `gaps`. A gap of more than 30 min starts a new segment, and clients must never draw across gaps | Window ≤ 31 days. At most 200,000 points (413 above that) |
 
 Conventions:
@@ -57,6 +60,8 @@ Conventions:
 - Every error has the shape `{"error": {"code", "message", "details"}}`. Codes: `invalid_parameter`, `window_too_large` (422), `dataset_not_found`, `vessel_not_found` (404), `too_many_points` (413). Validation errors return the location and message, never the submitted input.
 - Query times must carry a UTC offset; any offset is converted to UTC. Windows are half-open `[from, to)`.
 - Ids are validated by pattern, so dataset ids cannot traverse paths. Every value is a bound parameter.
+- Forecasts use the **P-known train-split fit** (`ApiSettings.deployment_protocol`) for fitted models, recorded in each model's `config`.
+- `forecast_id` is a hash of the request, model configs and versions, and the **data version** (dataset manifest identity plus each partition file's name, size and mtime). It keys a bounded in-process cache. A rewrite that keeps row counts still invalidates it, and a test checks this.
 - Each request gets its own DuckDB cursor. Cursors do not inherit session settings, so `ParquetStore` sets `TimeZone='UTC'` on every connection it is given.
 
 Measured on the June NOAA data:
@@ -104,4 +109,4 @@ Fixed in Milestone 1, found with the synthetic fixture:
 - Longitude interpolation (`geo.geodesic.lon_lerp_sql`, used by truth and by the P-paper grid) and the spike-filter distance take the short way round.
 - The web map unwraps longitudes along a track.
 
-Not yet built: run store, evaluator runner, damped velocity, constant turn rate, `/models` and `/forecasts` endpoints (Milestone 2 continues).
+Not yet built: `/benchmarks` endpoints, forecast evaluation endpoint, navigable-water feasibility flags, GeoJSON export (Milestone 2 continues).

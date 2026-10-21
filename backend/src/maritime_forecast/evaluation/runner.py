@@ -161,8 +161,12 @@ def predict_all(cfg, store, cutoffs, grid_steps, ctx: ModelContext):
     return out
 
 
-def truth_grid(cfg, store, cutoffs, grid_steps):
-    """Truth for every (cutoff, step): arrays [N,S] of lat, lon, course, evaluable, reason."""
+def truth_grid(cfg, store, cutoffs, grid_steps, truth_until: datetime | None = None):
+    """Truth for every (cutoff, step): arrays [N,S] of lat, lon, course, evaluable, reason.
+
+    `truth_until` caps the observations truth may use (exclusive). Fitting on a non-test split
+    passes that split's period end, so truth never brackets with a report from a later split,
+    whatever the purge gap is."""
     step = timedelta(minutes=cfg.step_minutes)
     targets = (
         cutoffs.select("cutoff_id", "vessel_id", "observed_at")
@@ -172,6 +176,8 @@ def truth_grid(cfg, store, cutoffs, grid_steps):
     )
     lo = cutoffs["observed_at"].min()
     hi = cutoffs["observed_at"].max() + timedelta(hours=max(cfg.horizons_h), minutes=60)
+    if truth_until is not None:
+        hi = min(hi, truth_until)
     con = store.con
     obs = store.scan(cfg.dataset_id, lo, hi, vessel_ids=cutoffs["vessel_id"].unique().to_list())
     con.register("_bench_obs", obs.to_arrow())
@@ -253,6 +259,11 @@ def run_benchmark(
     )
     for m in cfg.models():  # fail before creating a run, not halfway through it
         caps = get_model(m, ctx).capabilities()
+        fitted_on = get_model(m, ctx).config.get("fit_split")
+        if fitted_on is not None and fitted_on == cfg.split:
+            raise ValueError(
+                f"{m} was fitted on the {cfg.split!r} split; scoring it there would be in-sample"
+            )
         if not caps.installed:
             raise ValueError(
                 f"{m} is not installed/fitted for {manifest.protocol} on {cfg.dataset_id}"

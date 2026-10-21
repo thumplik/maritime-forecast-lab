@@ -19,7 +19,9 @@ def _day(d: int, month: int = 6) -> datetime:
 
 
 # Chronological split of the June 2023 calibration month. Gaps between periods are the purge:
-# nothing in them is used, and windows touching them are excluded via window_split().
+# no cutoff window may touch them (window_split). Truth for a cutoff may bracket with a report
+# up to the bracket gap (30 min) past the horizon; for non-test splits truth_grid is capped at
+# the split's end, so a fit never reads a later split even with adjacent periods.
 JUNE_2023_PERIODS = [
     Period(split="train", start=_day(1), end=_day(17)),
     Period(split="calibration", start=_day(18), end=_day(22)),
