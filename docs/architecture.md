@@ -25,7 +25,7 @@ Other providers: CSV/Parquet ── scripts/import_ais.py --mapping <config/sour
 | `maritime_forecast.data.ingest` | Files → store, with row-accounting report and dataset manifest |
 | `maritime_forecast.storage.parquet_store` | Daily-partitioned store: date pruning, scan, track, causal `history`, vessel summaries, atomic per-day writes |
 | `maritime_forecast.data.segment` | Gap-aware segmentation, spike removal, trailing SOG features, `motion_state` label, display segments/gaps |
-| `maritime_forecast.geo.geodesic` | WGS84 direct/inverse problems, along/cross-track |
+| `maritime_forecast.geo.geodesic` | WGS84 direct/inverse problems, along/cross-track, `LocalFrame` (anchor-centred azimuthal-equidistant plane) |
 | `maritime_forecast.models.baselines` | Pure array functions: persistence, constant velocity, last-two-point velocity |
 | `maritime_forecast.models.base` | Forecaster contract: `AISHistory` (rejects rows after as_of), `ForecastHorizon`, `ModelCapabilities`, `BaseForecaster` (typed failures) |
 | `maritime_forecast.models.{persistence,constant_velocity,damped_velocity,constant_turn}` | B0 adapters: `persistence_v1`, `constant_velocity_v1`, `constant_velocity_paper_v1` (calibration only), `damped_velocity_v1`, `constant_turn_rate_v1` |
@@ -44,6 +44,8 @@ Other providers: CSV/Parquet ── scripts/import_ais.py --mapping <config/sour
 | `maritime_forecast.data.segment_index` | Retrieval index of completed segments with regular tracks; per-cutoff, per-protocol eligibility (Milestone 3) |
 | `maritime_forecast.geo.navigable_mask` | Navigable-water raster: OSM land minus train-split traffic cells; point and segment tests |
 | `maritime_forecast.evaluation.feasibility` | Per-step feasibility flags (land, crossing, speed, acceleration) |
+| `maritime_forecast.models.route_retrieval` | R1 `route_retrieval_v1`: protocol-aware kNN over completed segments, aligned and continued from the anchor; candidate trajectories with similarity and provenance (Milestone 3) |
+| `maritime_forecast.evaluation.failure_review` | Per-sample failure categories for retrieval on a kept run, compared with the cell's best baseline (`scripts/failure_review.py`) |
 | `maritime_forecast.evaluation.export` | GeoJSON of a run (predictions, truth points, anchors) outside the immutable run directory |
 | `maritime_forecast.evaluation.forecast_eval` | Scores one served forecast against withheld truth (`ForecastEvaluation`) |
 

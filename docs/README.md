@@ -11,3 +11,4 @@
 | [cutoff-sampling.md](cutoff-sampling.md) | How cutoffs are chosen and stratified | When the sampler changes |
 | [benchmarks.md](benchmarks.md) | Benchmark results with run ids and file digests | After each kept benchmark run |
 | [model-integration-notes.md](model-integration-notes.md) | Per-model adaptation differences and limitations | When a model is added |
+| [failure-review.md](failure-review.md) | Where and why a model loses to the baselines, by category (Milestone 3 onwards) | After each failure review run |

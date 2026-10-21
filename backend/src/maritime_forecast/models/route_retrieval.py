@@ -74,6 +74,8 @@ PASS1_KEEP = 4  # approximate best edges per segment re-scored exactly
 EDGE_REACH_M = 3000.0  # edges up to 6 km (36 kn over 10 min) are found from their middle
 _POOL_CACHE: OrderedDict[tuple, _PoolArrays] = OrderedDict()
 _POOL_CACHE_SIZE = 2
+# Warning prefixes other code may match on (evaluation.failure_review).
+WARN_RADIUS_FALLBACK = "no reference within"
 _POOL_LOCK = threading.Lock()  # API routes run in a thread pool; build each pool once
 
 
@@ -225,7 +227,7 @@ def _xy_at(pool: _PoolArrays, frame: LocalFrame, seg: np.ndarray, t: np.ndarray)
     return x, y
 
 
-def _context_xy(history: AISHistory, frame: LocalFrame, t_anchor: float, steps: int,
+def context_xy(history: AISHistory, frame: LocalFrame, t_anchor: float, steps: int,
                 step_s: float, gap_s: float) -> np.ndarray:  # fmt: skip
     """Target positions at t_anchor - k*step (k = 1..steps), interpolated only between two of
     its own reports at most `gap_s` apart; stops at the first step that would bridge a gap.
@@ -339,7 +341,7 @@ class RouteRetrieval(BaseForecaster):
         t_a = last["observed_at"].timestamp()
         frame = LocalFrame(last["latitude_deg"], last["longitude_deg"])
         leads = np.array([t.timestamp() - t_a for t in horizon.target_times])
-        q_ctx = _context_xy(history, frame, t_a, cfg.context_steps, pool.step_s,
+        q_ctx = context_xy(history, frame, t_a, cfg.context_steps, pool.step_s,
                             cfg.index.segment.gap_minutes * 60)  # fmt: skip
         sog = anchor["sog_knots"] if anchor else None
         cog = anchor["cog_deg"] if anchor else None
@@ -394,7 +396,7 @@ class RouteRetrieval(BaseForecaster):
         ]
         warnings = []
         if radius != cfg.radii_m[0]:
-            warnings.append(f"no reference within {cfg.radii_m[0]:.0f} m; matched within "
+            warnings.append(f"{WARN_RADIUS_FALLBACK} {cfg.radii_m[0]:.0f} m; matched within "
                             f"{radius:.0f} m")  # fmt: skip
         if n_cov[central] < len(tt):
             held = (tt[max(n_cov[central] - 1, 0)] - history.as_of).total_seconds() / 3600
