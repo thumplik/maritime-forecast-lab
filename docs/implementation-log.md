@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 2 — Baselines and the evaluator** (in progress: slices 1–5 done; milestone check next). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 3 — Historical-route retrieval** (not started). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -586,3 +586,41 @@ make test && make lint && make gen-api && make web-test   # 246 passed
 - P-region masks are not built (P-region benchmarks are not built either).
 
 **Next step:** `/milestone-check` for Milestone 2. The open "done when" items to verify: calibration passes, and every model passes the invariance test with the current code.
+
+## 2026-10-21 — Milestone 2 check: complete
+
+**Milestone:** 2 — baselines and the evaluator
+**Done:** verified every §7 Milestone 2 task and "done when" criterion against current `main` (`1907912`).
+
+| Criterion | Evidence | Status |
+|---|---|---|
+| Persistence; CV (standard and paper-compatible); constant turn rate; damped velocity with τ per class fitted on train | `models/registry.py` (5 models). Fits in `data/model_params/damped_velocity_v1/` (P-known, P-unseen, train split). `test_baselines.py`, `test_fit_damped.py` | met |
+| Evaluator: paired scoring, `not_evaluable`, ADE/FDE (horizon error), along/cross-track, vessel-bootstrap CIs, stratification | `evaluation/runner.py`, `bootstrap.py`; `BenchmarkRun` validators; `test_runner.py`, `test_bootstrap.py` | met |
+| Feasibility flags against the navigable-water mask; OSM polygons plus a training-only AIS density mask | `geo/navigable_mask.py`, `evaluation/feasibility.py`, `data/manifests/masks/*.json`, `test_feasibility.py`, `docs/evaluation-protocol.md` § Feasibility | met |
+| `make calibrate` and the golden test | `make calibrate` → `calibration_20261021T103221Z` **PASS**: primary CV 4.03 / 9.65 / 16.16 km vs 3.69 / 9.03 / 15.33 (+9% / +7% / +5%, tolerance ±10%); `pytest -m golden` 3 passed in 334 s | met |
+| `POST /forecasts` with a deterministic cache; `POST /benchmarks`, `GET /benchmarks/{id}`, `/summary` | `api/app.py`, `api/jobs.py`; `test_api.py`, `test_api_benchmarks.py` (including a real spawned run) | met |
+| Unattended CLI benchmarks exporting JSON and GeoJSON | `make benchmark` → `run.json` + `report.md` + `exports/<run_id>/transiting.geojson`; `scripts/export_geojson.py` | met |
+| Leakage invariance: every model unchanged when post-cutoff data is altered or deleted | `test_invariance.py` (synthetic), `tests/golden/test_invariance_real.py`: all 5 registered models on real cutoffs, ok-fraction ≥ 0.8, no vacuous cases. **Passed on current code** | met |
+| **Done when:** unattended benchmarks of the baselines on P-known and P-unseen, persisted | `P-known_noaa_us_gulf_2023-06_20261021T034634Z`, `P-unseen_noaa_us_gulf_2023-06_20261021T034836Z` (digests in `docs/benchmarks.md`) | met |
+| **Done when:** passes calibration | above | met |
+| **Done when:** every model passes the invariance test | above | met |
+
+**Commands run:**
+```bash
+make test        # 246 passed, 3 deselected, 1 xfailed
+make lint        # clean
+make calibrate   # PASS; golden: 3 passed (333.6 s)
+```
+
+**Results:** calibration run `calibration_20261021T103221Z`, numbers above. They are identical to the earlier calibration runs.
+
+**Blockers / open questions:** none blocking.
+- The calibration margin at 1 h is +9% against a ±10% tolerance (unchanged since Milestone 0; explained in `docs/coverage-audit.md`).
+- Not in Milestone 2 scope and deferred: P-region benchmarks and masks; a per-dataset truth region for non-Gulf imports.
+
+**Next step (smallest first slice of Milestone 3):** the protocol-aware segment index (§5 R1, §6.2), with leakage tests and no forecasting yet:
+- index completed segments that end strictly before the cutoff;
+- P-unseen excludes test-assigned vessels; P-known allows the target's own earlier voyages;
+- tests prove no post-cutoff or test-vessel segment is ever eligible.
+
+Then a plain kNN `route_retrieval_v1` (alignment plus a median continuation, similarity labelled as such), behind the forecaster contract and the invariance harness.

@@ -4,7 +4,7 @@ Research workbench for forecasting where an AIS-tracked vessel will be 1 h – 3
 
 ## Where we are
 
-**Current milestone: 2 — baselines and the evaluator** (started 2026-10-20; Milestone 1 complete). Read API (`make api`), minimal web explorer, CI; `make dev` runs both. Forecast/benchmark contracts exist in `schemas/` (no endpoints yet).
+**Current milestone: 3 — historical-route retrieval** (Milestone 2 completed 2026-10-21). API serves data, forecasts, forecast evaluation and benchmarks (`make api`); minimal web explorer; CI; `make dev` runs both. Baselines B0, the paired evaluator, feasibility (navigable mask) and calibration are in place.
 Status, blockers and next step live in [docs/implementation-log.md](docs/implementation-log.md) — read it first, append to it last.
 
 ## Commands
@@ -27,7 +27,8 @@ make import MAPPING=<preset|yaml> DATASET=<id> FILES="..."   # any provider via 
 make fetch-dma DAYS="2023-06-01"   # Danish AIS; range-reads one day from monthly zips
 make api          # read API on :8000, OpenAPI docs at /docs
 make fit PROTOCOL=P-known         # damped-velocity tau on the TRAIN split -> data/model_params/ (commit it)
-make benchmark PROTOCOL=P-known   # unattended paired benchmark of product models -> data/runs/benchmarks/<run_id>/ (immutable)
+make benchmark PROTOCOL=P-known   # unattended paired benchmark of product models -> data/runs/benchmarks/<run_id>/ (immutable) + GeoJSON export
+make fetch-land && make mask PROTOCOL=P-known   # OSM land + train-split traffic -> navigable mask for feasibility
 ```
 
 Run one script directly: `uv run --project backend python scripts/<name>.py --help`.
