@@ -39,6 +39,20 @@ def _usable(sog, cog, flags=()) -> bool:
     return sog == 0 or not (cog is None or (isinstance(cog, float) and math.isnan(cog)))
 
 
+def select_anchor(history: AISHistory) -> tuple[dict | None, bool]:
+    """The most recent report with usable SOG/COG (not flagged sog_implausible), and whether
+    it is older than the latest report. Shared by every kinematic baseline."""
+    cols = ["observed_at", "latitude_deg", "longitude_deg", "sog_knots", "cog_deg"]
+    if "quality_flags" in history.reports.columns:
+        cols.append("quality_flags")
+    rows = history.reports.select(cols)
+    for i in range(rows.height - 1, -1, -1):
+        r = rows.row(i, named=True)
+        if _usable(r["sog_knots"], r["cog_deg"], r.get("quality_flags")):
+            return r, i != rows.height - 1
+    return None, False
+
+
 @dataclass
 class ConstantVelocity(BaseForecaster):
     model_id: str = "constant_velocity_v1"
@@ -56,17 +70,7 @@ class ConstantVelocity(BaseForecaster):
         )
 
     def _predict(self, history: AISHistory, horizon: ForecastHorizon):
-        cols = ["observed_at", "latitude_deg", "longitude_deg", "sog_knots", "cog_deg"]
-        if "quality_flags" in history.reports.columns:
-            cols.append("quality_flags")
-        rows = history.reports.select(cols)
-        anchor, fell_back = None, False
-        for i in range(rows.height - 1, -1, -1):
-            r = rows.row(i, named=True)
-            if _usable(r["sog_knots"], r["cog_deg"], r.get("quality_flags")):
-                anchor = r
-                fell_back = i != rows.height - 1
-                break
+        anchor, fell_back = select_anchor(history)
         if anchor is None:
             return self._result(
                 horizon,
@@ -104,6 +108,7 @@ class ConstantVelocityPaper(BaseForecaster):
             min_history_reports=1,
             needs_sog_cog=True,
             supports_missing_inputs=False,
+            calibration_only=True,
             description="Calibration-paper CV: last report's SOG/COG, extrapolated from as_of.",
         )
 

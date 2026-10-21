@@ -14,7 +14,7 @@ class Health(BaseModel):
     git_sha: str
     data_root_exists: bool
     datasets: int
-    models: list[str] = Field(default_factory=list, description="Installed forecasters (none yet)")
+    models: list[str] = Field(default_factory=list, description="Registered forecasters")
 
 
 class IngestTotals(BaseModel):
@@ -118,3 +118,24 @@ class Track(BaseModel):
     points: TrackPoints
 
     model_config = {"populate_by_name": True}
+
+
+class ModelInfo(BaseModel):
+    model_id: str
+    model_version: str
+    description: str
+    installed: bool
+    calibration_only: bool
+    reads_beyond_own_history: bool
+    max_horizon_hours: float
+    step_minutes: tuple[int, int]
+    min_history_reports: int
+    config: dict = Field(default_factory=dict, description="Parameters in use (e.g. fitted tau)")
+
+
+class ModelList(BaseModel):
+    dataset_id: str | None
+    parameters_from: str | None = Field(
+        None, description="Protocol whose TRAIN-split fit supplies fitted parameters"
+    )
+    models: list[ModelInfo]

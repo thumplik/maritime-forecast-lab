@@ -51,7 +51,7 @@ def env(tmp_path, monkeypatch):
     mpath = tmp_path / "m" / "splits" / "P-known__syn.json"
     mpath.parent.mkdir(parents=True)
     mpath.write_text(manifest.model_dump_json())
-    monkeypatch.setitem(registry._FACTORIES, "flaky_control", lambda s, d: FlakyControl())
+    monkeypatch.setitem(registry._FACTORIES, "flaky_control", lambda ctx: FlakyControl())
     loose = SamplerConfig(min_spacing_hours=0.25, max_per_vessel_day=50)
     cfg = BenchmarkConfig(
         dataset_id="syn", manifest_path=mpath, horizons_h=(0.25, 0.5), history_hours=1,
@@ -213,7 +213,7 @@ def test_under_capable_model_refused_before_any_run_exists(env, monkeypatch):
             c = super().capabilities()
             return c.model_copy(update={"model_id": self.model_id, "max_horizon_hours": 0.1})
 
-    monkeypatch.setitem(registry._FACTORIES, "short_control", lambda s, d: Short())
+    monkeypatch.setitem(registry._FACTORIES, "short_control", lambda ctx: Short())
     from dataclasses import replace
 
     with pytest.raises(ValueError, match="supports horizons up to"):

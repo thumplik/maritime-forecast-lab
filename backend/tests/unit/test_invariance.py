@@ -23,6 +23,8 @@ from maritime_forecast.models.base import (
 )
 from maritime_forecast.storage.parquet_store import ParquetStore
 
+PARAMS = {"damped_velocity_v1": {"taus_hours": {"default": 2.0, "cargo": 0.5}}}
+
 CASES = [
     (MOVING, T0 + timedelta(minutes=60)),
     (TURNING, T0 + timedelta(minutes=45, seconds=30)),  # between reports
@@ -46,14 +48,14 @@ def store(tmp_path_factory):
 
 
 def test_all_registered_models_are_invariant(store, tmp_path):
-    rep = check_invariance(registry_factories(), store, "syn", CASES, history_hours=3,
+    rep = check_invariance(registry_factories(PARAMS), store, "syn", CASES, history_hours=3,
                            workdir=tmp_path)  # fmt: skip
     assert rep.cases == len(CASES)
     assert rep.ok, rep.violations
     # Non-vacuous: every case has future reports in scope, so every perturbation bit,
     # and most comparisons were against a real (status ok) forecast.
     assert rep.vacuous == []
-    n = len(CASES) * len(registry_factories()) * 3  # 3 grids
+    n = len(CASES) * len(registry_factories(PARAMS)) * 3  # 3 grids
     assert rep.checks == n * (len(PERTURBATIONS) + 1)
     assert rep.ok_comparisons >= 0.8 * n * len(PERTURBATIONS)
 
@@ -96,7 +98,7 @@ def test_harness_self_check_rejects_a_perturbation_that_touches_the_past(store, 
         lambda src, t, v: f"SELECT * REPLACE (latitude_deg + 1 AS latitude_deg) FROM {src}",
     )
     with pytest.raises(AssertionError, match="before as_of"):
-        check_invariance(registry_factories(), store, "syn", CASES[:1], history_hours=3,
+        check_invariance(registry_factories(PARAMS), store, "syn", CASES[:1], history_hours=3,
                          grids=[(2, 10)], perturbations=[bad], workdir=tmp_path)  # fmt: skip
 
 
@@ -172,7 +174,7 @@ def test_harness_cannot_catch_a_process_global_cache_keyed_without_data_version(
 
 def test_vacuous_cases_are_reported_not_passed(store, tmp_path):
     late = T0 + timedelta(hours=10)  # MOVING stopped reporting at 02:00: no future in scope
-    rep = check_invariance(registry_factories(), store, "syn", [(MOVING, late)], history_hours=12,
+    rep = check_invariance(registry_factories(PARAMS), store, "syn", [(MOVING, late)], history_hours=12,
                            grids=[(2, 10)], workdir=tmp_path)  # fmt: skip
     vac = {p for _, _, p in rep.vacuous}
     assert {"delete_future", "shift_future", "flood_future"} <= vac

@@ -1,26 +1,29 @@
-"""Model registry: model_id -> factory(store, dataset_id). GET /models and benchmarks read this.
+"""Model registry: model_id -> factory(ModelContext). GET /models and benchmarks read this.
 
-Factories always receive the store and dataset a run uses. A model that needs data beyond the
-target's history (an index, fitted parameters) must build it from that store, never by
-opening the archive itself; the invariance harness blocks the real archive while it runs.
+Factories receive the ModelContext of a run: store, dataset, protocol and manifest hash. A
+model that needs data beyond the target's history (an index, fitted parameters) must take it
+from that context, never by opening the archive itself; the invariance harness blocks the real
+archive while it runs, and fitted parameters are only accepted for the matching manifest.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 
-from maritime_forecast.models.base import ModelCapabilities, TrajectoryForecaster
+from maritime_forecast.models.base import ModelCapabilities, ModelContext, TrajectoryForecaster
+from maritime_forecast.models.constant_turn import ConstantTurnRate
 from maritime_forecast.models.constant_velocity import ConstantVelocity, ConstantVelocityPaper
+from maritime_forecast.models.damped_velocity import DampedVelocity
 from maritime_forecast.models.persistence import Persistence
-from maritime_forecast.storage.parquet_store import ParquetStore
 
-Factory = Callable[[ParquetStore | None, str | None], TrajectoryForecaster]
+Factory = Callable[[ModelContext], TrajectoryForecaster]
 
-# Baselines use only AISHistory, so they ignore the store and dataset.
 _FACTORIES: dict[str, Factory] = {
-    "persistence_v1": lambda store, ds: Persistence(),
-    "constant_velocity_v1": lambda store, ds: ConstantVelocity(),
-    "constant_velocity_paper_v1": lambda store, ds: ConstantVelocityPaper(),
+    "persistence_v1": lambda ctx: Persistence(),
+    "constant_velocity_v1": lambda ctx: ConstantVelocity(),
+    "constant_velocity_paper_v1": lambda ctx: ConstantVelocityPaper(),
+    "constant_turn_rate_v1": lambda ctx: ConstantTurnRate(),
+    "damped_velocity_v1": DampedVelocity.from_context,
 }
 
 
@@ -32,15 +35,18 @@ def model_ids() -> list[str]:
     return sorted(_FACTORIES)
 
 
-def get_model(
-    model_id: str, store: ParquetStore | None = None, dataset_id: str | None = None
-) -> TrajectoryForecaster:
+def get_model(model_id: str, ctx: ModelContext | None = None) -> TrajectoryForecaster:
     try:
         factory = _FACTORIES[model_id]
     except KeyError:
         raise UnknownModel(f"unknown model {model_id!r}; available: {model_ids()}") from None
-    return factory(store, dataset_id)
+    return factory(ctx or ModelContext())
 
 
 def capabilities() -> list[ModelCapabilities]:
     return [get_model(m).capabilities() for m in model_ids()]
+
+
+def product_model_ids() -> list[str]:
+    """Models for product benchmarks: everything except calibration-only reproductions."""
+    return [c.model_id for c in capabilities() if not c.calibration_only]

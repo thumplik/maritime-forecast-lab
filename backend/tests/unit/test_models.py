@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime, timedelta
 
+import numpy as np
 import polars as pl
 import pytest
 
@@ -10,6 +11,7 @@ from maritime_forecast.models.base import (
     AISHistory,
     ForecastHorizon,
     LeakageError,
+    ModelContext,
     TrajectoryForecaster,
 )
 from maritime_forecast.models.registry import UnknownModel, capabilities, get_model, model_ids
@@ -54,21 +56,41 @@ def test_horizon_grid():
 
 
 def test_registry():
-    assert model_ids() == ["constant_velocity_paper_v1", "constant_velocity_v1", "persistence_v1"]
-    assert get_model("persistence_v1", None, None).model_id == "persistence_v1"
+    assert model_ids() == [
+        "constant_turn_rate_v1",
+        "constant_velocity_paper_v1",
+        "constant_velocity_v1",
+        "damped_velocity_v1",
+        "persistence_v1",
+    ]
+    assert get_model("persistence_v1").model_id == "persistence_v1"
+    from maritime_forecast.models.registry import product_model_ids
+
+    assert "constant_velocity_paper_v1" not in product_model_ids()  # calibration only
     for m in model_ids():
         assert isinstance(get_model(m), TrajectoryForecaster)
     assert {c.model_id for c in capabilities()} == set(model_ids())
-    assert not any(c.reads_beyond_own_history for c in capabilities())
+    reads = {c.model_id for c in capabilities() if c.reads_beyond_own_history}
+    assert reads == {"damped_velocity_v1"}  # fitted parameters
     with pytest.raises(UnknownModel):
         get_model("oracle")
 
 
+DAMPED_CTX = ModelContext(params={"taus_hours": {"default": 2.0}})
+
+
 @pytest.mark.parametrize(
-    "model_id", ["persistence_v1", "constant_velocity_v1", "constant_velocity_paper_v1"]
+    "model_id",
+    [
+        "persistence_v1",
+        "constant_velocity_v1",
+        "constant_velocity_paper_v1",
+        "constant_turn_rate_v1",
+        "damped_velocity_v1",
+    ],
 )
 def test_every_model_returns_the_requested_grid_or_a_typed_error(model_id):
-    m = get_model(model_id)
+    m = get_model(model_id, DAMPED_CTX)
     f = m.predict(hist([(-10, 29, -94, 10, 90), (0, 29.01, -94, 10, 90)]), H)
     assert isinstance(f, ModelForecast) and f.status == "ok"
     assert [p.timestamp for p in f.points] == H.target_times
@@ -180,3 +202,89 @@ def test_cv_standard_skips_implausible_sog_anchor():
     df = h.reports.with_columns(quality_flags=pl.Series([[], ["sog_implausible"]]))
     f = m.predict(AISHistory(h.vessel_id, h.as_of, 24, df), H)
     assert f.status == "ok" and any("earlier report" in w for w in f.warnings)
+
+
+# -- damped velocity --------------------------------------------------------------------------
+def test_damped_distance_limits():
+    from maritime_forecast.models.damped_velocity import damped_distance_m
+
+    lead = np.array([600.0, 3600.0, 36000.0])
+    cv = damped_distance_m(10, lead, None)
+    assert np.allclose(cv, 10 * 1852 / 3600 * lead)
+    d = damped_distance_m(10, lead, 1.0)
+    assert np.all(d < cv) and d[-1] == pytest.approx(10 * 1852, rel=1e-3)  # saturates at SOG*tau
+    assert damped_distance_m(10, lead, 1e-6).max() < 1  # tau -> 0: persistence
+
+
+def test_damped_uses_class_tau_and_default():
+    ctx = ModelContext(params={"taus_hours": {"cargo": 0.5, "default": None}})
+    m = get_model("damped_velocity_v1", ctx)
+    h = hist([(0, 29, -94, 10, 90)])
+    far = ForecastHorizon(AS_OF, 6, 60)
+
+    def final_distance(cls):
+        hh = AISHistory(h.vessel_id, h.as_of, 24, h.reports.with_columns(vessel_class=pl.lit(cls)))
+        p = m.predict(hh, far).points[-1]
+        return distance_m(29, -94, p.latitude_deg, p.longitude_deg)
+
+    assert final_distance("cargo") == pytest.approx(10 * 1852 * 0.5 * (1 - np.exp(-12)), rel=1e-3)
+    assert final_distance("tug_tow") == pytest.approx(10 * 1852 * 6, rel=1e-6)  # default: CV
+
+
+def test_damped_refuses_unfitted_and_mismatched_fits(tmp_path, monkeypatch):
+    import maritime_forecast.models.damped_velocity as dv
+
+    f = get_model("damped_velocity_v1").predict(hist([(0, 29, -94, 10, 90)]), H)
+    assert f.status == "unsupported" and f.error.code == "not_fitted"
+    monkeypatch.setattr(dv, "FIT_DIR", tmp_path)
+    fit = dv.DampedVelocityFit(
+        protocol="P-known",
+        dataset_id="d",
+        manifest_sha256="a" * 64,
+        split="train",
+        taus_hours={"default": 2.0},
+        n_cutoffs={},
+        objective={},
+        config={},
+        data_provenance="x",
+        git_sha="x",
+        created_at=AS_OF,
+    )
+    dv.fit_path("P-known", "d").write_text(fit.model_dump_json())
+    ok_ctx = ModelContext(dataset_id="d", protocol="P-known", manifest_sha256="a" * 64)
+    assert get_model("damped_velocity_v1", ok_ctx).capabilities().installed
+    bad = ModelContext(dataset_id="d", protocol="P-known", manifest_sha256="b" * 64)
+    m = get_model("damped_velocity_v1", bad)
+    assert not m.capabilities().installed
+    assert m.predict(hist([(0, 29, -94, 10, 90)]), H).error.code == "not_fitted"
+
+
+# -- constant turn rate -----------------------------------------------------------------------
+def test_turn_rate_estimate_wraps():
+    from maritime_forecast.models.constant_turn import turn_rate_deg_s
+
+    rate = turn_rate_deg_s(np.array([0, 60, 120.0]), np.array([358.0, 0.0, 2.0]))
+    assert rate == pytest.approx(2 / 60)
+    assert turn_rate_deg_s(np.array([0.0]), np.array([10.0])) is None
+
+
+def test_turn_path_straight_and_circle():
+    from maritime_forecast.models.constant_turn import turn_path
+
+    d, az = turn_path(10, 45.0, 0.0, [3600.0], decay_s=1e9, step_s=30)
+    assert d[0] == pytest.approx(10 * 1852, rel=1e-9) and az[0] == pytest.approx(45.0)
+    d, _ = turn_path(10, 0.0, 0.1, [3600.0], decay_s=1e12, step_s=1)  # 360 deg in 1 h
+    assert d[0] < 50
+
+
+def test_ctr_turns_with_history_and_caps():
+    m = get_model("constant_turn_rate_v1")
+    rows = [(-10 + k, 29 + 0.001 * k, -94, 10, (90 + 2 * k) % 360) for k in range(11)]
+    hz = ForecastHorizon(AS_OF, 1, 10)
+    f = m.predict(hist(rows), hz)
+    cv = get_model("constant_velocity_v1").predict(hist(rows), hz)
+    assert f.status == "ok"
+    a, b = f.points[-1], cv.points[-1]
+    assert distance_m(a.latitude_deg, a.longitude_deg, b.latitude_deg, b.longitude_deg) > 500
+    wild = [(-2, 29, -94, 10, 0), (-1, 29.001, -94, 10, 90), (0, 29.002, -94, 10, 180)]
+    assert any("capped" in w for w in m.predict(hist(wild), H).warnings)

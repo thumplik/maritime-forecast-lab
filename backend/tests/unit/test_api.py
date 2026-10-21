@@ -192,3 +192,81 @@ def test_parse_bbox_order():
 def test_openapi_lists_endpoints(client):
     paths = client.get("/openapi.json").json()["paths"]
     assert {"/health", "/datasets", "/vessels", "/vessels/{vessel_id}/track"} <= set(paths)
+
+
+# -- models and forecasts ---------------------------------------------------------------------
+def test_models_endpoint(client):
+    r = client.get("/models", params={"dataset_id": "syn"}).json()
+    by = {m["model_id"]: m for m in r["models"]}
+    assert set(by) == {"persistence_v1", "constant_velocity_v1", "constant_velocity_paper_v1",
+                       "constant_turn_rate_v1", "damped_velocity_v1"}  # fmt: skip
+    assert by["constant_velocity_paper_v1"]["calibration_only"]
+    assert not by["damped_velocity_v1"]["installed"]  # no fit for this dataset
+    assert by["damped_velocity_v1"]["reads_beyond_own_history"]
+    assert r["parameters_from"] == "P-known"
+    err(client.get("/models", params={"dataset_id": "nope"}), 404, "dataset_not_found")
+
+
+def _req(**kw):
+    return {"dataset_id": "syn", "vessel_id": "367000001", "as_of": "2023-06-01T01:00:00Z",
+            "horizon_hours": 1, "step_minutes": 10, "history_hours": 2,
+            "model_ids": ["persistence_v1", "constant_velocity_v1", "damped_velocity_v1"]} | kw  # fmt: skip
+
+
+def test_forecast_endpoint(client):
+    r = client.post("/forecasts", json=_req())
+    assert r.status_code == 200, r.text
+    f = r.json()
+    by = {x["model_id"]: x for x in f["forecasts"]}
+    assert by["persistence_v1"]["status"] == "ok" and len(by["persistence_v1"]["points"]) == 6
+    assert by["persistence_v1"]["points"][0]["timestamp"] == "2023-06-01T01:10:00Z"
+    assert by["damped_velocity_v1"]["status"] == "unsupported"
+    assert by["damped_velocity_v1"]["error"]["code"] == "not_fitted"
+    cov = f["input_coverage"]
+    assert cov["last_report"] == "2023-06-01T01:00:00Z" and cov["n_reports"] == 13
+    assert "truth" not in json.dumps(f).lower() or "truth is never" in json.dumps(f)
+
+
+def test_forecast_id_deterministic_and_cache_clean(client):
+    a = client.post("/forecasts", json=_req()).json()
+    b = client.post("/forecasts", json=_req(show_ground_truth=True)).json()
+    c = client.post("/forecasts", json=_req()).json()
+    assert a["forecast_id"] == b["forecast_id"] == c["forecast_id"]
+    assert b["warnings"] and not c["warnings"]  # per-request warning not cached
+    d = client.post("/forecasts", json=_req(as_of="2023-06-01T01:30:00Z")).json()
+    assert d["forecast_id"] != a["forecast_id"]
+    assert a["data_version"] == d["data_version"]
+
+
+@pytest.mark.parametrize(
+    "bad,code",
+    [
+        ({"model_ids": ["oracle_v9"]}, "unknown_model"),
+        ({"as_of": "2023-06-01T01:00:00"}, "invalid_parameter"),
+        ({"horizon_hours": 72, "step_minutes": 1}, "invalid_parameter"),
+        ({"vessel_id": "../x"}, "invalid_parameter"),
+        ({"model_ids": []}, "invalid_parameter"),
+    ],
+)
+def test_forecast_errors(client, bad, code):
+    err(client.post("/forecasts", json=_req(**bad)), 422, code)
+
+
+def test_forecast_unknown_dataset(client):
+    err(client.post("/forecasts", json=_req(dataset_id="nope")), 404, "dataset_not_found")
+
+
+def test_data_version_changes_forecast_id(client, tmp_path):
+    a = client.post("/forecasts", json=_req()).json()
+    store = ParquetStore(tmp_path / "canonical")
+    src = str(store.files("syn")[0])
+    store.write(
+        "syn",
+        f"SELECT * REPLACE (latitude_deg + 0.001 AS latitude_deg) "
+        f"FROM read_parquet('{src}', hive_partitioning=false)",
+    )  # same row counts
+    b = client.post("/forecasts", json=_req()).json()
+    assert a["data_version"] != b["data_version"] and a["forecast_id"] != b["forecast_id"]
+    pa = a["forecasts"][0]["points"][0]["latitude_deg"]
+    pb = b["forecasts"][0]["points"][0]["latitude_deg"]
+    assert pb == pytest.approx(pa + 0.001)  # not served from a stale cache

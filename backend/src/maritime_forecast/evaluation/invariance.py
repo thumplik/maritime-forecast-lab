@@ -249,8 +249,15 @@ def check_invariance(
     return report
 
 
-def registry_factories() -> dict[str, Factory]:
-    """Factories for every registered model, each built from the store it is handed."""
+def registry_factories(params: dict[str, dict] | None = None) -> dict[str, Factory]:
+    """Factories for every registered model, each built from the store it is handed.
+    `params` supplies explicit fitted parameters per model (e.g. damped-velocity taus), as a
+    benchmark would load them for its manifest."""
+    from maritime_forecast.models.base import ModelContext
     from maritime_forecast.models.registry import get_model, model_ids
 
-    return {m: (lambda store, ds, m=m: get_model(m, store, ds)) for m in model_ids()}
+    params = params or {}
+    return {
+        m: (lambda store, ds, m=m: get_model(m, ModelContext(store, ds, params=params.get(m))))
+        for m in model_ids()
+    }

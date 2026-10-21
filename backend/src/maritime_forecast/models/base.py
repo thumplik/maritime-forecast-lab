@@ -155,6 +155,23 @@ class ModelCapabilities(BaseModel):
         "index, neighbours, fitted parameters). Required: no default, so it cannot be forgotten."
     )
     installed: bool = True
+    calibration_only: bool = Field(
+        False,
+        description="Exists to reproduce a published protocol (§6.6); excluded from "
+        "product benchmarks and headline tables by default",
+    )
+
+
+@dataclass(frozen=True)
+class ModelContext:
+    """What a model factory may use besides AISHistory. Fitted parameters must match the
+    protocol under evaluation (manifest_sha256) or be passed explicitly in `params`."""
+
+    store: ParquetStore | None = None
+    dataset_id: str | None = None
+    protocol: str | None = None
+    manifest_sha256: str | None = None
+    params: dict | None = None
 
 
 @runtime_checkable

@@ -36,8 +36,8 @@ from maritime_forecast.evaluation.admission import DEFAULT_ADMISSION, admit_by_s
 from maritime_forecast.evaluation.bootstrap import paired_vessel_bootstrap
 from maritime_forecast.evaluation.truth import truth_sql
 from maritime_forecast.geo.geodesic import along_cross_track, distance_m, inverse
-from maritime_forecast.models.base import ForecastHorizon, histories_for_cutoffs
-from maritime_forecast.models.registry import get_model, model_ids
+from maritime_forecast.models.base import ForecastHorizon, ModelContext, histories_for_cutoffs
+from maritime_forecast.models.registry import get_model, model_ids, product_model_ids
 from maritime_forecast.provenance import git_sha
 from maritime_forecast.schemas.benchmark import (
     HEADLINE_MAX_FAILURE_RATE,
@@ -80,7 +80,7 @@ class BenchmarkConfig:
     )
 
     def models(self) -> tuple[str, ...]:
-        return self.model_ids or tuple(model_ids())
+        return self.model_ids or tuple(product_model_ids())
 
     def as_dict(self) -> dict:
         d = asdict(self)
@@ -131,13 +131,13 @@ def select_cutoffs(
     )
 
 
-def predict_all(cfg, store, cutoffs, grid_steps):
+def predict_all(cfg, store, cutoffs, grid_steps, ctx: ModelContext):
     """Per model: (status[N], error_code[N], lat[N,S], lon[N,S], warnings count, seconds)."""
     horizon_h = max(cfg.horizons_h)
     n, s = cutoffs.height, grid_steps
     out = {}
     for m in cfg.models():
-        model = get_model(m, store, cfg.dataset_id)
+        model = get_model(m, ctx)
         status = np.empty(n, dtype=object)
         code = np.full(n, None, dtype=object)
         lat = np.full((n, s), np.nan)
@@ -245,8 +245,18 @@ def run_benchmark(
     if manifest.region_split is not None:
         raise NotImplementedError("P-region benchmarks need context positions; not in slice 2")
     run_id = run_id or f"{manifest.protocol}_{cfg.dataset_id}_{started:%Y%m%dT%H%M%SZ}"
+    ctx = ModelContext(
+        store=store,
+        dataset_id=cfg.dataset_id,
+        protocol=manifest.protocol,
+        manifest_sha256=_sha256_file(Path(cfg.manifest_path)),
+    )
     for m in cfg.models():  # fail before creating a run, not halfway through it
-        caps = get_model(m, store, cfg.dataset_id).capabilities()
+        caps = get_model(m, ctx).capabilities()
+        if not caps.installed:
+            raise ValueError(
+                f"{m} is not installed/fitted for {manifest.protocol} on {cfg.dataset_id}"
+            )
         if caps.max_horizon_hours < max(cfg.horizons_h):
             raise ValueError(
                 f"{m} supports horizons up to {caps.max_horizon_hours} h; "
@@ -266,13 +276,17 @@ def run_benchmark(
             "manifest_sha256": _sha256_file(Path(cfg.manifest_path)),
         },
         models=[
-            {"model_id": m, "model_version": get_model(m).capabilities().model_version}
+            {
+                "model_id": m,
+                "model_version": get_model(m, ctx).capabilities().model_version,
+                "config": get_model(m, ctx).config,
+            }
             for m in cfg.models()
         ],
         horizons_minutes=[h * 60 for h in cfg.horizons_h],
     )
     try:
-        return _run(cfg, store, runs, run_id, manifest, base_record)
+        return _run(cfg, store, runs, run_id, manifest, base_record, ctx)
     except Exception as e:
         # A failed run is recorded and finalized too; never an orphan directory.
         failed = BenchmarkRun(
@@ -292,12 +306,12 @@ def _provenance(cfg: BenchmarkConfig) -> str:
     return cfg.dataset_id
 
 
-def _run(cfg, store, runs, run_id, manifest, base_record) -> BenchmarkRun:
+def _run(cfg, store, runs, run_id, manifest, base_record, ctx) -> BenchmarkRun:
     cutoffs = select_cutoffs(cfg, store, manifest)
     step_min = cfg.step_minutes
     grid_steps = round(max(cfg.horizons_h) * 60 / step_min)
     h_steps = {h: round(h * 60 / step_min) for h in cfg.horizons_h}
-    preds = predict_all(cfg, store, cutoffs, grid_steps)
+    preds = predict_all(cfg, store, cutoffs, grid_steps, ctx)
     truth = truth_grid(cfg, store, cutoffs, grid_steps)
     models = list(cfg.models())
 

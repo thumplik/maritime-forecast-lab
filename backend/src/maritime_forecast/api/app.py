@@ -6,8 +6,10 @@ Docs: http://localhost:8000/docs
 
 # No `from __future__ import annotations`: FastAPI must resolve the Annotated limits that
 # reference `settings` inside create_app at definition time.
+import hashlib
 import json
 import re
+from collections import OrderedDict
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
@@ -30,6 +32,8 @@ from maritime_forecast.api.models import (
     Gap,
     Health,
     IngestTotals,
+    ModelInfo,
+    ModelList,
     Segment,
     Track,
     TrackPoints,
@@ -42,8 +46,11 @@ from maritime_forecast.data.segment import (
     gap_segments,
     segments_and_gaps,
 )
+from maritime_forecast.models.base import ForecastHorizon, ModelContext, history_from_store
+from maritime_forecast.models.registry import get_model, model_ids
 from maritime_forecast.provenance import git_sha
 from maritime_forecast.schemas.dataset import DatasetManifest
+from maritime_forecast.schemas.forecast import ForecastRequest, ForecastResponse
 from maritime_forecast.storage.parquet_store import CANONICAL_ROOT, ParquetStore, connect
 
 DATASET_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
@@ -59,6 +66,9 @@ class ApiSettings:
     max_track_points: int = 200_000
     max_vessel_page: int = 1000
     gap_minutes: float = DEFAULT_SEGMENT_CONFIG.gap_minutes
+    # Fitted parameters for the API come from this protocol's TRAIN split (deployment fit).
+    deployment_protocol: str = "P-known"
+    forecast_cache_size: int = 256
     cors_origins: list[str] = field(
         default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"]
     )
@@ -180,6 +190,35 @@ def _admission(settings: ApiSettings, dataset_id: str) -> Admission | None:
     return None
 
 
+def _model_context(
+    settings: ApiSettings, store: ParquetStore, dataset_id: str | None
+) -> ModelContext:
+    if dataset_id is None:
+        return ModelContext()
+    proto = settings.deployment_protocol
+    mpath = settings.manifest_dir / "splits" / f"{proto}__{dataset_id}.json"
+    sha = hashlib.sha256(mpath.read_bytes()).hexdigest() if mpath.exists() else None
+    return ModelContext(store=store, dataset_id=dataset_id, protocol=proto, manifest_sha256=sha)
+
+
+def _data_version(settings: ApiSettings, store: ParquetStore, dataset_id: str) -> str:
+    """Identity of the data a forecast read, part of every cache key: the dataset manifest's
+    mapping, inputs and update time, plus every partition file's name, size and mtime (so a
+    rewrite that keeps row counts still changes it)."""
+    m = _manifest(settings, dataset_id)
+    files = store.files(dataset_id)
+    basis = json.dumps(
+        {
+            "mapping": m.mapping_id if m else None,
+            "inputs": [i.sha256 for i in m.inputs] if m else None,
+            "updated_at": str(m.updated_at) if m else None,
+            "files": [(f.parent.name, f.stat().st_size, f.stat().st_mtime_ns) for f in files],
+        },
+        sort_keys=True,
+    )
+    return hashlib.sha256(basis.encode()).hexdigest()[:16]
+
+
 # -- app ---------------------------------------------------------------------------------
 def create_app(settings: ApiSettings | None = None) -> FastAPI:
     settings = settings or ApiSettings()
@@ -193,7 +232,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
     app.state.ctx = Context(settings)
     errors.install(app)
     app.add_middleware(
-        CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["GET"],
+        CORSMiddleware, allow_origins=settings.cors_origins, allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )  # fmt: skip
     R = errors.ERROR_RESPONSES
@@ -205,6 +244,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
             git_sha=ctx.git_sha,
             data_root_exists=settings.store_root.exists(),
             datasets=len(store.datasets()),
+            models=model_ids(),
         )
 
     @app.get("/datasets", response_model=DatasetList, tags=["data"])
@@ -316,6 +356,98 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
                 quality_flags=[list(f) for f in df["quality_flags"].to_list()],
             ),
         )  # fmt: skip
+
+    @app.get("/models", response_model=ModelList, tags=["models"])
+    def models(
+        store: StoreDep,
+        dataset_id: Annotated[str | None, Query(pattern=DATASET_ID_PATTERN)] = None,
+    ) -> ModelList:
+        if dataset_id is not None:
+            _partitions(store, dataset_id)
+        ctx = _model_context(settings, store, dataset_id)
+        out = []
+        for m in model_ids():
+            model = get_model(m, ctx)
+            c = model.capabilities()
+            out.append(
+                ModelInfo(
+                    model_id=c.model_id,
+                    model_version=c.model_version,
+                    description=c.description,
+                    installed=c.installed,
+                    calibration_only=c.calibration_only,
+                    reads_beyond_own_history=c.reads_beyond_own_history,
+                    max_horizon_hours=c.max_horizon_hours,
+                    step_minutes=c.step_minutes,
+                    min_history_reports=c.min_history_reports,
+                    config=model.config,
+                )
+            )
+        return ModelList(
+            dataset_id=dataset_id,
+            parameters_from=settings.deployment_protocol if dataset_id else None,
+            models=out,
+        )
+
+    cache: OrderedDict[str, ForecastResponse] = OrderedDict()
+
+    @app.post("/forecasts", response_model=ForecastResponse, responses=R, tags=["models"])
+    def forecasts(store: StoreDep, req: ForecastRequest) -> ForecastResponse:
+        _partitions(store, req.dataset_id)
+        unknown = [m for m in req.model_ids if m not in model_ids()]
+        if unknown:
+            raise ApiError(
+                422, "unknown_model", f"unknown model(s) {unknown}", {"available": model_ids()}
+            )
+        ctx = _model_context(settings, store, req.dataset_id)
+        built = {m: get_model(m, ctx) for m in req.model_ids}
+        data_version = _data_version(settings, store, req.dataset_id)
+        key_basis = json.dumps(
+            {
+                "request": req.model_dump(mode="json", exclude={"show_ground_truth"}),
+                "configs": {m: built[m].config for m in req.model_ids},
+                "versions": {m: built[m].capabilities().model_version for m in req.model_ids},
+                "data_version": data_version,
+            },
+            sort_keys=True,
+            default=str,
+        )
+        forecast_id = hashlib.sha256(key_basis.encode()).hexdigest()[:24]
+        warnings = []
+        if req.show_ground_truth:
+            warnings.append(
+                "show_ground_truth: the evaluation endpoint is not available yet; "
+                "truth is never part of a forecast response"
+            )
+        if forecast_id in cache:
+            cache.move_to_end(forecast_id)
+            return cache[forecast_id].model_copy(update={"warnings": warnings})
+        as_of = req.as_of.astimezone(UTC)
+        history = history_from_store(store, req.dataset_id, req.vessel_id, as_of, req.history_hours)
+        horizon = ForecastHorizon(as_of, req.horizon_hours, req.step_minutes)
+        times = history.reports["observed_at"].to_list()
+        segs = gap_segments(times, settings.gap_minutes) if times else []
+        manifest = _manifest(settings, req.dataset_id)
+        resp = ForecastResponse(
+            forecast_id=forecast_id,
+            dataset_id=req.dataset_id,
+            vessel_id=req.vessel_id,
+            as_of=as_of,
+            source=manifest.source_id if manifest else req.dataset_id,
+            data_version=data_version,
+            input_coverage={
+                "n_reports": len(times),
+                "first_report": times[0] if times else None,
+                "last_report": times[-1] if times else None,
+                "last_report_age_s": (as_of - times[-1]).total_seconds() if times else None,
+                "n_gaps": max(segs) if segs else 0,
+            },
+            forecasts=[built[m].predict(history, horizon) for m in req.model_ids],
+        )
+        cache[forecast_id] = resp  # request-independent: no per-request warnings inside
+        if len(cache) > settings.forecast_cache_size:
+            cache.popitem(last=False)
+        return resp.model_copy(update={"warnings": warnings})
 
     return app
 
