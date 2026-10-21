@@ -13,7 +13,9 @@ archive; what a forecast may use is decided per cutoff by `eligible()`:
     segments built from the full archive equal those built from data truncated at as_of.
   * **Protocol vessels.** P-known: every vessel, including the target's own earlier voyages.
     Vessel-disjoint protocols (P-unseen): only vessels assigned to the `train` split, and
-    never the target. P-region: not built yet (raises).
+    never the target. P-region: only segments lying wholly on the train side (their bounding
+    box clear of the test region grown by the buffer), from any vessel, including the target's
+    own train-side voyages.
   * **Time pool** (`pool`):
       - `"frozen"` (default; headline benchmarks): only segments known complete by the end of
         the manifest's TRAIN period(s), so `known_at <= min(as_of, train end)`. The retrieval
@@ -160,9 +162,14 @@ def eligible(
     index: pl.DataFrame, as_of: datetime, target_vessel: str, manifest, pool: Pool = "frozen"
 ) -> pl.DataFrame:
     """Segments a forecast for `target_vessel` at `as_of` may use under `manifest`."""
-    if manifest.region_split is not None:
-        raise NotImplementedError("P-region retrieval needs side-aware eligibility; not built")
     out = index.filter(pl.col("known_at") <= pool_until(as_of, manifest, pool))
+    rs = manifest.region_split
+    if rs is not None:  # train side only: the whole segment beyond the buffer band
+        a, b, c, d = rs.outer
+        out = out.filter(
+            (pl.col("lat_max") < a) | (pl.col("lat_min") > b)
+            | (pl.col("lon_max") < c) | (pl.col("lon_min") > d)
+        )  # fmt: skip
     va = manifest.vessel_assignment
     if va is not None:
         vids = out["vessel_id"].unique().to_list()

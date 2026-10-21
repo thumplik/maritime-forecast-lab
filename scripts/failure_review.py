@@ -74,7 +74,7 @@ def render(run_id: str, summary: pl.DataFrame, n_failed: int) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     g = ap.add_mutually_exclusive_group(required=True)
-    g.add_argument("--protocol", choices=["P-known", "P-unseen"])
+    g.add_argument("--protocol", choices=["P-known", "P-unseen", "P-region"])
     g.add_argument("--run-id")
     ap.add_argument("--dataset-id", default="noaa_us_gulf_2023-06")
     ap.add_argument("--split", default="test", help="with --protocol: which split's latest run")

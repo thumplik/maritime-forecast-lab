@@ -292,8 +292,6 @@ class RouteRetrieval(BaseForecaster):
                     manifest = SplitManifest.model_validate_json(raw)
         if ctx.store is None or ctx.dataset_id is None or (manifest is None and not why):
             return cls(cfg=cfg)
-        if manifest is not None and manifest.region_split is not None:
-            why = "P-region retrieval needs side-aware eligibility; not built"
         if (
             manifest is not None
             and cfg.pool == "frozen"

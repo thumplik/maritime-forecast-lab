@@ -245,3 +245,45 @@ def test_window_spanning_another_period_is_excluded():
     ])  # fmt: skip
     assert m.window_split("v", d + timedelta(hours=8), d + timedelta(hours=12)) is None
     assert m.window_split("v", d + timedelta(hours=1), d + timedelta(hours=5)) == "test"
+
+
+def test_region_window_ok_uses_context_for_test_and_labels_for_train(tmp_path, monkeypatch):
+    """SYNTHETIC tracks around a test box [29.0, 29.5] x [-95, -94] with a 10 km buffer."""
+    import polars as pl
+
+    import maritime_forecast.data.ingest as ingest_mod
+    from maritime_forecast.data.ingest import ingest
+    from maritime_forecast.data.mapping import load_mapping
+    from maritime_forecast.evaluation.runner import region_window_ok
+    from maritime_forecast.schemas.manifest import Box, RegionSplit
+
+    monkeypatch.setattr(ingest_mod, "MANIFEST_DIR", tmp_path / "m")
+    t0 = datetime(2023, 6, 5, tzinfo=UTC)
+    head = "MMSI,BaseDateTime,LAT,LON,SOG,COG,Heading,VesselType,Status,Length,Width,Draft,TransceiverClass"
+    rows = [head]
+
+    def track(mmsi, lats):  # one report per 10 min from t0, at lon -94.5 (or far east)
+        for k, (la, lo) in enumerate(lats):
+            t = t0 + timedelta(minutes=10 * k)
+            rows.append(f"{mmsi},{t:%Y-%m-%dT%H:%M:%S},{la},{lo},8,0,511,70,0,100,20,5,A")
+
+    inside, buffer_, far = (29.2, -94.5), (29.55, -94.5), (29.2, -90.0)
+    track("999200001", [inside] * 24)  # test side throughout
+    track("999200002", [buffer_] * 3 + [inside] * 21)  # context starts in the buffer
+    track("999200003", [far] * 24)  # train side throughout
+    track("999200004", [far] * 12 + [buffer_] * 12)  # train context, label enters the buffer
+    csv = tmp_path / "SYNTHETIC_region.csv"
+    csv.write_text("\n".join(rows) + "\n")
+    store = ParquetStore(tmp_path / "canonical")
+    ingest([csv], load_mapping("noaa_marinecadastre"), "reg", store=store)
+    rs = RegionSplit(test_region=Box(name="t", lat_min=29.0, lat_max=29.5, lon_min=-95.0,
+                                     lon_max=-94.0), buffer_km=10)  # fmt: skip
+    as_of = t0 + timedelta(hours=1, minutes=50)
+    cut = pl.DataFrame({"vessel_id": ["999200001", "999200002", "999200003", "999200004"],
+                        "observed_at": [as_of] * 4}).with_columns(
+        pl.col("observed_at").dt.cast_time_unit("us"))  # fmt: skip
+    hist, max_h = timedelta(hours=2), timedelta(hours=1)
+    test_ok = region_window_ok(store, "reg", cut, rs, "test", hist, max_h).to_list()
+    assert test_ok == [True, False, False, False]
+    train_ok = region_window_ok(store, "reg", cut, rs, "train", hist, max_h).to_list()
+    assert train_ok == [False, False, True, False]  # 4: its label reports enter the buffer

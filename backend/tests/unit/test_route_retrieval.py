@@ -166,17 +166,23 @@ def test_no_reference_nearby_is_a_typed_failure(store):
     assert f.status == "failed" and f.error.code == "no_references" and not f.points
 
 
-def test_unavailable_without_a_manifest_and_refuses_p_region(store):
+def test_unavailable_without_a_manifest_and_p_region_uses_train_side_only(store):
     m = get_model("route_retrieval_v1", ModelContext(store, "lanes"))
     assert not m.capabilities().installed
     caps = get_model("route_retrieval_v1").capabilities()
     assert caps.reads_beyond_own_history and caps.uses_store_at_predict
     from maritime_forecast.schemas.manifest import Box, RegionSplit
 
-    box = Box(name="b", lat_min=0, lat_max=1, lon_min=0, lon_max=1)
-    pr = _manifest().model_copy(update={"protocol": "P-region", "region_split": RegionSplit(
-        test_region=box, buffer_km=0)})  # fmt: skip
-    assert not _model(store, manifest=pr).capabilities().installed
+    def region(box):
+        return _manifest().model_copy(update={"protocol": "P-region", "region_split": RegionSplit(
+            test_region=box, buffer_km=20)})  # fmt: skip
+
+    far = region(Box(name="b", lat_min=0, lat_max=1, lon_min=0, lon_max=1))
+    assert _model(store, manifest=far).capabilities().installed
+    assert _forecast(store, manifest=far).status == "ok"  # every lane is on the train side
+    here = region(Box(name="h", lat_min=28.5, lat_max=29.8, lon_min=-95.0, lon_max=-94.0))
+    f = _forecast(store, manifest=here)  # the lanes are the test waters: nothing to retrieve
+    assert f.status == "failed" and f.error.code == "no_references"
 
 
 def test_pool_cache_is_keyed_by_data_version(store, tmp_path):

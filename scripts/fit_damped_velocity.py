@@ -22,7 +22,7 @@ from maritime_forecast.storage.parquet_store import ParquetStore
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("--protocol", required=True, choices=["P-known", "P-unseen"])
+    ap.add_argument("--protocol", required=True, choices=["P-known", "P-unseen", "P-region"])
     ap.add_argument("--dataset-id", default="noaa_us_gulf_2023-06")
     args = ap.parse_args()
 

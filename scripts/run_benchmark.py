@@ -26,7 +26,7 @@ from maritime_forecast.storage.run_store import RunStore
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    ap.add_argument("--protocol", required=True, choices=["P-known", "P-unseen"])
+    ap.add_argument("--protocol", required=True, choices=["P-known", "P-unseen", "P-region"])
     ap.add_argument("--dataset-id", default="noaa_us_gulf_2023-06")
     ap.add_argument("--models", nargs="*", default=[], help="default: all registered models")
     ap.add_argument("--horizons", nargs="*", type=float, default=[1, 2, 3, 6, 12, 24])

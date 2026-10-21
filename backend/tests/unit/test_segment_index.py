@@ -201,15 +201,24 @@ def test_class_is_deterministic_and_provenance_is_carried(store):
     assert a["vessel_class"].null_count() == 0
 
 
-def test_p_region_is_refused(store):
+def test_p_region_keeps_only_segments_wholly_beyond_the_buffer(store):
     full = build_segment_index(store, "syn")
+    rs = RegionSplit(
+        test_region=Box(name="t", lat_min=29.1, lat_max=31, lon_min=-100, lon_max=-80),
+        buffer_km=5,
+    )
     m = SplitManifest(
         protocol="P-region", dataset_id="syn", description="SYNTHETIC",
-        periods=[Period(split="test", start=T0, end=T0 + timedelta(days=1))],
-        region_split=RegionSplit(
-            test_region=Box(name="t", lat_min=29.5, lat_max=31, lon_min=-100, lon_max=-80),
-            buffer_km=5,
-        ),
+        periods=[Period(split="test", start=T0, end=T0 + timedelta(days=1))], region_split=rs,
     )  # fmt: skip
-    with pytest.raises(NotImplementedError):
-        eligible(full, T0 + timedelta(hours=7), MOVING, m)
+    as_of = T0 + timedelta(hours=7)
+    got = eligible(full, as_of, MOVING, m, "rolling")
+    known = full.filter(pl.col("known_at") <= as_of)
+    a, b, c, d = rs.outer
+    clear = (pl.col("lat_max") < a) | (pl.col("lat_min") > b)
+    clear = clear | (pl.col("lon_max") < c) | (pl.col("lon_min") > d)
+    assert got.height and got.height < known.height  # not vacuous either way
+    assert got.sort("segment_id").equals(known.filter(clear).sort("segment_id"))
+    # Every track point of an eligible segment is on the train side, none in the buffer.
+    for la, lo in zip(got["track_lat"], got["track_lon"], strict=True):
+        assert all(rs.side(x, y) == "train" for x, y in zip(la, lo, strict=True) if x is not None)

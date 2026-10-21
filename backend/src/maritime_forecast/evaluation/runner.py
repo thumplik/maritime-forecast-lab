@@ -109,25 +109,50 @@ def _lit(t: datetime) -> str:
 
 
 def select_cutoffs(
-    cfg: BenchmarkConfig, store: ParquetStore, manifest: SplitManifest
+    cfg: BenchmarkConfig, store: ParquetStore, manifest: SplitManifest, stats: dict | None = None
 ) -> pl.DataFrame:
-    """Sampled cutoffs whose whole [as_of - history, as_of + max horizon] lies in the split."""
+    """Sampled cutoffs whose whole [as_of - history, as_of + max horizon] lies in the split.
+
+    P-region: the test split samples cutoffs in the cutoff region (the test side); other
+    splits sample anywhere in the truth region on the train side. The sampler runs on
+    candidates whose cutoff report is on the required side and whose window is in the split's
+    period; windows whose other context reports leave that side (or, outside test, whose label
+    reports enter the buffer or the test side) are then dropped (`region_window_ok`). So
+    test membership depends only on context positions, never on where the vessel goes.
+    `stats`, if given, receives the effective sampling region and the P-region drop count."""
     periods = [p for p in manifest.periods or [] if p.split == cfg.split]
     if not periods:
         raise ValueError(f"manifest has no {cfg.split!r} period")
     lo = min(p.start for p in periods)
     hi = max(p.end for p in periods)
     max_h = timedelta(hours=max(cfg.horizons_h))
-    box = region(cfg.cutoff_region)
+    hist = timedelta(hours=cfg.history_hours)
+    rs = manifest.region_split
+    if rs is None:
+        box = region(cfg.cutoff_region)
+        predicate = box.sql_predicate()
+    else:
+        side = "test" if cfg.split == "test" else "train"
+        box = region(cfg.cutoff_region) if side == "test" else default_region("truth_region")
+        predicate = f"{box.sql_predicate()} AND ({rs.sql_case()}) = '{side}'"
+    if stats is not None:
+        stats["sampling_region"] = box.name if rs is None else f"{box.name}:{side}-side"
     files = store.files(cfg.dataset_id, lo - timedelta(hours=3), hi)
     src = "read_parquet([" + ", ".join(f"'{f}'" for f in files) + "], hive_partitioning=false)"
-    cand = store.con.execute(
-        cutoff_candidates_sql(src, box.sql_predicate(), _lit(lo), _lit(hi))
-    ).pl()
-    hist = timedelta(hours=cfg.history_hours)
-    splits = manifest.window_splits(
-        cand["vessel_id"], cand["observed_at"] - hist, cand["observed_at"] + max_h
-    )
+    cand = store.con.execute(cutoff_candidates_sql(src, predicate, _lit(lo), _lit(hi))).pl()
+    if rs is None:
+        splits = manifest.window_splits(
+            cand["vessel_id"], cand["observed_at"] - hist, cand["observed_at"] + max_h
+        )
+    else:  # time part only; the positions are checked after sampling
+        splits = [
+            a if a == b else None
+            for a, b in zip(
+                map(manifest.time_split, cand["observed_at"] - hist),
+                map(manifest.time_split, cand["observed_at"] + max_h),
+                strict=True,
+            )
+        ]
     cand = cand.filter(pl.Series(splits, dtype=pl.Utf8) == cfg.split)
     frames = []
     for name, sc in cfg.samplers.items():
@@ -136,9 +161,52 @@ def select_cutoffs(
             s = s.sample(cfg.max_cutoffs_per_set, seed=cfg.seed).sort("vessel_id", "observed_at")
         frames.append(s.with_columns(motion_set=pl.lit(name)))
     cutoffs = pl.concat(frames).sort("motion_set", "vessel_id", "observed_at")
+    if rs is not None:
+        # Labels: through the last target plus the truth bracket (truth may interpolate toward
+        # a report up to the bracket gap after it).
+        label_end = max_h + timedelta(minutes=cfg.max_bracket_gap_minutes)
+        keep = region_window_ok(store, cfg.dataset_id, cutoffs, rs, cfg.split, hist, label_end)
+        if stats is not None:
+            stats["region_dropped"] = int((~keep).sum())
+        cutoffs = cutoffs.filter(keep)
     return cutoffs.with_row_index("cutoff_id").with_columns(
         transiting=(pl.col("motion_set") == "underway") & transiting_expr()
     )
+
+
+def region_window_ok(store, dataset_id, cutoffs, rs, split, hist, max_h) -> pl.Series:
+    """P-region window membership by position: every context report (as_of - hist, as_of] on
+    the split's side; outside test, every label report (as_of, as_of + max_h] on the train
+    side (no training label from the test waters or the buffer). Pass the label reach as
+    `max_h` (horizon plus the truth bracket)."""
+    side = "test" if split == "test" else "train"
+    lo = cutoffs["observed_at"].min() - hist
+    hi = cutoffs["observed_at"].max() + max_h + timedelta(microseconds=1)
+    files = store.files(dataset_id, lo, hi)
+    src = "read_parquet([" + ", ".join(f"'{f}'" for f in files) + "], hive_partitioning=false)"
+    con = store.con
+    con.register("_rw_arrow", cutoffs.with_row_index("_i").select("_i", "vessel_id",
+                 pl.col("observed_at").alias("as_of")).to_arrow())  # fmt: skip
+    con.execute("CREATE OR REPLACE TEMP TABLE _rw AS SELECT * FROM _rw_arrow")
+    con.unregister("_rw_arrow")
+    labels = "true" if split == "test" else (
+        f"coalesce(bool_and(coalesce(({rs.sql_case('r.latitude_deg', 'r.longitude_deg')}) "
+        "= 'train', false)) FILTER (WHERE r.observed_at > c.as_of), true)"
+    )  # fmt: skip
+    ok = con.execute(f"""
+        SELECT c._i,
+               coalesce(bool_and(coalesce(({rs.sql_case('r.latitude_deg', 'r.longitude_deg')})
+                        = '{side}', false)) FILTER (WHERE r.observed_at <= c.as_of), false)
+               AND {labels} AS ok
+        FROM _rw c JOIN {src} r
+          ON r.vessel_id = c.vessel_id
+         AND r.observed_at > c.as_of - INTERVAL {int(hist.total_seconds())} SECOND
+         AND r.observed_at <= c.as_of + INTERVAL {int(max_h.total_seconds())} SECOND
+        GROUP BY c._i ORDER BY c._i""").pl()  # fmt: skip
+    con.execute("DROP TABLE IF EXISTS _rw")
+    out = np.zeros(cutoffs.height, dtype=bool)
+    out[ok["_i"].to_numpy()] = ok["ok"].fill_null(False).to_numpy()
+    return pl.Series(out)
 
 
 def predict_all(cfg, store, cutoffs, grid_steps, ctx: ModelContext):
@@ -282,8 +350,6 @@ def benchmark_context(
     manifest = SplitManifest.model_validate_json(Path(cfg.manifest_path).read_text())
     if manifest.dataset_id != cfg.dataset_id:
         raise ValueError(f"manifest is for {manifest.dataset_id}, not {cfg.dataset_id}")
-    if manifest.region_split is not None:
-        raise NotImplementedError("P-region benchmarks need context positions; not in slice 2")
     ctx = ModelContext(
         store=store,
         dataset_id=cfg.dataset_id,
@@ -394,7 +460,8 @@ def _provenance(cfg: BenchmarkConfig) -> str:
 
 
 def _run(cfg, store, runs, run_id, manifest, base_record, ctx) -> BenchmarkRun:
-    cutoffs = select_cutoffs(cfg, store, manifest)
+    select_stats: dict = {}
+    cutoffs = select_cutoffs(cfg, store, manifest, select_stats)
     step_min = cfg.step_minutes
     grid_steps = round(max(cfg.horizons_h) * 60 / step_min)
     h_steps = {h: round(h * 60 / step_min) for h in cfg.horizons_h}
@@ -647,6 +714,7 @@ def _run(cfg, store, runs, run_id, manifest, base_record, ctx) -> BenchmarkRun:
             "runner_version": RUNNER_VERSION,
             "admission": DEFAULT_ADMISSION.as_dict(),
             "n_cutoffs": cutoffs.height,
+            **select_stats,
             "model_seconds": {m: round(preds[m]["seconds"], 2) for m in models},
         },
         not_evaluable=not_eval,
