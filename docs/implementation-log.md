@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 6 — Timestral** (in progress: slice 1, T1-pos adapter, done 2026-10-22). Milestone 5 complete 2026-10-22 (exceptions accepted, entry below). Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 6 — Timestral** (in progress: slice 1 T1-pos adapter committed `123b4f4`; dev benchmark recorded 2026-10-22). Milestone 5 complete 2026-10-22 (exceptions accepted, entry below). Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -1435,3 +1435,34 @@ uv run --project backend python scripts/run_benchmark.py --protocol P-known --da
 1. A full dev-window benchmark with Timestral named, next to the baselines and retrieval, on the identical evaluable set. Record the runtime per forecast.
 2. Then T1-vel (forecast velocity and integrate geodesically) and history lengths of 24/48/72 h, on dev only.
 3. No July scoring until a Timestral design is frozen on dev.
+
+## 2026-10-22 — Milestone 6: T1-pos on the full dev window
+
+**Milestone:** 6 — Timestral
+**Done:**
+- Slice 1 committed (`123b4f4`).
+- Full P-known dev benchmark: run `P-known_noaa_us_gulf_2023-06-07_dev_20261022T173857Z`, recorded in `docs/benchmarks.md` as a development record (not held out, not for the README).
+  - Model set: B0 + retrieval v1/v2 + `timestral_pos_v1`.
+  - 7,372 cutoffs in 554 s; Timestral took about 16 ms per 24 h forecast on CPU.
+- **Pairing verified against the reference dev run.** Timestral's 68 `insufficient_context` failures remove exactly those samples from every model's paired set, and the evaluable counts are identical.
+
+**Commands run:**
+```bash
+uv run --project backend python scripts/run_benchmark.py --protocol P-known --dataset-id noaa_us_gulf_2023-06-07 --split dev \
+  --models persistence_v1 constant_velocity_v1 damped_velocity_v1 route_retrieval_v1 route_retrieval_v2 timestral_pos_v1
+```
+
+**Results (dev, development record):**
+- **Underway pooled:** Timestral beats the best baseline at 1–3 h (+37 / +28 / +14%, CIs above 0) and loses from 6 h (−23 to −35%).
+- **Transiting:** it never beats the best baseline (CV at 1–3 h; far worse than damped velocity from 6 h).
+- **Stationary:** worse than persistence.
+- **Retrieval v2** beats it everywhere up to 12 h.
+
+That is consistent with §5's expectation of a smoothed kinematic extrapolator.
+
+**Next step:** slice 2 on dev only:
+1. T1-vel (east/north velocity channels from the context grid, forecast, then integrated from the anchor);
+2. history lengths of 48 and 72 h for T1-pos and T1-vel, on the identical evaluable set;
+3. then T1-vel+route.
+
+No July scoring until one design is frozen on dev.

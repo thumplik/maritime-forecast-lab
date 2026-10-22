@@ -394,3 +394,44 @@ Dataset `noaa_us_gulf_2023-06-07`, manifests `splits-v2`, **split = test (Jul 2�
 - Every P-known cell that flipped is retrieval (v1/v2). They sat at 0.872–0.877 under slice 1, just inside tolerance, because retrieval's frozen pool ages through July. H3's tighter radii take them to 0.867–0.869.
 - The kinematic baselines are unaffected.
 - **Crashed first attempt:** it wrote coverage files and then crashed before its ledger entry. Those outputs were set aside unread (`_crashed_*`) and recorded in the ledger (`86a9cad`), then the analysis was re-run.
+
+## 2026-10-22 — `timestral_pos_v1` (T1-pos, zero-shot) on the dev window (development record, not held out)
+
+Dataset `noaa_us_gulf_2023-06-07`, P-known, **split = dev (Jun 18–22)**, clean commit `123b4f4`. This is the identical model set as the dev reference run `…_dev_20261021T204207Z`, plus Timestral. It is **not** a held-out result and is not for the README (AGENTS.md rule 13). Timestral has not been scored on July.
+
+| | |
+|---|---|
+| Run id | `P-known_noaa_us_gulf_2023-06-07_dev_20261022T173857Z` |
+| files.json SHA-256 | `eb474894d017f18a9a8164691a3b1ba7e5ae85ebd4581903541a3a967511fadc` |
+| Cutoffs / cells | 7,372 / 744 (14 dropped cells, as in the reference run) |
+| Wall time | 554 s; Timestral 121 s of model time (about 16 ms per 24 h forecast on CPU) |
+| Timestral checkpoint | `mistralai/Timestral-28M@49b2640`, package `a534bdb`; pretraining corpus undisclosed (see model-integration-notes) |
+
+**Pairing.** Timestral failed on 68 cutoffs, all `insufficient_context` (fewer than 6 observed 10-min steps). Those samples leave the paired set for every model. On all 124 comparable cells, each paired count drops by exactly Timestral's failures, and the evaluable counts are identical to the reference run. Every headline cell stays headline.
+
+**Median error, km, and skill against the cell's best baseline** [paired 95% CI]
+
+| Stratum | Model | 1 h | 2 h | 3 h | 6 h | 12 h | 24 h |
+|---|---|---|---|---|---|---|---|
+| Underway pooled | Timestral T1-pos | 2.54 (+37% [30, 42]) | 4.57 (+28% [22, 35]) | 6.25 (+14% [6, 22]) | 11.29 (−23% [−36, −10]) | 15.25 (−35% [−48, −20]) | 17.32 (−32% [−47, −21]) |
+| | retrieval v2 | 1.61 (+60%) | 2.58 (+59%) | 3.80 (+48%) | 6.32 (+31%) | 8.25 (+27%) | 13.40 (−2% [−17, 8]) |
+| | best baseline | damped 4.01 | damped 6.33 | persistence 7.27 | persistence 9.16 | persistence 11.29 | persistence 13.10 |
+| Transiting | Timestral T1-pos | 5.59 (−21% [−44, −1]) | 14.28 (−14% [−30, 5]) | 23.72 (−1% [−14, 11]) | 56.81 (−37% [−54, −14]) | 118.91 (−157%) | 180.90 (−266%) |
+| | retrieval v2 | 1.83 (+60%) | 3.91 (+69%) | 6.02 (+74%) | 12.45 (+70%) | 23.90 (+48%) | 54.09 (−9% [−32, 18]) |
+| | best baseline | CV 4.62 | CV 12.56 | CV 23.42 | damped 41.58 | damped 46.35 | damped 49.45 |
+| Stationary | Timestral T1-pos | 0.01 | 0.02 | 0.03 | 0.08 (−650%) | 0.23 (−360%) | 1.25 (−468%) |
+| | persistence (best) | 0.00 | 0.00 | 0.01 | 0.01 | 0.05 | 0.22 |
+
+(Stationary 1–3 h has no skill reference: the best baseline's median is under 10 m.)
+
+### What this says (dev only)
+- **Short-horizon port moves:** zero-shot Timestral on raw positions beats the best kinematic baseline on pooled underway traffic at 1–3 h. That traffic is mostly tugs and harbour moves, where speed changes and the track bends.
+  - From 6 h on it loses to persistence and damped velocity, by 23–35%.
+- **Transiting ships:** it never beats constant velocity at 1–3 h, and from 6 h on it is far worse than damped velocity. On lanes it neither holds speed like CV nor saturates like damped velocity.
+- **Moored ships:** it adds drift to them (worse than persistence at every horizon).
+- **Against retrieval:** retrieval v2 beats Timestral in every stratum and at every horizon up to 12 h.
+- This matches the plan's expectation for a model with no route knowledge (§5 T1): a smoothed extrapolator of the recent track, useful only where recent curvature and deceleration carry information.
+- **Next:**
+  - T1-vel (velocity channels, integrated geodesically);
+  - longer histories (48/72 h);
+  - T1-vel+route (retrieval displacement as a known-future covariate), the variant where route knowledge can enter.
