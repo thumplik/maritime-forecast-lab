@@ -115,7 +115,9 @@ Ships in transit, July hold-out, median error in km (best baseline in brackets):
 ### Calibrated uncertainty radii (Milestone 4, first slice)
 
 **What the radii are:**
-- Each forecast can carry a split-conformal radius: "the ship will be within *r* km of this point with 90% probability". It is fitted per model, horizon and stratum on a calibration window (Jun 23–30) that the models never trained on.
+- Each forecast can carry a split-conformal radius. Over forecasts like the calibration samples, at least 90% of true positions should fall within *r* km of the forecast point. That is a marginal coverage claim that assumes exchangeability, not a probability for one particular ship.
+- It is fitted per model, horizon and stratum on a calibration window (Jun 23–30) that the models never trained on.
+- `POST /forecasts` returns the radii at the fitted horizons (1/2/3/6/12/24 h), with the calibration run id and sample sizes. It returns them only for forecasts that resemble the calibration samples; otherwise it says why not.
 - No per-axis marginal intervals are ever combined into a corridor.
 
 **Coverage on the July hold-out, P-known:**
@@ -136,7 +138,7 @@ The success condition for every model is the same: **beat the best of persistenc
 | 1 | Contracts, data pipeline, read API, track explorer, CI | ✓ |
 | 2 | Baselines & the evaluator: paired benchmark, calibration, invariance, feasibility, benchmark API | ✓ |
 | 3 | Historical-route retrieval: kNN over train-period segments, aligned and continued along real routes ([failure review](docs/failure-review.md)); v2 holds moored ships; scored on the July hold-out | ✓ |
-| 4 | **Conformal uncertainty:** calibrated displacement radii per stratum | ← *now* (radii + July coverage done; API and H3 bins next) |
+| 4 | **Conformal uncertainty:** calibrated displacement radii per stratum | ← *now* (radii, July coverage and API done; H3 bins next) |
 | 5 | Workbench UI: forecast comparison, truth overlay, benchmark dashboard | |
 | 6 | Timestral zero-shot adapter (position, velocity, velocity + retrieved route) | |
 | 7 | Research models: TrAISformer via the calibration paper's reimplementation | |

@@ -1045,3 +1045,39 @@ make test   # 291 passed
 **Next step:**
 1. API returns radii with nominal level and calibration-set id. A radius is returned only at target times that coincide with a fitted horizon; other times get none.
 2. Slice 2 (H3), then `/milestone-check` for Milestone 4.
+
+## 2026-10-21 — Milestone 4: radii served by POST /forecasts
+
+**Milestone:** 4 — conformal uncertainty
+**Done** (commits `0c16654`, `9edfe42`, `48a4891`):
+- `ConformalRegion` changes:
+  - nullable radii, so no radius at unfitted target times and none interpolated;
+  - per-radius stratum, calibration n and vessels;
+  - fitted horizons and the back-filled class source;
+  - wording now states a marginal, exchangeability-based claim.
+- `ForecastRequest.conformal_level`. Generated TS types updated.
+- `evaluation/conformal`: `motion_state` (the sampler's rule), `calibration_like` (the population the radii were calibrated on), `last_vessel_class`, and `region_for` with its refusals. The API attaches radii in `_with_radii`.
+- `scripts/conformal.py --params-only` refits the radii file without reading test records. The radii now carry per-model config hashes and `label_reach_end`. They were regenerated from clean commits, and the radii are numerically identical to the ones analysed.
+
+**Leakage review (leakage-reviewer subagent):** no leakage. Fixed:
+1. Stale `as_of`: radii are refused if `as_of` is more than 10 min after the last report.
+2. Non-calibration-like vessels are refused: outside the cutoff region, not Class A/B, too few reports, history under 3 h.
+3. The model-config hash is checked.
+4. Honest wording, with sample sizes in the response.
+5. The 30 min label-reach edge after the calibration end.
+6. The cache key covers the radii file and manifest.
+7. A warning when no radii are fitted.
+8. A clean refusal (not a 500) when there is no calibration period.
+9. Class is taken from the last report, as the benchmark does.
+
+Not done: gating served radii on July per-cell coverage verdicts. Coverage is documented in `docs/benchmarks.md` instead.
+
+**Commands run:**
+```bash
+make test && make lint && make gen-api && make web-test   # 293 passed; clean; 10 passed
+uv run --project backend python scripts/conformal.py --protocol P-known --params-only   # and P-unseen
+```
+
+**Results:** a real July forecast (v2, a transiting tanker) carries 12.7 / 26.8 / 43.5 / 91.1 km radii at 1 / 2 / 3 / 6 h. Behind them are 980 / 960 / 953 / 903 calibration errors from about 280 vessels. Unfitted hours are null.
+
+**Next step:** slice 2 (H3 Mondrian bins, pre-registered above), then `/milestone-check` for Milestone 4.

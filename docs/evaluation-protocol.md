@@ -202,6 +202,21 @@ Tracks are interpolated only between reports of one segment, whose internal gaps
 - The guarantee assumes exchangeability. One vessel's cutoffs are correlated, and calibration and test differ (retrieval's frozen pool is 6–14 days old at calibration and 15–44 days old in July). So July coverage per stratum and per week is the evidence.
 - Radii exist only at the fitted horizons (1, 2, 3, 6, 12, 24 h).
 
+**Serving (`POST /forecasts`, `conformal_level` 0.8 / 0.9 / 0.95, default 0.9):**
+- **Output:** `uncertainty` on each ok forecast. It has one radius per target time, null except where the lead from `as_of` equals a fitted horizon, plus the stratum used, the calibration n and vessels behind each radius, the calibration run id, and `class_source: backfilled`.
+- **Served only when the forecast resembles the calibration samples** (`conformal.calibration_like`):
+  - the last report is in the cutoff region, from a Class A/B transceiver;
+  - at least 6 reports in its trailing 3 h;
+  - history of at least 3 h;
+  - `as_of` at most 10 min after the last report (calibration cutoffs sit exactly on a report);
+  - a motion stratum by the sampler's rule (10-min mean SOG ≥ 2 kn underway, < 0.5 kn stationary).
+- **Refused, with a warning:**
+  - radii fitted for another split manifest, model version or model config (per-model config hash);
+  - an unfitted level;
+  - `as_of` before the calibration labels' reach (`label_reach_end` = calibration end + the 30 min truth bracket), since those radii were fitted on that forecast's future;
+  - no radii fitted for the dataset.
+- **Cache:** the forecast cache key includes the radii file and the manifest.
+
 ## Calibration (§6.6)
 
 `make calibrate` → paper-compatible constant velocity on P-paper vs the published table, ±10% tolerance. Assumptions made in reconstructing P-paper are listed in [coverage-audit.md](coverage-audit.md#calibration).
