@@ -19,6 +19,7 @@ dependencies = [
     "uvicorn>=0.30",
     "shapely>=2.0",
     "pyshp>=2.3",
+    "h3>=4,<5",
 ]
 
 [dependency-groups]

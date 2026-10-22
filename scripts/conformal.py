@@ -60,7 +60,13 @@ def main() -> None:
         action="store_true",
         help="refit and write the radii only; read no test records (no analysis)",
     )
+    ap.add_argument(
+        "--bins", choices=["stratum", "h3"], default="stratum",
+        help="h3: Mondrian bins motion x H3 cell (res 5) before the stratum chain (slice 2, "
+        "pre-registered; adoption rule applied against the latest stratum analysis)",
+    )  # fmt: skip
     args = ap.parse_args()
+    h3 = args.bins == "h3"
     runs = RunStore()
     cal_id = args.calibration_run or _latest(args.protocol, args.dataset_id, "calibration")
     ledger = [e for e in read_ledger(args.dataset_id)
@@ -83,13 +89,19 @@ def main() -> None:
         raise SystemExit("run from a clean, committed tree (the outputs are stamped with its SHA)")
 
     cfg = cf.ConformalConfig()
-    radii = cf.fit_radii(runs.table(cal_id, "records"), cfg)
+    cal_records = runs.table(cal_id, "records")
+    if h3:
+        cal_records = cf.add_h3(cal_records, runs.table(cal_id, "cutoffs"))
+    radii = cf.fit_radii(cal_records, cfg, h3=h3)
+    suffix = f"__h3r{cf.H3_RES}" if h3 else ""
     out_params = (
-        DATA_DIR / "model_params" / "conformal" / f"{args.protocol}__{args.dataset_id}.json"
-    )
+        DATA_DIR / "model_params" / "conformal"
+        / f"{args.protocol}__{args.dataset_id}{suffix}.json"
+    )  # fmt: skip
     out_params.parent.mkdir(parents=True, exist_ok=True)
     out_params.write_text(json.dumps({
         "kind": "conformal_radius", "protocol": args.protocol, "dataset_id": args.dataset_id,
+        "bins": f"h3r{cf.H3_RES}" if h3 else "stratum",
         "calibration_set_id": cal_id, "calibration_files_json_sha256": _digest(cal_id),
         "manifest_sha256": cal.protocol.manifest_sha256, "config": cfg.as_dict(),
         "models": {m.model_id: {"model_version": m.model_version,
@@ -109,10 +121,12 @@ def main() -> None:
         print(f"{args.protocol}: radii -> {out_params} (params only; no test records read)")
         return
     test_records = runs.table(test_id, "records")
+    if h3:
+        test_records = cf.add_h3(test_records, runs.table(test_id, "cutoffs"))
     failed = cf.failures_by_cell(test_records)
     tables = []
     for level in cfg.levels:
-        a = cf.assign_radii(test_records, radii, level)
+        a = cf.assign_radii(test_records, radii, level, h3=h3)
         week = (pl.col("observed_at").dt.ordinal_day() - 183) // 7  # Jul 2 = day 183 -> week 0
         a = a.with_columns(week=week)
         g = pl.concat([
@@ -139,9 +153,14 @@ def main() -> None:
     (out / "conformal.json").write_text(json.dumps({
         "calibration_run": cal_id, "test_run": test_id, "params": str(out_params),
         "test_files_json_sha256": _digest(test_id), "config": cfg.as_dict(),
+        "bins": f"h3r{cf.H3_RES}" if h3 else "stratum",
+        "adoption": adoption(test_id, cov) if h3 else None,
         "git_sha": sha, "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }, indent=2) + "\n")  # fmt: skip
-    record_analysis(args.dataset_id, test_id, "conformal_coverage", cfg.as_dict(), sha, str(out))
+    record_analysis(args.dataset_id, test_id, "conformal_coverage_h3" if h3 else
+                    "conformal_coverage", cfg.as_dict(), sha, str(out))  # fmt: skip
+    if h3:
+        print(json.dumps(adoption(test_id, cov), indent=1))
     # Headline count over non-overlapping cells: motion:ALL groups at the primary level.
     judged = cov.filter(pl.col("calibrated").is_not_null() & pl.col("group").str.ends_with(":ALL")
                         & (pl.col("level") == cf.PRIMARY_LEVEL))  # fmt: skip
@@ -149,6 +168,45 @@ def main() -> None:
     print(f"{args.protocol}: radii -> {out_params}; coverage -> {out}/report.md; "
           f"{ok}/{judged.height} motion:ALL cells at {cf.PRIMARY_LEVEL:.0%} within "
           f"±{cfg.tolerance:.0%}")  # fmt: skip
+
+
+def adoption(test_id: str, cov_h3: pl.DataFrame) -> dict:
+    """The pre-registered rule (implementation log, 2026-10-21), against the latest stratum
+    (slice 1) analysis of the same test run: at 90%, at least as many motion:ALL cells within
+    tolerance, and v2's mean underway:ALL area smaller at >= 4 of the 6 horizons. Adoption
+    needs this to pass for both protocols (checked by the caller across runs)."""
+    base = RUNS_DIR / "conformal" / test_id
+    slice1 = sorted(d for d in base.glob("2026*")
+                    if json.loads((d / "conformal.json").read_text()).get("bins", "stratum")
+                    == "stratum")  # fmt: skip
+    if not slice1:
+        raise SystemExit("no stratum (slice 1) analysis of this test run to compare against")
+    cov_s1 = pl.read_parquet(slice1[-1] / "coverage.parquet")
+
+    def count(c):
+        x = c.filter((pl.col("level") == cf.PRIMARY_LEVEL) & pl.col("group").str.ends_with(":ALL")
+                     & pl.col("calibrated").is_not_null())  # fmt: skip
+        return int(x["calibrated"].sum()), x.height
+
+    def areas(c):
+        x = c.filter((pl.col("level") == cf.PRIMARY_LEVEL) & (pl.col("group") == "underway:ALL")
+                     & (pl.col("model_id") == "route_retrieval_v2")).sort("horizon_h")  # fmt: skip
+        return dict(zip(x["horizon_h"], x["mean_area_km2"], strict=True))
+
+    (k1, n1), (k3, n3) = count(cov_s1), count(cov_h3)
+    a1, a3 = areas(cov_s1), areas(cov_h3)
+    wins = [h for h in a1 if a3.get(h) is not None and a3[h] < a1[h]]
+    return {
+        "slice1_analysis": str(slice1[-1]),
+        "calibrated_cells_slice1": f"{k1}/{n1}",
+        "calibrated_cells_h3": f"{k3}/{n3}",
+        "coverage_ok": k3 >= k1,
+        "v2_underway_area_km2_slice1": a1,
+        "v2_underway_area_km2_h3": a3,
+        "area_smaller_at_horizons": wins,
+        "area_ok": len(wins) >= 4,
+        "passes": k3 >= k1 and len(wins) >= 4,
+    }
 
 
 def render(protocol, cal_id, test_id, cov: pl.DataFrame, cfg, cal_n: pl.DataFrame) -> str:

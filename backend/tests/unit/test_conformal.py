@@ -131,3 +131,29 @@ def test_region_for_refuses_hindsight_mismatches_and_unfitted_times():
     _, why = region_for(params, man, "abc", "m", "1", "underway", "x", early,
                         [early + timedelta(hours=1)], 0.9)  # fmt: skip
     assert "labels' reach" in why
+
+
+def test_h3_bins_get_their_own_radius_and_thin_cells_fall_back():
+    from maritime_forecast.evaluation.conformal import add_h3
+
+    rng = np.random.default_rng(4)
+    # Cell A (Bolivar Roads): 60 tight errors; cell B (far): 10 wide errors (thin).
+    a = _records(6, 10, rng, 300.0)
+    b = _records(2, 5, rng, 5000.0, cls="cargo")
+    recs = pl.concat([a, b]).with_columns(cutoff_id=pl.int_range(0, a.height + b.height))
+    cut = pl.DataFrame({"cutoff_id": list(range(recs.height)),
+                        "latitude_deg": [29.34] * a.height + [26.0] * b.height,
+                        "longitude_deg": [-94.74] * a.height + [-90.0] * b.height})  # fmt: skip
+    recs = add_h3(recs.with_columns(pl.col("cutoff_id").cast(pl.Int64)),
+                  cut.with_columns(pl.col("cutoff_id").cast(pl.Int64)))  # fmt: skip
+    cfg = ConformalConfig(min_n=30)
+    radii = fit_radii(recs, cfg, h3=True)
+    cells = radii.filter(pl.col("stratum").str.contains(":h3:") & (pl.col("level") == 0.9))
+    own = cells.filter(pl.col("radius_m").is_not_null())
+    assert own.height == 1 and own["n"][0] == 60  # only cell A qualifies
+    out = assign_radii(recs, radii, 0.9, h3=True)
+    by = dict(zip(out["vessel_class"], out["radius_stratum"], strict=False))
+    assert ":h3:" in by["tanker"] and by["cargo"] == "underway:ALL"  # thin cell -> slice-1 chain
+    assert out.filter(pl.col("vessel_class") == "cargo")["s_first"][0].count(":h3:") == 1
+    flat = assign_radii(recs, fit_radii(recs, cfg), 0.9)
+    assert "h3_cell" in flat.columns and not flat["radius_stratum"].str.contains(":h3:").any()

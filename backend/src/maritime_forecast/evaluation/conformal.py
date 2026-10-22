@@ -72,17 +72,47 @@ def _evaluable(records: pl.DataFrame) -> pl.DataFrame:
     return records.filter(pl.col("evaluable") & pl.col("error_m").is_not_null())
 
 
-def fit_radii(records: pl.DataFrame, cfg: ConformalConfig = DEFAULT_CONFORMAL) -> pl.DataFrame:
-    """Radii for every (model, horizon, level) at three stratum levels: motion:class, motion:ALL
-    and ALL. Rows: model_id, horizon_h, level, stratum, n, radius_m (null when n < min_n or the
-    level needs more samples than n)."""
+H3_RES = 5  # pre-registered (implementation log, 2026-10-21): ~250 km^2 cells
+
+
+def add_h3(records: pl.DataFrame, cutoffs: pl.DataFrame, res: int = H3_RES) -> pl.DataFrame:
+    """Attach `h3_cell`: the H3 cell (resolution `res`) of each record's cutoff report position,
+    known at the cutoff (causal). `cutoffs` has cutoff_id, latitude_deg, longitude_deg."""
+    import h3
+
+    cells = cutoffs.select(
+        "cutoff_id",
+        h3_cell=pl.struct("latitude_deg", "longitude_deg").map_elements(
+            lambda r: h3.latlng_to_cell(r["latitude_deg"], r["longitude_deg"], res),
+            return_dtype=pl.Utf8,
+        ),
+    )
+    return records.join(cells, on="cutoff_id", how="left")
+
+
+def _strata(records: pl.DataFrame, h3: bool) -> tuple[pl.DataFrame, list[str]]:
+    """Evaluable records with their stratum columns, most specific first. Slice 1: motion:class,
+    motion:ALL, ALL. H3 (slice 2): motion x H3 cell before those."""
     r = _evaluable(records).with_columns(
         s_class=pl.col("motion_set") + ":" + pl.col("vessel_class").fill_null("unknown"),
         s_motion=pl.col("motion_set") + ":" + pl.lit(ALL),
         s_all=pl.lit(ALL),
     )
+    chain = ["s_class", "s_motion", "s_all"]
+    if h3:
+        r = r.with_columns(s_h3=pl.col("motion_set") + ":h3:" + pl.col("h3_cell").fill_null("none"))
+        chain = ["s_h3", *chain]
+    return r, chain
+
+
+def fit_radii(records: pl.DataFrame, cfg: ConformalConfig = DEFAULT_CONFORMAL,
+              h3: bool = False) -> pl.DataFrame:  # fmt: skip
+    """Radii for every (model, horizon, level) at each stratum level of the chain (see _strata).
+    Rows: model_id, horizon_h, level, stratum, n, n_vessels, radius_m (null when n < min_n or the
+    level needs more samples than n). With `h3`, records need an `h3_cell` column (add_h3)."""
+    r, chain = _strata(records, h3)
     rows = []
-    for col in ("s_class", "s_motion", "s_all"):
+    for col in chain:
         for (m, h, s), g in r.group_by("model_id", "horizon_h", col, maintain_order=True):
             e = g["error_m"].to_numpy()
             nv = g["vessel_id"].n_unique() if "vessel_id" in g.columns else None
@@ -94,28 +124,26 @@ def fit_radii(records: pl.DataFrame, cfg: ConformalConfig = DEFAULT_CONFORMAL) -
     return pl.DataFrame(rows).sort("model_id", "horizon_h", "level", "stratum")
 
 
-def assign_radii(records: pl.DataFrame, radii: pl.DataFrame, level: float) -> pl.DataFrame:
+def assign_radii(records: pl.DataFrame, radii: pl.DataFrame, level: float,
+                 h3: bool = False) -> pl.DataFrame:  # fmt: skip
     """Attach to each evaluable record the radius of its most specific stratum that has one:
-    columns radius_m and radius_stratum (null if no radius exists even pooled)."""
-    r = _evaluable(records).with_columns(
-        s_class=pl.col("motion_set") + ":" + pl.col("vessel_class").fill_null("unknown"),
-        s_motion=pl.col("motion_set") + ":" + pl.lit(ALL),
-        s_all=pl.lit(ALL),
-    )
+    columns radius_m and radius_stratum (null if no radius exists even pooled), and s_first (the
+    most specific stratum it could have had; a different radius_stratum is a fallback)."""
+    r, chain = _strata(records, h3)
     rad = radii.filter((pl.col("level") == level) & pl.col("radius_m").is_not_null()).select(
         "model_id", "horizon_h", "stratum", "radius_m"
     )
-    for col, tag in (("s_class", "c"), ("s_motion", "m"), ("s_all", "a")):
-        r = r.join(
-            rad.rename({"stratum": col, "radius_m": f"r_{tag}"}),
-            on=["model_id", "horizon_h", col], how="left",
-        )  # fmt: skip
+    tags = [f"r_{i}" for i in range(len(chain))]
+    for col, tag in zip(chain, tags, strict=True):
+        r = r.join(rad.rename({"stratum": col, "radius_m": tag}),
+                   on=["model_id", "horizon_h", col], how="left")  # fmt: skip
+    which = pl.when(pl.col(tags[0]).is_not_null()).then(pl.col(chain[0]))
+    for col, tag in zip(chain[1:], tags[1:], strict=True):
+        which = which.when(pl.col(tag).is_not_null()).then(pl.col(col))
+    drop = [*tags, *(c for c in chain if c not in ("s_class",))]
     return r.with_columns(
-        radius_m=pl.coalesce("r_c", "r_m", "r_a"),
-        radius_stratum=pl.when(pl.col("r_c").is_not_null()).then(pl.col("s_class"))
-        .when(pl.col("r_m").is_not_null()).then(pl.col("s_motion"))
-        .when(pl.col("r_a").is_not_null()).then(pl.col("s_all")),
-    ).drop("r_c", "r_m", "r_a", "s_motion", "s_all")  # fmt: skip
+        radius_m=pl.coalesce(tags), radius_stratum=which, s_first=pl.col(chain[0])
+    ).drop(drop)
 
 
 def _vessel_ci(covered: np.ndarray, vessels: np.ndarray, n_boot: int, seed: int):
@@ -151,7 +179,7 @@ def coverage_table(assigned: pl.DataFrame, level: float, group_cols: list[str],
                  .group_by(keys).agg(n_no_radius=pl.len()))  # fmt: skip
     a = assigned.filter(pl.col("radius_m").is_not_null()).with_columns(
         covered=pl.col("error_m") <= pl.col("radius_m"),
-        fallback=pl.col("radius_stratum") != pl.col("s_class"),
+        fallback=pl.col("radius_stratum") != pl.col("s_first"),
     )
     rows = []
     keys = ["model_id", "horizon_h", *group_cols]
