@@ -1636,3 +1636,14 @@ uv run --project backend python scripts/hexsets_dev.py --run P-known_noaa_us_gul
 **Dev sensitivity of the spread rule at 93%** (run `…/20261022T201131Z`, after the 90% design was frozen; changes nothing): pooled H1 reaches 0.89–0.92 coverage at 22–30% of the disc's area; transiting at 12 h balloons (ratio 1.08).
 
 **Dry run** (`data/runs/hexsets/<dev run>/dryrun_20261022T202620Z`; a crash check, not a result: the dev window precedes the calibration window): all 12 cells fitted on the calibration run; scoring ran end to end on the dev run, with no parameters written and no ledger entry. Re-run failures 0. Pooled H1 coverage 0.87–0.91 at 26–42% of the disc's area. The rule as registered would read "not adopted" there (H1 within tolerance on 10 cells, the disc on 11; the transiting 12/24 h cells are at the edge). **The rule is kept exactly as registered.**
+
+## 2026-10-22 — Milestone 7: July comparison scored once → H1 adopted
+
+**Run:** `scripts/hexsets_holdout.py --protocol P-known` from clean commit `e62bbdc`, 48 min. The ledger has `hexsets_h1_started` (before any test read) and `hexsets_h1`, both with `informed_by` set to the earlier conformal analyses. Outputs: `data/runs/hexsets/P-known_…_20261021T213109Z/20261022T211506Z/`. The served parameters, with their verdict, are in `data/model_params/hexsets/P-known__noaa_us_gulf_2023-06-07.json`.
+
+**Result (`docs/benchmarks.md`):** adopted under the pre-registered rule. H1 is within tolerance on 7 of 12 cells (the disc also on 7), and smaller on 6 of 6 pooled horizons.
+- **Area:** 25–46% of the disc's (pooled underway), 35–57% (transiting).
+- **Coverage, transiting:** 0.889–0.902.
+- **Coverage, pooled underway:** both methods 0.84–0.87 at 1–12 h. This is the July drift; H1 does not fix it.
+
+README results and roadmap updated (AGENTS.md rule 13).

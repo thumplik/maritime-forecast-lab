@@ -555,3 +555,38 @@ Dev run `P-known_noaa_us_gulf_2023-06-07_dev_20261022T175118Z` (24 h history), u
 - **H1 under-covers its nominal level by about 2–3 points; the disc by about 0–1.** Likely causes are the chronological shift between the halves, and the density score being more sensitive to which routes were in use. For the July comparison the level correction must be fixed in advance, not tuned on test.
 - **Transiting is unstable:** bandwidth selection from 32–83 selection samples swings between 0.5 and 16 km, and at 12 h H1 is no smaller. The fix to try is choosing the bandwidth on pooled underway traffic (or as a fraction of the candidate spread) rather than per stratum.
 - **24 h** needs a longer calibration window: the calibration split (Jun 23–30) does that for the hold-out protocol.
+
+
+## 2026-10-22 — Hex prediction sets (H1) vs disc on the July hold-out, P-known (held-out; pre-registered; **adopted**)
+
+- **Test run:** `P-known_noaa_us_gulf_2023-06-07_20261021T213109Z` (underway cutoffs: 40,950).
+- **Calibration run:** `P-known_noaa_us_gulf_2023-06-07_calibration_20261022T005126Z`.
+- **Code and design:** commit `e62bbdc`, frozen design `data/model_params/hexsets/h1_design.json` (sha `e0d6a707…`).
+- **Analysis:** `data/runs/hexsets/P-known_noaa_us_gulf_2023-06-07_20261021T213109Z/20261022T211506Z/` (report.md, summary.json, samples.parquet).
+- **Ledger:** `hexsets_h1_started` then `hexsets_h1`. `informed_by` lists the earlier `conformal_coverage*` analyses of this run: the disc arm was not blind.
+- **Pre-registration:** implementation log, 2026-10-22, written before the look; the procedural fixes were also made before it.
+- Retrieval re-run failures: 0. Zero-candidate (broad-only) sets per cell are in the report; most at 24 h (2,129 of 36,893 pooled).
+
+| Stratum | h | n (vessels) | Disc coverage [CI] | H1 coverage [CI] | Disc km² | H1 km² | H1/disc area [CI] |
+|---|---|---|---|---|---|---|---|
+| underway:ALL | 1 h | 39,700 (2,768) | 0.843 [0.833, 0.853] ✗ | 0.837 [0.821, 0.849] ✗ | 252 | 67 | 0.26 [0.26, 0.27] |
+| underway:ALL | 2 h | 39,198 (2,716) | 0.847 [0.837, 0.858] ✗ | 0.840 [0.828, 0.852] ✗ | 914 | 233 | 0.25 [0.25, 0.26] |
+| underway:ALL | 3 h | 38,828 (2,687) | 0.844 [0.834, 0.854] ✗ | 0.840 [0.827, 0.853] ✗ | 1,807 | 569 | 0.32 [0.31, 0.32] |
+| underway:ALL | 6 h | 37,908 (2,605) | 0.854 [0.845, 0.863] ✗ | 0.851 [0.841, 0.863] ✗ | 6,597 | 1,782 | 0.27 [0.27, 0.28] |
+| underway:ALL | 12 h | 36,704 (2,528) | 0.865 [0.856, 0.874] ✗ | 0.864 [0.854, 0.872] ✗ | 19,054 | 6,268 | 0.33 [0.32, 0.34] |
+| underway:ALL | 24 h | 36,893 (2,535) | 0.876 [0.868, 0.883] | 0.873 [0.864, 0.881] | 40,132 | 18,485 | 0.46 [0.45, 0.47] |
+| underway:TRANSITING | 1 h | 6,006 (1,004) | 0.895 [0.880, 0.907] | 0.889 [0.870, 0.903] | 478 | 241 | 0.51 [0.50, 0.51] |
+| underway:TRANSITING | 2 h | 5,937 (1,000) | 0.895 [0.883, 0.907] | 0.899 [0.885, 0.912] | 2,099 | 928 | 0.44 [0.44, 0.44] |
+| underway:TRANSITING | 3 h | 5,864 (998) | 0.897 [0.885, 0.907] | 0.902 [0.889, 0.914] | 5,103 | 1,886 | 0.37 [0.36, 0.38] |
+| underway:TRANSITING | 6 h | 5,645 (992) | 0.895 [0.885, 0.904] | 0.898 [0.887, 0.909] | 20,936 | 7,793 | 0.37 [0.36, 0.39] |
+| underway:TRANSITING | 12 h | 5,033 (969) | 0.894 [0.885, 0.902] | 0.899 [0.888, 0.911] | 82,750 | 28,694 | 0.35 [0.33, 0.36] |
+| underway:TRANSITING | 24 h | 4,590 (942) | 0.895 [0.884, 0.907] | 0.894 [0.882, 0.904] | 168,463 | 95,960 | 0.57 [0.55, 0.59] |
+
+(✗ = outside ±0.03 of 0.90.)
+
+**Pre-registered verdict:** H1 within tolerance on 7 of 12 cells (disc: 7); H1 smaller on 6 of 6 pooled horizons → **adopted**. The served parameters (`data/model_params/hexsets/P-known__noaa_us_gulf_2023-06-07.json`) carry this verdict.
+
+### What this says
+- **At equal coverage, H1's hex sets are 2–4 times smaller than the conformal disc** around the same retrieval forecast, in both strata and at every horizon. The two methods' coverages differ by at most 0.6 points in any cell.
+- **Transiting ships are calibrated at every horizon (0.889–0.902).**
+- **Pooled underway traffic is under-covered by both methods at 1–12 h (0.84–0.87).** This is the July drift seen for U1, the frozen retrieval pool ageing through July. H1 improves area, not coverage. A coverage fix (a rolling calibration window, or recalibration per week) is separate work, with its own protocol.

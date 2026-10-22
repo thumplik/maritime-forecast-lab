@@ -156,5 +156,37 @@
     "output": "/Volumes/Code/AIS-predictor/data/runs/conformal/P-unseen_noaa_us_gulf_2023-06-07_20261021T225730Z/20261022T020706Z",
     "informed_by": [],
     "rerun_reason": "re-run after the adoption-step crash (fix fe15817); outputs byte-identical to _crashed_*"
+  },
+  {
+    "run_id": "P-known_noaa_us_gulf_2023-06-07_20261021T213109Z",
+    "kind": "hexsets_h1_started",
+    "protocol": null,
+    "git_sha": "e62bbdc89a9e901e80a6b95b0328c13f33c825b8",
+    "accessed_at": "2026-10-22T20:32:28+00:00",
+    "models": [],
+    "config_sha256": "0b3e2e00336947d6931f26879602834d500b4c1d2bc76b10b8a05533b77e8ac0",
+    "output": "(started)",
+    "informed_by": [
+      "conformal_coverage@2026-10-22T01:29:30+00:00",
+      "conformal_coverage_h3_crashed@2026-10-22T02:06:13+00:00",
+      "conformal_coverage_h3@2026-10-22T02:06:59+00:00"
+    ],
+    "rerun_reason": null
+  },
+  {
+    "run_id": "P-known_noaa_us_gulf_2023-06-07_20261021T213109Z",
+    "kind": "hexsets_h1",
+    "protocol": null,
+    "git_sha": "e62bbdc89a9e901e80a6b95b0328c13f33c825b8",
+    "accessed_at": "2026-10-22T21:15:06+00:00",
+    "models": [],
+    "config_sha256": "0b3e2e00336947d6931f26879602834d500b4c1d2bc76b10b8a05533b77e8ac0",
+    "output": "/Volumes/Code/AIS-predictor/data/runs/hexsets/P-known_noaa_us_gulf_2023-06-07_20261021T213109Z/20261022T211506Z",
+    "informed_by": [
+      "conformal_coverage@2026-10-22T01:29:30+00:00",
+      "conformal_coverage_h3_crashed@2026-10-22T02:06:13+00:00",
+      "conformal_coverage_h3@2026-10-22T02:06:59+00:00"
+    ],
+    "rerun_reason": null
   }
 ]

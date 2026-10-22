@@ -130,6 +130,34 @@ Ships in transit, July hold-out, median error in km (best baseline in brackets):
 
 Details: [docs/benchmarks.md](docs/benchmarks.md).
 
+### Hex prediction sets (Milestone 7): which hexagons will the ship be in?
+
+**What a hex set is:**
+- Instead of a point and a circle, the forecast at each horizon is a **set of H3 hexagons** that should contain the ship with 90% probability: about 5 km² cells up to 3 h, about 36 km² beyond.
+- The set comes from the 50 most similar historical voyages, weighted by similarity. Because it follows the shipping lanes, it can split across both branches of a channel junction.
+- It is calibrated with split conformal on the Jun 23–30 window. That is a marginal 90% claim over forecasts like the calibration samples, not a probability for one ship.
+
+**Scored once on the July hold-out (P-known), against the conformal disc around the same retrieval forecast:**
+- The design was frozen on the dev window, and the comparison rule was pre-registered before any July look.
+- Run `P-known_noaa_us_gulf_2023-06-07_20261021T213109Z`; analysis `data/runs/hexsets/<run>/20261022T211506Z`.
+
+| Underway, all | 1 h | 2 h | 3 h | 6 h | 12 h | 24 h |
+|---|---|---|---|---|---|---|
+| Disc coverage / mean area | 84.3% / 252 km² | 84.7% / 914 | 84.4% / 1,807 | 85.4% / 6,597 | 86.5% / 19,054 | 87.6% / 40,132 |
+| **Hex-set coverage / mean area** | 83.7% / **67 km²** | 84.0% / **233** | 84.0% / **569** | 85.1% / **1,782** | 86.4% / **6,268** | 87.3% / **18,485** |
+
+| Transiting ships | 1 h | 2 h | 3 h | 6 h | 12 h | 24 h |
+|---|---|---|---|---|---|---|
+| Disc coverage / mean area | 89.5% / 478 km² | 89.5% / 2,099 | 89.7% / 5,103 | 89.5% / 20,936 | 89.4% / 82,750 | 89.5% / 168,463 |
+| **Hex-set coverage / mean area** | 88.9% / **241 km²** | 89.9% / **928** | 90.2% / **1,886** | 89.8% / **7,793** | 89.9% / **28,694** | 89.4% / **95,960** |
+
+- **At the same coverage, the hex sets are 2–4 times smaller than the discs:** 25–46% of the disc's area on all underway traffic, 35–57% on transiting ships. The pre-registered rule therefore **adopted** them, and `POST /forecasts` now serves them for retrieval forecasts.
+- **Transiting ships are calibrated at every horizon** (88.9–90.2%).
+- **Pooled underway traffic is under-covered by both methods** (84–87% at 1–12 h, outside the ±3-point tolerance). This is the July drift already seen for the radii above. The hex sets improve area, not coverage.
+- **The disc side was not blind:** the radii's July coverage was already known (ledger). The hex sets' design was blind to July.
+
+Details: [docs/benchmarks.md](docs/benchmarks.md).
+
 The success condition for every model is the same: **beat the best of persistence, constant velocity and damped velocity, per stratum, on paired held-out samples under P-known and P-unseen.** Retrieval meets it for ships in transit at every horizon under both protocols, and for all underway traffic up to 3–6 h. It does not meet it for long-horizon harbour traffic. For moored vessels, v2 only ties persistence.
 
 ## Roadmap
@@ -143,7 +171,7 @@ The success condition for every model is the same: **beat the best of persistenc
 | 4 | Conformal uncertainty: calibrated displacement radii per stratum, served by the API (H3 bins tried, not adopted) | ✓ |
 | 5 | Workbench UI: forecast comparison, truth overlay, benchmark dashboard, failure gallery with sample replay, Playwright smoke test | ✓ |
 | 6 | Timestral zero-shot adapter (position, velocity, context length): closed as a negative result on the dev window; it never beat retrieval or, on transiting ships, the best kinematic baseline ([notes](docs/model-integration-notes.md)) | ✗ closed |
-| 7 | **Hex prediction sets:** a calibrated set of H3 cells per horizon ("which hexes will the ship be in?"), built on historical traffic | ← next |
+| 7 | **Hex prediction sets:** a calibrated set of H3 cells per horizon ("which hexes will the ship be in?"), built on historical retrieval. Scored on July and adopted (2–4× smaller than discs at equal coverage); served by the API and drawn on the map | ← in progress |
 | 8 | Research models: TrAISformer via the calibration paper's reimplementation, scored as a distribution | |
 | 9 | Multi-day credibility with longer-range AIS; optional live ingest | |
 
