@@ -281,8 +281,8 @@ class TimestralVel(TimestralPos):
         if not np.isfinite(ctx[:, -1]).all():
             return self.unsupported(
                 horizon, "stale_anchor",
-                "no report at or bracketing as_of: there is no position to integrate the "
-                "forecast velocity from",
+                "no report exactly at as_of (a bracket would need a report after it): there "
+                "is no position to integrate the forecast velocity from",
             )  # fmt: skip
         return None
 

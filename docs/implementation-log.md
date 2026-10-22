@@ -1466,3 +1466,31 @@ That is consistent with §5's expectation of a smoothed kinematic extrapolator.
 3. then T1-vel+route.
 
 No July scoring until one design is frozen on dev.
+
+## 2026-10-22 — Milestone 6 slice 2: T1-vel; history-length study blocked by the dev window
+
+**Milestone:** 6 — Timestral
+**Done:**
+- `timestral_vel_v1` (`727a1f1`): the velocity series from the causal position grid, integrated from the position at `as_of`, with a typed `stale_anchor` refusal.
+  - Tests use the stand-in backend and the real checkpoint (`-m timestral`, 4 passed), plus the invariance harness.
+- Dev run `P-known_…_dev_20261022T175118Z` (24 h history): T1-pos and T1-vel paired with the baselines and retrieval v2. Recorded in `docs/benchmarks.md` as a development record.
+  - T1-vel is worse than T1-pos on pooled underway traffic and ties CV on transiting ships at 1–3 h.
+  - Retrieval v2 beats both everywhere up to 12 h.
+
+**Leakage review (leakage-reviewer subagent):** no leakage; velocity alignment and integration start are correct. Findings:
+1. **The 24/48/72 h history runs were not comparable.** The dev-window purge depends on history length, so 48 h draws 1 day of cutoffs and 72 h draws none. The 48 h run was stopped before it wrote anything (its empty directory was removed), and the 72 h run never started. No history-length result is reported.
+2. **`stale_anchor` means "no report exactly at `as_of`"** (the message and notes are reworded). It never fires on benchmark cutoffs.
+
+**Commands run:**
+```bash
+uv run --project backend pytest -q && uv run --project backend pytest -q -m timestral
+uv run --project backend python scripts/run_benchmark.py --protocol P-known --dataset-id noaa_us_gulf_2023-06-07 --split dev --history-hours 24 \
+  --no-geojson --models persistence_v1 constant_velocity_v1 damped_velocity_v1 route_retrieval_v2 timestral_pos_v1 timestral_vel_v1
+```
+
+**Blocker for review:** a sound 24/48/72 h history comparison (§7 Milestone 6) needs one of:
+- (a) a sampler purge window set separately from the model's history (a protocol change);
+- (b) per-model context lengths in one run;
+- (c) a longer dev window.
+
+**Next step:** T1-vel+route (retrieval displacement as a known-future covariate) on dev. That is the remaining representation, and the one where route knowledge can enter. The history study waits on the choice above.

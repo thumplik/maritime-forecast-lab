@@ -435,3 +435,43 @@ Dataset `noaa_us_gulf_2023-06-07`, P-known, **split = dev (Jun 18–22)**, clean
   - T1-vel (velocity channels, integrated geodesically);
   - longer histories (48/72 h);
   - T1-vel+route (retrieval displacement as a known-future covariate), the variant where route knowledge can enter.
+
+## 2026-10-22 — `timestral_vel_v1` (T1-vel) vs T1-pos on the dev window (development record, not held out)
+
+Dataset `noaa_us_gulf_2023-06-07`, P-known, **split = dev**, 24 h history, clean commit `727a1f1`. Models: persistence, CV, damped velocity, retrieval v2, T1-pos, T1-vel, all paired. Not held out; not for the README.
+
+| | |
+|---|---|
+| Run id | `P-known_noaa_us_gulf_2023-06-07_dev_20261022T175118Z` |
+| files.json SHA-256 | `e05c14df71bb3a899ecd0827dbb73181ebd3ad448e85c8a6e90418d57c2eb8de` |
+| Cutoffs / cells / wall time | 7,372 / 744 / 510 s (T1-pos 120 s, T1-vel 133 s of model time) |
+| Failures (removed from every model's paired set) | T1-vel 82 and T1-pos 68 `insufficient_context`; retrieval v2 3 `no_references`; no `stale_anchor` (cutoffs are report times) |
+
+**Median km and skill against the best baseline** [paired 95% CI]
+
+| Stratum | Model | 1 h | 2 h | 3 h | 6 h | 12 h | 24 h |
+|---|---|---|---|---|---|---|---|
+| Underway pooled | T1-pos | 2.54 (+37% [30, 42]) | 4.57 (+28% [22, 35]) | 6.25 (+14% [6, 22]) | 11.30 (−23%) | 15.30 (−35%) | 17.32 (−32%) |
+| | T1-vel | 2.89 (+28% [19, 35]) | 5.75 (+9% [0, 20]) | 8.37 (−15% [−27, −1]) | 17.73 (−93%) | 34.58 (−206%) | 56.43 (−330%) |
+| Transiting | T1-pos | 5.59 (−21% [−44, −1]) | 14.28 (−14% [−30, 5]) | 23.72 (−1%) | 56.81 (−37%) | 118.91 (−157%) | 180.90 (−266%) |
+| | T1-vel | 4.28 (+7% [−9, 18]) | 12.56 (+0% [−12, 11]) | 23.79 (−2% [−9, 8]) | 60.33 (−45%) | 146.55 (−216%) | 329.26 (−566%) |
+| Stationary | T1-pos | 0.01 | 0.02 | 0.03 | 0.08 (−652%) | 0.23 (−360%) | 1.25 (−468%) |
+| | T1-vel | 0.01 | 0.02 | 0.03 | 0.09 (−820%) | 0.33 (−543%) | 1.85 (−738%) |
+
+Retrieval v2 on the same set is unchanged from the T1-pos record above (for example, 1.61 / 3.80 / 6.32 km pooled at 1 / 3 / 6 h).
+
+### What this says (dev only)
+- **T1-vel is worse than T1-pos on pooled underway traffic at every horizon.** Integrating forecast velocities compounds their error, and from 3 h on it loses to the best baseline.
+- **On transiting ships, T1-vel matches constant velocity at 1–3 h** (CIs straddle 0). It extrapolates the current velocity, which is what CV does, and it is better than T1-pos at 1 h. From 6 h on it is far worse than damped velocity.
+- **Neither representation beats retrieval anywhere up to 12 h, and neither should be a product model as is.** The variant left in the plan where route knowledge can enter is T1-vel+route.
+
+### History length: not measured, because this dev window cannot support it
+A cutoff is kept only if its whole window (`as_of − history`, `as_of + 24 h`) lies inside the dev period (Jun 18–22). So:
+- 24 h history draws cutoffs from 2 days;
+- 48 h from 1 day;
+- 72 h from none.
+
+Separate runs would therefore compare different cutoff populations, not history lengths. An interrupted 48 h run left an empty directory, which was removed; no 48 or 72 h result exists. A sound comparison needs one of:
+- (a) a sampler purge window set independently of the model's history, so all lengths share one cutoff set (a protocol change, for review);
+- (b) one run with per-model context lengths on a shared paired set;
+- (c) a longer dev window.
