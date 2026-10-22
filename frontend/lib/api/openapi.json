@@ -1896,6 +1896,17 @@
       "HexSet": {
         "description": "A calibrated hex prediction set at one target time (build plan v0.4 \u00a75 H): the H3 cells\nholding the true position with the nominal probability. Split-conformal on the calibration\nwindow: a MARGINAL coverage claim over the calibration population (underway vessels in the\ncutoff region, per stratum and horizon), not a per-forecast probability.",
         "properties": {
+          "adoption": {
+            "default": "pending",
+            "description": "The pre-registered held-out comparison against the conformal disc: pending until it has run; a not-adopted set is shown as experimental",
+            "enum": [
+              "adopted",
+              "not_adopted",
+              "pending"
+            ],
+            "title": "Adoption",
+            "type": "string"
+          },
           "area_km2": {
             "title": "Area Km2",
             "type": "number"

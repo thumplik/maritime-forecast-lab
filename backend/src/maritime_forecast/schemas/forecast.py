@@ -160,6 +160,11 @@ class HexSet(BaseModel):
     calibration_vessels: int
     n_candidates: int = Field(description="Retrieved continuations behind the density")
     boundary: dict | None = Field(None, description="GeoJSON MultiPolygon outline of the cells")
+    adoption: Literal["adopted", "not_adopted", "pending"] = Field(
+        "pending",
+        description="The pre-registered held-out comparison against the conformal disc: "
+        "pending until it has run; a not-adopted set is shown as experimental",
+    )
 
 
 class ModelForecast(BaseModel):

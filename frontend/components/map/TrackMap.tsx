@@ -25,7 +25,7 @@ interface Props {
   onViewChange?: (bbox: [number, number, number, number]) => void;
 }
 
-const FORECAST_SOURCES = ["discs", "candidates", "paths", "steps", "markers"] as const;
+const FORECAST_SOURCES = ["hexes", "discs", "candidates", "paths", "steps", "markers"] as const;
 const TRUTH_SOURCES = ["errors", "truth-lines", "truth-points"] as const;
 
 export default function TrackMap({ geo, forecast = null, truth = null, fitKey = null, trackKey = null, onViewChange }: Props) {
@@ -113,6 +113,18 @@ export default function TrackMap({ geo, forecast = null, truth = null, fitKey = 
           },
         });
         for (const id of [...FORECAST_SOURCES, ...TRUTH_SOURCES]) m.addSource(id, { type: "geojson", data: empty() });
+        m.addLayer({
+          id: "hexes-fill",
+          type: "fill",
+          source: "hexes",
+          paint: { "fill-color": ["get", "color"], "fill-opacity": 0.22 },
+        });
+        m.addLayer({
+          id: "hexes-edge",
+          type: "line",
+          source: "hexes",
+          paint: { "line-color": ["get", "color"], "line-width": 1.2 },
+        });
         m.addLayer({
           id: "discs-fill",
           type: "fill",
@@ -243,6 +255,7 @@ function draw(m: MlMap, geo: TrackGeo, refit: boolean) {
 function drawOverlay(m: MlMap, forecast: ForecastGeo | null, truth: TruthGeo | null) {
   const set = (id: string, data: GeoJSON.FeatureCollection | undefined) =>
     (m.getSource(id) as GeoJSONSource).setData(data ?? empty());
+  set("hexes", forecast?.hexes as GeoJSON.FeatureCollection);
   set("discs", forecast?.discs as GeoJSON.FeatureCollection);
   set("candidates", forecast?.candidates as GeoJSON.FeatureCollection);
   set("paths", forecast?.paths as GeoJSON.FeatureCollection);

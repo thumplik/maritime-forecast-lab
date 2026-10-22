@@ -1009,6 +1009,13 @@ export interface components {
          *     cutoff region, per stratum and horizon), not a per-forecast probability.
          */
         HexSet: {
+            /**
+             * Adoption
+             * @description The pre-registered held-out comparison against the conformal disc: pending until it has run; a not-adopted set is shown as experimental
+             * @default pending
+             * @enum {string}
+             */
+            adoption: "adopted" | "not_adopted" | "pending";
             /** Area Km2 */
             area_km2: number;
             /**

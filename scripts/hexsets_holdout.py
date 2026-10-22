@@ -12,6 +12,7 @@ Without --params-only it then scores the held-out test run: the analysis is appe
 test-access ledger BEFORE any test record is read, the tree must be clean, and the adoption
 rule pre-registered in docs/implementation-log.md is applied as written.
 
+    uv run --project backend python scripts/hexsets_holdout.py --dry-run <dev or calibration run>
     uv run --project backend python scripts/hexsets_holdout.py --protocol P-known --params-only
     uv run --project backend python scripts/hexsets_holdout.py --protocol P-known
 """
@@ -42,6 +43,8 @@ from maritime_forecast.storage.run_store import RunStore
 PARAMS_DIR = DATA_DIR / "model_params" / "hexsets"
 STRATA = {"underway:ALL": pl.lit(True), "underway:TRANSITING": pl.col("transiting")}
 TOLERANCE, TOLERANCE_MIN_N = 0.03, 200  # pre-registered (implementation log, 2026-10-22)
+LEVEL = 0.9  # pre-registered: 90% nominal, no level correction (not a command-line option)
+EPS_TOL = 1e-9  # coverage exactly at 0.87 or 0.93 counts as within (decided before the look)
 N_BOOT = 500
 
 
@@ -109,74 +112,91 @@ def rerun_candidates(run, k: int, cutoffs: pl.DataFrame):
     return out, failed, model
 
 
-def mixture(row, cand, c, broad):
+def mixture(row, cand, cell):
     frame = LocalFrame(row["pred_lat"], row["pred_lon"])
+    kw = {"eps": cell["eps"], "floor_m": cell["min_bandwidth_m"]}
     if cand is None:
-        return frame, hx.h1_mixture(frame, np.zeros(0), np.zeros(0), np.zeros(0), c, broad)
+        z = np.zeros(0)
+        return frame, hx.h1_mixture(frame, z, z, z, cell["c"], cell["broad_m"], **kw)
     tt, lat, lon, cov, w = cand
     j = tt.index(row["target_time"])
     use = cov[:, j]
-    return frame, hx.h1_mixture(frame, lat[use, j], lon[use, j], w[use], c, broad)
+    return frame, hx.h1_mixture(
+        frame, lat[use, j], lon[use, j], w[use], cell["c"], cell["broad_m"], **kw
+    )
 
 
-def fit(design: dict, cal_run, level: float, k: int) -> tuple[dict, dict]:
+def expected_cells(design: dict) -> list[tuple[str, float]]:
+    return [(st, float(h)) for st in STRATA for h in design["c_by_horizon"]]
+
+
+def fit(design: dict, cal_run) -> tuple[list[dict], list[dict], dict]:
     runs = RunStore()
     rows = underway_v2(runs.table(cal_run.run_id, "records"), runs.table(cal_run.run_id, "cutoffs"))
     cutoffs = runs.table(cal_run.run_id, "cutoffs").filter(
         pl.col("cutoff_id").is_in(rows["cutoff_id"].unique().implode())
     )
-    print(f"calibration: retrieval v2 k={k} on {cutoffs.height} underway cutoffs ...")
-    cand, failed, model = rerun_candidates(cal_run, k, cutoffs)
-    cells = []
-    for st, cond in STRATA.items():
-        for hz in sorted(rows["horizon_h"].unique().to_list()):
-            key = f"{hz:g}"
-            if key not in design["c_by_horizon"]:
-                continue
-            res, c = hx.resolution_for(hz), design["c_by_horizon"][key]
-            g = rows.filter(cond & (pl.col("horizon_h") == hz)).to_dicts()
-            d = np.array(
-                [
-                    hx.disc_score(
-                        LocalFrame(r["pred_lat"], r["pred_lon"]),
-                        r["truth_lat"],
-                        r["truth_lon"],
-                        res,
-                    )
-                    for r in g
-                ]
-            )
-            radius = hx.conformal_quantile(d, level)
-            if radius is None:
-                continue
-            broad = max(radius / 2, 1000.0)
-            sc = []
-            for r in g:
-                fr, mix = mixture(r, cand.get(r["cutoff_id"]), c, broad)
-                sc.append(hx.density_score(mix, fr, r["truth_lat"], r["truth_lon"], res))
-            tau = hx.density_threshold(np.array(sc), level)
-            if tau is None:
-                continue
-            cells.append(
+    print(f"calibration: retrieval v2 k={design['k']} on {cutoffs.height} underway cutoffs ...")
+    cand, failed, model = rerun_candidates(cal_run, design["k"], cutoffs)
+    cells, skipped = [], []
+    for st, hz in expected_cells(design):
+        res, c = hx.resolution_for(hz), design["c_by_horizon"][f"{hz:g}"]
+        g = rows.filter(STRATA[st] & (pl.col("horizon_h") == hz)).to_dicts()
+        d = np.array(
+            [
+                hx.disc_score(
+                    LocalFrame(r["pred_lat"], r["pred_lon"]), r["truth_lat"], r["truth_lon"], res
+                )
+                for r in g
+            ]
+        )
+        radius = hx.conformal_quantile(d, LEVEL)
+        if radius is None:
+            skipped.append(
                 {
                     "stratum": st,
                     "horizon_h": hz,
-                    "level": level,
-                    "res": res,
-                    "c": c,
                     "n": len(g),
-                    "n_vessels": len({r["vessel_id"] for r in g}),
-                    "disc_radius_m": radius,
-                    "broad_m": broad,
-                    "tau": tau,
+                    "why": "disc quantile undefined (n too small)",
                 }
             )
-            print(f"  {st} {hz:g} h: n={len(g)}, c={c}, disc r={radius / 1000:.1f} km")
-    return cells, {
+            continue
+        cell = {
+            "stratum": st,
+            "horizon_h": hz,
+            "level": LEVEL,
+            "res": res,
+            "c": c,
+            "eps": design["eps"],
+            "min_bandwidth_m": design["min_bandwidth_m"],
+            "n": len(g),
+            "n_vessels": len({r["vessel_id"] for r in g}),
+            "disc_radius_m": radius,
+            "broad_m": max(radius / 2, 1000.0),
+        }
+        sc = []
+        for r in g:
+            fr, mix = mixture(r, cand.get(r["cutoff_id"]), cell)
+            sc.append(hx.density_score(mix, fr, r["truth_lat"], r["truth_lon"], res))
+        tau = hx.density_threshold(np.array(sc), LEVEL)
+        if tau is None:
+            skipped.append(
+                {
+                    "stratum": st,
+                    "horizon_h": hz,
+                    "n": len(g),
+                    "why": "density quantile undefined (n too small)",
+                }
+            )
+            continue
+        cells.append({**cell, "tau": tau})
+        print(f"  {st} {hz:g} h: n={len(g)}, c={c}, disc r={radius / 1000:.1f} km")
+    info = {
         "failed": len(failed),
         "codes": dict(Counter(failed.values())),
         "model_config": model.config,
     }
+    return cells, skipped, info
 
 
 def main() -> None:
@@ -185,25 +205,36 @@ def main() -> None:
     ap.add_argument("--dataset-id", default="noaa_us_gulf_2023-06-07")
     ap.add_argument("--calibration-run")
     ap.add_argument("--test-run")
-    ap.add_argument("--level", type=float, default=0.9)
     ap.add_argument(
         "--params-only",
         action="store_true",
         help="fit and write the served parameters; read no test records",
     )
+    ap.add_argument(
+        "--dry-run",
+        metavar="RUN_ID",
+        help="exercise the whole scoring path on a NON-test run (dev or calibration): "
+        "no params written, no ledger entry",
+    )
+    ap.add_argument("--rerun-reason", help="required to look at the test run a second time")
     args = ap.parse_args()
     sha = git_sha()
-    if sha.endswith("-dirty") or sha == "unknown":
+    if not args.dry_run and (sha.endswith("-dirty") or sha == "unknown"):
         raise SystemExit("run from a clean, committed tree (outputs are stamped with its SHA)")
     design_path = PARAMS_DIR / "h1_design.json"
     design = json.loads(design_path.read_text())
+    if (design["eps"], design["min_bandwidth_m"]) != (hx.H1_EPS, hx.H1_MIN_BANDWIDTH_M):
+        raise SystemExit("the frozen design and evaluation/hexsets.py constants disagree")
+    for _, hz in expected_cells(design):
+        if hx.resolution_for(hz) != (7 if hz <= 3 else 6):
+            raise SystemExit("resolution rule differs from the frozen design")
     runs = RunStore()
     cal_id = args.calibration_run or latest(args.protocol, args.dataset_id, "calibration")
     cal_run = runs.load(cal_id)
     if cal_run.sampler.get("split") != "calibration":
         raise SystemExit(f"{cal_id} is not a calibration-split run")
     man = SplitManifest.model_validate_json(Path(cal_run.sampler["manifest_path"]).read_text())
-    cells, info = fit(design, cal_run, args.level, design["k"])
+    cells, skipped, info = fit(design, cal_run)
     s = cal_run.sampler
     params = {
         "kind": "h1_hex_sets",
@@ -213,6 +244,7 @@ def main() -> None:
         "manifest_sha256": cal_run.protocol.manifest_sha256,
         "design": design,
         "design_sha256": hashlib.sha256(design_path.read_bytes()).hexdigest(),
+        "level": LEVEL,
         "request": {
             "horizon_h": max(s["horizons_h"]),
             "step_minutes": s["step_minutes"],
@@ -231,30 +263,63 @@ def main() -> None:
         "retrieval_failures": {"n": info["failed"], "codes": info["codes"]},
         "class_source": "backfilled (NOAA; not as-of)",
         "cells": cells,
+        "skipped_cells": skipped,
+        "verdict": None,  # set by the held-out comparison; the API labels sets until then
         "git_sha": sha,
         "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }
-    PARAMS_DIR.mkdir(parents=True, exist_ok=True)
     out_params = PARAMS_DIR / f"{args.protocol}__{args.dataset_id}.json"
+    if args.dry_run:
+        evaluate(args, params, sha, dry=True)
+        return
+    PARAMS_DIR.mkdir(parents=True, exist_ok=True)
     out_params.write_text(json.dumps(params, indent=1, default=str) + "\n")
     print(f"params -> {out_params}")
     if args.params_only:
         print("params only: no test records read")
         return
-    evaluate(args, params, sha)
+    d, verdict, test_id = evaluate(args, params, sha, dry=False)
+    params["verdict"] = {**verdict, "test_run_id": test_id, "analysis": str(d)}
+    out_params.write_text(json.dumps(params, indent=1, default=str) + "\n")
+    print(f"verdict written to {out_params}")
 
 
-def evaluate(args, params: dict, sha: str) -> None:
+def evaluate(args, params: dict, sha: str, dry: bool):
     runs = RunStore()
-    ledger = [
-        e
-        for e in read_ledger(args.dataset_id)
-        if e["protocol"] == args.protocol and e.get("kind") is None
-    ]
-    test_id = args.test_run or (ledger[-1]["run_id"] if ledger else None)
-    if test_id is None or test_id not in {e["run_id"] for e in ledger}:
-        raise SystemExit("the test run must be a recorded held-out run (test-access ledger)")
-    test = runs.load(test_id)
+    hashed = {
+        "design_sha256": params["design_sha256"],
+        "level": LEVEL,
+        "calibration_set_id": params["calibration_set_id"],
+    }
+    informed: list[str] = []
+    if dry:
+        test_id = args.dry_run
+        test = runs.load(test_id)
+        if test.sampler.get("split") == "test":
+            raise SystemExit("--dry-run never touches a test-split run")
+    else:
+        entries = read_ledger(args.dataset_id)
+        scored = [e for e in entries if e["protocol"] == args.protocol and e.get("kind") is None]
+        test_id = args.test_run or (scored[-1]["run_id"] if scored else None)
+        if test_id is None or test_id not in {e["run_id"] for e in scored}:
+            raise SystemExit("the test run must be a recorded held-out run (test-access ledger)")
+        again = [
+            e
+            for e in entries
+            if e["run_id"] == test_id and e.get("kind") in ("hexsets_h1_started", "hexsets_h1")
+        ]
+        if again and not args.rerun_reason:
+            raise SystemExit(
+                f"{test_id} was already looked at for H1 ({len(again)} ledger "
+                "entries); pass --rerun-reason to look again"
+            )
+        # Disclosure: earlier analyses of this test run (e.g. the disc's July coverage).
+        informed = [
+            f"{e['kind']}@{e['accessed_at']}"
+            for e in entries
+            if e["run_id"] == test_id and e.get("kind") and not e["kind"].startswith("hexsets_h1")
+        ]
+        test = runs.load(test_id)
     if test.protocol.manifest_sha256 != params["manifest_sha256"]:
         raise SystemExit("calibration and test runs use different split manifests")
     req = (
@@ -264,18 +329,26 @@ def evaluate(args, params: dict, sha: str) -> None:
     )
     if req != tuple(params["request"].values()):
         raise SystemExit(f"test request {req} differs from the calibration's {params['request']}")
-    hashed = {
-        "design_sha256": params["design_sha256"],
-        "level": args.level,
-        "calibration_set_id": params["calibration_set_id"],
-    }
-    # On record BEFORE any test record is read: a crash can never leave a look unrecorded.
-    record_analysis(args.dataset_id, test_id, "hexsets_h1_started", hashed, sha, "(started)")
+    if not dry:
+        # On record BEFORE any test record is read: a crash can never leave a look unrecorded.
+        record_analysis(
+            args.dataset_id,
+            test_id,
+            "hexsets_h1_started",
+            hashed,
+            sha,
+            "(started)",
+            informed_by=informed,
+            rerun_reason=args.rerun_reason,
+        )
     rows = underway_v2(runs.table(test_id, "records"), runs.table(test_id, "cutoffs"))
     cutoffs = runs.table(test_id, "cutoffs").filter(
         pl.col("cutoff_id").is_in(rows["cutoff_id"].unique().implode())
     )
-    print(f"test: retrieval v2 k={params['design']['k']} on {cutoffs.height} underway cutoffs ...")
+    print(
+        f"scoring {test_id}: retrieval v2 k={params['design']['k']} on {cutoffs.height} "
+        "underway cutoffs ..."
+    )
     cand, failed, _ = rerun_candidates(test, params["design"]["k"], cutoffs)
     out = []
     for f in params["cells"]:
@@ -283,7 +356,7 @@ def evaluate(args, params: dict, sha: str) -> None:
         area = hx.cell_area_km2(res)
         g = rows.filter(STRATA[st] & (pl.col("horizon_h") == hz)).to_dicts()
         for r in g:
-            fr, mix = mixture(r, cand.get(r["cutoff_id"]), f["c"], f["broad_m"])
+            fr, mix = mixture(r, cand.get(r["cutoff_id"]), f)
             truth = hx.cell_of(r["truth_lat"], r["truth_lon"], res)
             kde = hx.level_set_cells(mix, fr, f["tau"], res)
             disc = hx.disc_cells(r["pred_lat"], r["pred_lon"], f["disc_radius_m"], res)
@@ -295,6 +368,7 @@ def evaluate(args, params: dict, sha: str) -> None:
                     "vessel_id": r["vessel_id"],
                     "week": r["as_of"].isocalendar().week,
                     "retrieval_error": failed.get(r["cutoff_id"]),
+                    "n_candidates": len(mix.xy),
                     "kde_covered": truth in set(kde),
                     "kde_area_km2": len(kde) * area,
                     "disc_covered": truth in set(disc),
@@ -302,21 +376,36 @@ def evaluate(args, params: dict, sha: str) -> None:
                 }
             )
         print(f"  {st} {hz:g} h: {len(g)} samples")
-    df = pl.DataFrame(out)
+    schema = {
+        "stratum": pl.String,
+        "horizon_h": pl.Float64,
+        "cutoff_id": pl.UInt32,
+        "vessel_id": pl.String,
+        "week": pl.Int64,
+        "retrieval_error": pl.String,
+        "n_candidates": pl.Int64,
+        "kde_covered": pl.Boolean,
+        "kde_area_km2": pl.Float64,
+        "disc_covered": pl.Boolean,
+        "disc_area_km2": pl.Float64,
+    }
+    df = pl.DataFrame(out, schema=schema)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
-    d = RUNS_DIR / "hexsets" / test_id / stamp
+    d = RUNS_DIR / "hexsets" / test_id / (f"dryrun_{stamp}" if dry else stamp)
     d.mkdir(parents=True)
     df.write_parquet(d / "samples.parquet")
-    summary, verdict = summarise(df, params, args.level)
-    report(d, test_id, params, summary, verdict, len(failed), sha)
+    summary, verdict = summarise(df, params)
+    report(d, test_id, params, summary, verdict, len(failed), sha, informed, dry)
     (d / "summary.json").write_text(
         json.dumps(
             {
                 "test_run_id": test_id,
+                "dry_run": dry,
                 "params": params,
-                "level": args.level,
+                "level": LEVEL,
                 "cells": summary,
                 "verdict": verdict,
+                "informed_by": informed,
                 "retrieval_failures": {"n": len(failed), "codes": dict(Counter(failed.values()))},
                 "git_sha": sha,
                 "created_at": stamp,
@@ -326,9 +415,20 @@ def evaluate(args, params: dict, sha: str) -> None:
         )
         + "\n"
     )
-    record_analysis(args.dataset_id, test_id, "hexsets_h1", hashed, sha, str(d))
+    if not dry:
+        record_analysis(
+            args.dataset_id,
+            test_id,
+            "hexsets_h1",
+            hashed,
+            sha,
+            str(d),
+            informed_by=informed,
+            rerun_reason=args.rerun_reason,
+        )
     print((d / "report.md").read_text())
     print(f"-> {d}")
+    return d, verdict, test_id
 
 
 def _boot(g: pl.DataFrame, num: str, den: str | None) -> tuple[float, float]:
@@ -343,37 +443,59 @@ def _boot(g: pl.DataFrame, num: str, den: str | None) -> tuple[float, float]:
     return float(np.quantile(est, 0.025)), float(np.quantile(est, 0.975))
 
 
-def summarise(df: pl.DataFrame, params: dict, level: float):
+def _within(covered: int, n: int) -> bool:
+    """|coverage - level| <= tolerance with n >= the minimum, in counts (no float edge)."""
+    return n >= TOLERANCE_MIN_N and abs(covered - LEVEL * n) <= TOLERANCE * n + EPS_TOL
+
+
+def summarise(df: pl.DataFrame, params: dict):
+    """Per cell results and the pre-registered verdict. Every expected cell (2 strata x the
+    design's horizons) is counted: a missing one is neither within tolerance nor smaller."""
     rows = []
-    for f in params["cells"]:
-        g = df.filter((pl.col("stratum") == f["stratum"]) & (pl.col("horizon_h") == f["horizon_h"]))
+    for st, hz in expected_cells(params["design"]):
+        g = df.filter((pl.col("stratum") == st) & (pl.col("horizon_h") == hz))
         if not g.height:
+            rows.append(
+                {
+                    "stratum": st,
+                    "horizon_h": hz,
+                    "n": 0,
+                    "missing": True,
+                    "disc_within": False,
+                    "kde_within": False,
+                    "kde_smaller": False,
+                }
+            )
             continue
         n = g.height
+        kc, dc = int(g["kde_covered"].sum()), int(g["disc_covered"].sum())
         row = {
-            "stratum": f["stratum"],
-            "horizon_h": f["horizon_h"],
+            "stratum": st,
+            "horizon_h": hz,
             "n": n,
+            "missing": False,
             "n_vessels": g["vessel_id"].n_unique(),
-            "disc_coverage": float(g["disc_covered"].mean()),
+            "zero_candidates": int((g["n_candidates"] == 0).sum()),
+            "disc_coverage": dc / n,
             "disc_ci": _boot(g, "disc_covered", None),
-            "kde_coverage": float(g["kde_covered"].mean()),
+            "kde_coverage": kc / n,
             "kde_ci": _boot(g, "kde_covered", None),
             "disc_area": float(g["disc_area_km2"].mean()),
             "kde_area": float(g["kde_area_km2"].mean()),
             "area_ratio": float(g["kde_area_km2"].sum() / g["disc_area_km2"].sum()),
             "area_ratio_ci": _boot(g, "kde_area_km2", "disc_area_km2"),
+            "disc_within": _within(dc, n),
+            "kde_within": _within(kc, n),
         }
-        ok = n >= TOLERANCE_MIN_N
-        row["disc_within"] = ok and abs(row["disc_coverage"] - level) <= TOLERANCE
-        row["kde_within"] = ok and abs(row["kde_coverage"] - level) <= TOLERANCE
+        row["kde_smaller"] = row["kde_area"] < row["disc_area"]
         rows.append(row)
     pooled = [r for r in rows if r["stratum"] == "underway:ALL"]
     verdict = {
         "kde_cells_within": sum(r["kde_within"] for r in rows),
         "disc_cells_within": sum(r["disc_within"] for r in rows),
         "n_cells": len(rows),
-        "pooled_horizons_smaller": sum(r["kde_area"] < r["disc_area"] for r in pooled),
+        "missing_cells": [f"{r['stratum']}@{r['horizon_h']:g}h" for r in rows if r["missing"]],
+        "pooled_horizons_smaller": sum(r["kde_smaller"] for r in pooled),
         "n_pooled_horizons": len(pooled),
     }
     verdict["adopted"] = (
@@ -383,33 +505,48 @@ def summarise(df: pl.DataFrame, params: dict, level: float):
     return rows, verdict
 
 
-def report(d: Path, test_id, params, rows, verdict, n_failed, sha) -> None:
+def report(d: Path, test_id, params, rows, verdict, n_failed, sha, informed, dry) -> None:
+    title = "DRY RUN (crash check on a non-test run; not a result)" if dry else "held-out test run"
     lines = [
-        f"# H1 hex sets vs disc on the held-out test run {test_id}",
+        f"# H1 hex sets vs disc: {title} {test_id}",
         "",
         f"Calibration run `{params['calibration_set_id']}`; design sha "
-        f"`{params['design_sha256'][:12]}`; git `{sha[:12]}`. Retrieval re-run failures: "
-        f"{n_failed} (broad-only sets). Tolerance ±{TOLERANCE} on n ≥ {TOLERANCE_MIN_N}.",
+        f"`{params['design_sha256'][:12]}`; git `{sha[:12]}`. Level {LEVEL:.0%}, tolerance "
+        f"±{TOLERANCE} on n ≥ {TOLERANCE_MIN_N}. Retrieval re-run failures: {n_failed} "
+        "(broad-only sets; per-cell zero-candidate counts below).",
         "",
+    ]
+    if informed:
+        lines += [
+            f"Earlier analyses of this run (the disc arm is not blind): {', '.join(informed)}.",
+            "",
+        ]
+    lines += [
         "| stratum | h | n (vessels) | disc coverage [CI] | H1 coverage [CI] | disc km² | "
-        "H1 km² | H1/disc area [CI] |",
-        "|---|---|---|---|---|---|---|---|",
+        "H1 km² | H1/disc area [CI] | 0-cand. |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for r in rows:
+        if r["missing"]:
+            lines.append(
+                f"| {r['stratum']} | {r['horizon_h']:g} h | 0 | missing | missing | | | | |"
+            )
+            continue
         lines.append(
             f"| {r['stratum']} | {r['horizon_h']:g} h | {r['n']} ({r['n_vessels']}) | "
             f"{r['disc_coverage']:.3f} [{r['disc_ci'][0]:.3f}, {r['disc_ci'][1]:.3f}]"
             f"{'' if r['disc_within'] else ' ✗'} | {r['kde_coverage']:.3f} [{r['kde_ci'][0]:.3f}, "
             f"{r['kde_ci'][1]:.3f}]{'' if r['kde_within'] else ' ✗'} | {r['disc_area']:,.0f} | "
             f"{r['kde_area']:,.0f} | {r['area_ratio']:.2f} [{r['area_ratio_ci'][0]:.2f}, "
-            f"{r['area_ratio_ci'][1]:.2f}] |"
+            f"{r['area_ratio_ci'][1]:.2f}] | {r['zero_candidates']} |"
         )
     lines += [
         "",
         f"**Pre-registered verdict:** H1 within tolerance on {verdict['kde_cells_within']}"
         f" of {verdict['n_cells']} cells (disc: {verdict['disc_cells_within']}); H1 smaller "
         f"on {verdict['pooled_horizons_smaller']} of {verdict['n_pooled_horizons']} pooled "
-        f"horizons -> **{'adopted' if verdict['adopted'] else 'not adopted'}**.",
+        f"horizons; missing cells: {verdict['missing_cells'] or 'none'} -> "
+        f"**{'adopted' if verdict['adopted'] else 'not adopted'}**.",
     ]
     (d / "report.md").write_text("\n".join(lines) + "\n")
 

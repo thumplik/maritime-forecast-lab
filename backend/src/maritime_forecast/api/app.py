@@ -499,6 +499,10 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
                                                       req.step_minutes))  # fmt: skip
         if cf.status != "ok" or not cf.trajectories:
             return refuse("retrieval found no candidates for the density")
+        verdict = hp.get("verdict")
+        adoption = (
+            "pending" if not verdict else "adopted" if verdict.get("adopted") else "not_adopted"
+        )
         sets = []
         for i, t in enumerate(horizon.target_times):
             lead = (t - history.as_of).total_seconds() / 3600
@@ -515,8 +519,10 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
                 np.array([tr.points[j].longitude_deg for tr in keep]),
                 np.array([tr.similarity or 0.0 for tr in keep]),
             )  # fmt: skip
-            sets.append(HexSet(nominal_level=cell["level"],
-                               calibration_set_id=hp["calibration_set_id"], **got))  # fmt: skip
+            sets.append(
+                HexSet(nominal_level=cell["level"], calibration_set_id=hp["calibration_set_id"],
+                       adoption=adoption, **got)
+            )  # fmt: skip
         out = list(forecasts)
         out[idx] = f.model_copy(update={"hex_sets": sets})
         return out

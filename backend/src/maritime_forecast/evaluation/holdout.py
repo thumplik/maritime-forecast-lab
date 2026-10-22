@@ -89,7 +89,8 @@ def record_test_access(manifest: SplitManifest, run_id: str, git: str, models: l
 
 
 def record_analysis(dataset_id: str, test_run_id: str, kind: str, config: dict, git: str,
-                    output: str) -> None:  # fmt: skip
+                    output: str, informed_by: list[str] | None = None,
+                    rerun_reason: str | None = None) -> None:  # fmt: skip
     """Record a later analysis of a held-out run's stored records (e.g. conformal coverage):
     no model is scored again, but the look is on record with its config and code version."""
     entries = read_ledger(dataset_id)
@@ -97,7 +98,7 @@ def record_analysis(dataset_id: str, test_run_id: str, kind: str, config: dict, 
         "run_id": test_run_id, "kind": kind, "protocol": None, "git_sha": git,
         "accessed_at": datetime.now(UTC).isoformat(timespec="seconds"), "models": [],
         "config_sha256": config_sha(config), "output": output,
-        "informed_by": [], "rerun_reason": None,
+        "informed_by": list(informed_by or []), "rerun_reason": rerun_reason,
     })  # fmt: skip
     p = ledger_path(dataset_id)
     p.parent.mkdir(parents=True, exist_ok=True)

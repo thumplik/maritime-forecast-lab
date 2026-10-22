@@ -81,6 +81,7 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay, link 
       model_ids: [...selected].sort(),
       conformal_level: level,
       show_ground_truth: false,
+      hex_sets: true,
     }),
     [datasetId, history.vessel_id, asOf, horizon, selected, level, link],
   );
@@ -232,6 +233,8 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay, link 
                           : `no radius at this target time (fitted at ${(f.uncertainty.fitted_horizons_h ?? []).join(", ")} h)`
                         : "no radii"}
                       {(f.trajectories?.length ?? 0) > 0 && ` · ${f.trajectories!.length} candidate routes (similarity, not probability)`}
+                      {f.hex_sets?.[s] &&
+                        ` · ${Math.round(f.hex_sets[s]!.nominal_level * 100)}% hex set: ${f.hex_sets[s]!.cells.length} cells, ${Math.round(f.hex_sets[s]!.area_km2).toLocaleString()} km² (${f.hex_sets[s]!.stratum}, n=${f.hex_sets[s]!.calibration_n}; ${f.hex_sets[s]!.adoption === "adopted" ? "adopted" : f.hex_sets[s]!.adoption === "pending" ? "not yet tested on the hold-out" : "experimental: not adopted"})`}
                       {f.predicted_horizon_hours != null && ` · predicted at ${f.predicted_horizon_hours} h as benchmarked, shown to ${horizon} h`}
                     </p>
                   )}
@@ -315,6 +318,9 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay, link 
             </span>
             <span>
               <i className="ring" /> conformal radius at the target time
+            </span>
+            <span>
+              <i className="hex" /> calibrated hex set at the target time (retrieval)
             </span>
             <span>
               <i style={{ background: TRUTH_COLOR }} /> withheld truth (after reveal)

@@ -203,14 +203,15 @@ def h1_bandwidth(xy: np.ndarray, w: np.ndarray, c: float,
 
 
 def h1_mixture(frame: LocalFrame, lat: np.ndarray, lon: np.ndarray, w: np.ndarray, c: float,
-               broad_m: float, eps: float = H1_EPS) -> Mixture:  # fmt: skip
+               broad_m: float, eps: float = H1_EPS,
+               floor_m: float = H1_MIN_BANDWIDTH_M) -> Mixture:  # fmt: skip
     """The H1 density in `frame` (centred on the central point) from candidate positions at one
     target time (only candidates whose reference covers it) with similarity weights."""
     use = np.asarray(w, float) > 0
     x, y = frame.to_xy(np.asarray(lat, float)[use], np.asarray(lon, float)[use])
     xy = np.column_stack([x, y]) if use.any() else np.zeros((0, 2))
     ww = np.asarray(w, float)[use]
-    return Mixture(xy, ww, h1_bandwidth(xy, ww, c), (0.0, 0.0), broad_m, eps)
+    return Mixture(xy, ww, h1_bandwidth(xy, ww, c, floor_m), (0.0, 0.0), broad_m, eps)
 
 
 # -- serving (POST /forecasts) ----------------------------------------------------------------
@@ -240,7 +241,9 @@ def h1_set(cell: dict, central_lat: float, central_lon: float, lat: np.ndarray, 
     import h3
 
     frame = LocalFrame(central_lat, central_lon)
-    mix = h1_mixture(frame, lat, lon, w, cell["c"], cell["broad_m"])
+    mix = h1_mixture(
+        frame, lat, lon, w, cell["c"], cell["broad_m"], cell["eps"], cell["min_bandwidth_m"]
+    )  # the fitted values, never module defaults
     cells = level_set_cells(mix, frame, cell["tau"], cell["res"])
     return {
         "resolution": cell["res"],

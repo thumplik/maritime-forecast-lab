@@ -140,7 +140,7 @@ def test_is_transiting_follows_the_sampler_rule():
 
 def test_h1_set_returns_cells_area_and_outline():
     cell = {"c": 0.5, "broad_m": 20000.0, "tau": 1e-9, "res": 6, "stratum": "underway:ALL",
-            "n": 300, "n_vessels": 120}  # fmt: skip
+            "n": 300, "n_vessels": 120, "eps": 0.05, "min_bandwidth_m": 500.0}  # fmt: skip
     la, lo = FRAME.to_latlon(np.array([0.0, 5000.0]), np.array([0.0, 0.0]))
     got = hx.h1_set(cell, LAT0, LON0, la, lo, np.array([1.0, 1.0]))
     assert got["cells"] and got["area_km2"] == pytest.approx(

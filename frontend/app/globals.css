@@ -59,6 +59,7 @@ button.primary, .forecast > button { font: inherit; padding: 7px 10px; border-ra
 .eval th.experimental { color: var(--warn); }
 .eval { overflow-x: auto; display: flex; flex-direction: column; gap: 4px; }
 .repro { word-break: break-all; }
+.legend i.hex { width: 12px; height: 12px; background: rgba(227, 73, 72, 0.25); border: 1px solid #e34948; clip-path: polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%); }
 .legend i.ring { width: 12px; height: 12px; border-radius: 50%; border: 1px solid #6b7280; background: rgba(107, 114, 128, 0.08); }
 .nav { display: flex; gap: 12px; }
 .nav a { color: var(--muted); text-decoration: none; }

@@ -1620,3 +1620,19 @@ uv run --project backend python scripts/hexsets_dev.py --run P-known_noaa_us_gul
    - (b) H1's mean area is smaller than the disc's at ≥ 4 of the 6 underway:ALL horizons.
 5. **Reported either way:** per-cell coverage and area with vessel-bootstrap CIs, the paired area ratio, and retrieval re-run failures. Nothing else is tried on July: no other c, level, K or resolution.
 6. **P-unseen** is not part of this comparison (its calibration bucket is 5% of vessels; U1 already showed it under-powered).
+
+## 2026-10-22 — Milestone 7: pre-July review fixes (still before any July look)
+
+**Review:** leakage-reviewer subagent on `66ccdc3`. No leakage, and the code matches the pre-registration. Procedural fixes, all made **before** the look:
+1. **One look, pinned level.** The level is fixed at the registered 90% (no option). A second H1 look at the test run is refused unless `--rerun-reason` is given, and the reason is recorded.
+2. **`--dry-run <non-test run>`** exercises the whole scoring path (no parameters written, no ledger entry). It is run once on the dev run before July. An empty result has an explicit schema.
+3. **Disclosure.** The disc arm is not blind: the July run `…213109Z` already has `conformal_coverage` and `conformal_coverage_h3` analyses in the ledger. They go into the started entry's `informed_by` (`record_analysis` gained `informed_by` and `rerun_reason`), and `report.md` says so.
+4. **Served verdict.** The verdict is written into the served parameters after the look. `HexSet.adoption` is "pending", "adopted" or "not_adopted", and the panel labels not-adopted sets as experimental.
+5. **Missing cells.** All 12 cells (2 strata × 6 horizons) are expected. A missing one is listed and counts as neither within tolerance nor smaller.
+6. **Broad-only sets** are counted per sample (`n_candidates`) and per cell (zero-candidate count).
+7. **Tolerance edge.** Tolerance is tested in counts, with ε = 1e-9: a coverage of exactly 0.87 or 0.93 counts as within (decided now).
+8. **Design constants.** The frozen design's ε and floor are asserted against the code constants and stored per fitted cell; serving uses the fitted values.
+
+**Dev sensitivity of the spread rule at 93%** (run `…/20261022T201131Z`, after the 90% design was frozen; changes nothing): pooled H1 reaches 0.89–0.92 coverage at 22–30% of the disc's area; transiting at 12 h balloons (ratio 1.08).
+
+**Dry run** (`data/runs/hexsets/<dev run>/dryrun_20261022T202620Z`; a crash check, not a result: the dev window precedes the calibration window): all 12 cells fitted on the calibration run; scoring ran end to end on the dev run, with no parameters written and no ledger entry. Re-run failures 0. Pooled H1 coverage 0.87–0.91 at 26–42% of the disc's area. The rule as registered would read "not adopted" there (H1 within tolerance on 10 cells, the disc on 11; the transiting 12/24 h cells are at the edge). **The rule is kept exactly as registered.**

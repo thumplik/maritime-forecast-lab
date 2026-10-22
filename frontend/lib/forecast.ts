@@ -16,6 +16,7 @@ interface FeatureCollection<G, P> {
 type LineString = { type: "LineString"; coordinates: Position[] };
 type Point = { type: "Point"; coordinates: Position };
 type Polygon = { type: "Polygon"; coordinates: Position[][] };
+type MultiPolygon = { type: "MultiPolygon"; coordinates: Position[][][] };
 
 export interface Anchor {
   t: string;
@@ -126,6 +127,12 @@ export interface DiscProps extends PathProps {
   level: number;
 }
 
+export interface HexProps extends PathProps {
+  area_km2: number;
+  level: number;
+  cells: number;
+}
+
 export interface ForecastGeo {
   paths: FeatureCollection<LineString, PathProps>;
   steps: FeatureCollection<Point, StepProps>;
@@ -134,6 +141,8 @@ export interface ForecastGeo {
   candidates: FeatureCollection<LineString, CandidateProps>;
   /** Conformal discs at the selected target time, only where a radius was fitted. */
   discs: FeatureCollection<Polygon, DiscProps>;
+  /** Calibrated hex prediction sets at the selected target time (GeoJSON outline of the cells). */
+  hexes: FeatureCollection<Polygon | MultiPolygon, HexProps>;
   bounds: [number, number, number, number] | null;
 }
 
@@ -145,6 +154,7 @@ export function forecastToGeo(resp: ForecastResponse, anchor: Anchor | null, ste
     markers: { type: "FeatureCollection", features: [] },
     candidates: { type: "FeatureCollection", features: [] },
     discs: { type: "FeatureCollection", features: [] },
+    hexes: { type: "FeatureCollection", features: [] },
     bounds: null,
   };
   const ref = anchor?.lon ?? resp.forecasts.find((f) => f.points.length)?.points[0]?.longitude_deg ?? 0;
@@ -174,6 +184,17 @@ export function forecastToGeo(resp: ForecastResponse, anchor: Anchor | null, ste
         geometry: { type: "LineString", coordinates: [...head, ...c.points.map((p) => pos(p.latitude_deg, p.longitude_deg))] },
         properties: { model_id: f.model_id, color, trajectory_id: c.trajectory_id, similarity: c.similarity ?? null, central: c.trajectory_id === f.central_trajectory_id },
       });
+    }
+    const hs = f.hex_sets?.[step];
+    if (hs?.boundary) {
+      const g = hs.boundary as unknown as Polygon | MultiPolygon;
+      geo.hexes.features.push({
+        type: "Feature",
+        geometry: g,
+        properties: { model_id: f.model_id, color, area_km2: hs.area_km2, level: hs.nominal_level, cells: hs.cells.length },
+      });
+      const rings = g.type === "Polygon" ? g.coordinates : g.coordinates.flat();
+      for (const ring of rings) all.push(...ring.map(([lon, la]) => pos(la, lon)));
     }
     const r = f.uncertainty?.radii_m[step];
     const p = f.points[step];

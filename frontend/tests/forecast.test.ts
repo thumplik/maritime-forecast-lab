@@ -67,6 +67,19 @@ describe("forecastToGeo", () => {
     expect(d).toHaveLength(1);
     expect(d[0]!.properties.radius_m).toBe(5000);
   });
+  it("draws a hex set only at target times that have one", () => {
+    const r = forecast();
+    const ring: [number, number][] = [[-94, 29], [-93.9, 29], [-93.9, 29.1], [-94, 29]];
+    r.forecasts[0]!.hex_sets = [null, null, {
+      kind: "h1_hex_set", nominal_level: 0.9, calibration_set_id: "cal", resolution: 6, cells: ["a", "b"], area_km2: 72,
+      stratum: "underway:ALL", calibration_n: 300, calibration_vessels: 90, n_candidates: 12,
+      boundary: { type: "Polygon", coordinates: [ring] }, adoption: "pending",
+    }];
+    expect(forecastToGeo(r, anchor, 0).hexes.features).toHaveLength(0);
+    const h = forecastToGeo(r, anchor, 2).hexes.features;
+    expect(h).toHaveLength(1);
+    expect(h[0]!.properties.area_km2).toBe(72);
+  });
   it("honours the model toggle", () => {
     expect(forecastToGeo(forecast(), anchor, 0, new Set()).paths.features).toHaveLength(0);
   });
