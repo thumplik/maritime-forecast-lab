@@ -17,24 +17,31 @@
  },
  "models": {
   "constant_turn_rate_v1": {
-   "model_version": "1.0.0"
+   "model_version": "1.0.0",
+   "config_sha256": "442d0afe1939f962f2b4bb55db21c349df86c4b8277fa47838a88e619a93370b"
   },
   "constant_velocity_v1": {
-   "model_version": "1.0.0"
+   "model_version": "1.0.0",
+   "config_sha256": "9a7008509fb0dd903ca8df331f02c85008b5db34715349f51de206425a0b7692"
   },
   "damped_velocity_v1": {
-   "model_version": "1.0.0"
+   "model_version": "1.0.0",
+   "config_sha256": "48b542830592d928e3abde690819c9283e8adca20b36e6aa81c16fe5b3a215d9"
   },
   "persistence_v1": {
-   "model_version": "1.0.0"
+   "model_version": "1.0.0",
+   "config_sha256": "9a7008509fb0dd903ca8df331f02c85008b5db34715349f51de206425a0b7692"
   },
   "route_retrieval_v1": {
-   "model_version": "1.0.0"
+   "model_version": "1.0.0",
+   "config_sha256": "c27cd7c04cef50bce78fb32b2fafab16418091621bb8aa21140a81f98558dcdf"
   },
   "route_retrieval_v2": {
-   "model_version": "2.0.0"
+   "model_version": "2.0.0",
+   "config_sha256": "50062dc78c8d61460fc316b80d4e6803f018bf7c78634bf393b7a2f88d79e86a"
   }
  },
+ "label_reach_end": "2023-07-01T00:30:00+00:00",
  "class_source": "backfilled (NOAA; not as-of)",
  "radii": [
   {
@@ -17534,6 +17541,6 @@
    "radius_m": 154480.2317671174
   }
  ],
- "git_sha": "9baab7025572e6dc451de9f4c0f1482d86e4ac3a",
- "created_at": "2026-10-22T01:29:31+00:00"
+ "git_sha": "9edfe428e946b79f8242826a6852e8dd87580607",
+ "created_at": "2026-10-22T01:44:24+00:00"
 }
