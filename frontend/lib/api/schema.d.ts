@@ -864,10 +864,20 @@ export interface components {
              * @description as_of minus the last report time
              */
             last_report_age_s: number | null;
+            /**
+             * Motion State
+             * @description The cutoff sampler's motion rule on the history (None: neither)
+             */
+            motion_state?: ("underway" | "stationary") | null;
             /** N Gaps */
             n_gaps: number;
             /** N Reports */
             n_reports: number;
+            /**
+             * Vessel Class
+             * @description Class on the last report with one (NOAA back-filled, not as-of)
+             */
+            vessel_class?: string | null;
         };
         /** ModelError */
         ModelError: {

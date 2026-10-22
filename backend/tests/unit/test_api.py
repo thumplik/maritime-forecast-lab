@@ -227,6 +227,7 @@ def test_forecast_endpoint(client):
     assert by["damped_velocity_v1"]["error"]["code"] == "not_fitted"
     cov = f["input_coverage"]
     assert cov["last_report"] == "2023-06-01T01:00:00Z" and cov["n_reports"] == 13
+    assert cov["motion_state"] in ("underway", "stationary", None) and "vessel_class" in cov
     assert "truth" not in json.dumps(f).lower() or "truth is never" in json.dumps(f)
 
 

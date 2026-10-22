@@ -113,6 +113,12 @@ class InputCoverage(BaseModel):
     last_report: AwareDatetime | None
     last_report_age_s: float | None = Field(description="as_of minus the last report time")
     n_gaps: int
+    motion_state: Literal["underway", "stationary"] | None = Field(
+        None, description="The cutoff sampler's motion rule on the history (None: neither)"
+    )
+    vessel_class: str | None = Field(
+        None, description="Class on the last report with one (NOAA back-filled, not as-of)"
+    )
 
 
 class ModelError(BaseModel):

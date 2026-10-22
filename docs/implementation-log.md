@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 5 — Workbench UI** (not started). Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 5 — Workbench UI** (in progress: slice 1, forecast comparison, done 2026-10-22). Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -1153,3 +1153,45 @@ Beyond the plan, the H3 Mondrian variant was pre-registered, evaluated and **not
 - Radii exist only at the fitted horizons.
 
 **Next step:** Milestone 5, the workbench UI (§9). Smallest first slice: the forecast comparison screen. It shows the models' paths for a chosen vessel and cutoff, the conformal discs at the fitted horizons, the retrieval candidates (labelled similarity), and the withheld-truth overlay only after the forecast exists.
+
+## 2026-10-22 — Milestone 5 slice 1: forecast comparison screen (Screen B)
+
+**Milestone:** 5 — workbench UI
+**Done** (uncommitted):
+- **Cutoff mode in the explorer.** A checkbox plus a slider over the loaded track's report times sets `as_of`, so a cutoff is always a real report (§6.1). In this mode the map draws only reports at or before `as_of` (`clipTrack`), and every report after it is removed from the drawn layers.
+- **`ForecastPanel`:**
+  - choice of horizon (1–24 h), conformal level (none/80/90/95%) and models; calibration-only models are hidden;
+  - `POST /forecasts`; dashed, model-coloured paths from the anchor report, with a step dot every 10 min;
+  - retrieval candidates as faint lines labelled "similarity, not probability";
+  - a target-time slider. The conformal disc is drawn only where a radius was fitted, with its level, calibration n, vessels and stratum. Elsewhere the panel says so;
+  - per-model warnings, model toggles, and a reproducibility line (forecast id, data version, model versions).
+- **Withheld truth:**
+  - fetched from `POST /forecasts/evaluation` only after a forecast exists for the identical request; any change to the request clears both;
+  - drawn solid green with hollow points, never bridged across a missing target time; dotted error lines at the selected time;
+  - an error table (whole hours × models, along/cross on hover, `n/e` with reasons, paired ADE, a truth-availability row);
+  - a July cutoff gets the API's `holdout_test_period` refusal, shown as "Truth withheld".
+- **Experimental horizons:** `ForecastResponse.input_coverage` gains `motion_state` (the sampler's rule) and `vessel_class` (last report, back-filled). The panel looks up §6.4 admission for `motion:class` and labels each horizon first-class, experimental or not audited. Additive API change; types regenerated.
+- **MMSI search:** typing a full MMSI opens it even when it is not on the current vessel page.
+- Pure layer functions in `lib/forecast.ts`, with Vitest tests on synthetic data (clipping, anchor, discs only at fitted times, toggles, truth never bridged, admission lookup).
+
+**Commands run:**
+```bash
+make gen-api; make lint; make test            # 294 passed
+cd frontend && npm run typecheck && npm test && npm run build   # 18 passed; build ok
+```
+
+**Checked in the browser (real data, `make dev`):**
+- Tanker 636010378, `as_of` 2023-06-20T11:59:24Z, 6 h horizon, P-known parameters. Truth was shown. Errors at 1/2/3/4 h:
+  - CV 0.66/1.84/3.30/4.91 km;
+  - retrieval v2 1.29/2.44/3.39/4.70 km;
+  - damped 5.1–51 km;
+  - persistence 22–87 km.
+
+  This is one diagnostic sample on the dev window, not a result. No radii: `as_of` is before the calibration labels' reach.
+- Cargo ship 636092697, `as_of` 2023-07-10T12:00:10Z. 90% discs at 6 h of 87–160 km (n=334 from 113 vessels, `underway:cargo`). Truth was refused (July hold-out).
+
+**Known gaps:**
+- Admission exists only for `noaa_us_gulf_2023-06`. On the June+July dataset every horizon reads "not audited".
+- The explorer fetches the whole day's track to the browser and clips it client-side. Post-cutoff reports are not drawn, but they are in the browser's memory. That is the same data `GET /track` already serves.
+
+**Next step:** slice 2, the benchmark dashboard (Screen C): model × horizon table with CIs, along/cross, error versus lead time, strata, evaluable/`not_evaluable` counts, reproducibility metadata. Then the failure gallery: open a benchmark sample on the map by run id. Then the Playwright smoke test.

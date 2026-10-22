@@ -1,9 +1,12 @@
 "use client";
 
-// Milestone 1 explorer: pick a dataset, a time window and a vessel; see its real track with
-// coverage gaps drawn distinctly. Forecasting and truth overlays arrive in Milestones 2 and 5.
+// Workbench: pick a dataset, a time window and a vessel; see its real track with coverage gaps
+// drawn distinctly. Setting a cutoff clips the track to what was known then and opens the
+// forecast comparison (Milestone 5, Screen B).
 import { useCallback, useEffect, useMemo, useState } from "react";
+import ForecastPanel from "@/components/forecast/ForecastPanel";
 import TrackMap, { COLORS } from "@/components/map/TrackMap";
+import { clipTrack, type ForecastGeo, type TruthGeo } from "@/lib/forecast";
 import { api, ApiError, type DatasetSummary, type Track, type VesselPage } from "@/lib/api/client";
 import { formatDuration, trackToGeo } from "@/lib/track";
 
@@ -34,6 +37,16 @@ export default function Explorer() {
   const [track, setTrack] = useState<Track | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [cutoffIdx, setCutoffIdx] = useState<number | null>(null);
+  const [overlay, setOverlay] = useState<{ forecast: ForecastGeo | null; truth: TruthGeo | null; fitKey: string | null }>({
+    forecast: null,
+    truth: null,
+    fitKey: null,
+  });
+  const onOverlay = useCallback(
+    (forecast: ForecastGeo | null, truth: TruthGeo | null, fitKey: string | null) => setOverlay({ forecast, truth, fitKey }),
+    [],
+  );
 
   const dataset = datasets.find((d) => d.dataset_id === datasetId);
   const window = useMemo(
@@ -88,7 +101,14 @@ export default function Explorer() {
     return () => ac.abort();
   }, [datasetId, window, vesselId]);
 
-  const geo = useMemo(() => (track ? trackToGeo(track) : null), [track]);
+  useEffect(() => setCutoffIdx(null), [track]);
+  // A cutoff is always a real report time (§6.1); everything after it is removed from the map.
+  const asOf = track && cutoffIdx !== null ? track.points.observed_at[cutoffIdx] : undefined;
+  const history = useMemo(() => (track && asOf ? clipTrack(track, asOf) : null), [track, asOf]);
+  useEffect(() => {
+    if (!asOf) setOverlay({ forecast: null, truth: null, fitKey: null });
+  }, [asOf]);
+  const geo = useMemo(() => (history ? trackToGeo(history) : track ? trackToGeo(track) : null), [track, history]);
   const onView = useCallback((b: [number, number, number, number]) => setView(b), []);
   const shown = (page?.vessels ?? []).filter((v) => v.vessel_id.includes(filter.trim()));
   const longestGap = track?.gaps.reduce((m, g) => Math.max(m, g.duration_s), 0) ?? 0;
@@ -97,7 +117,7 @@ export default function Explorer() {
     <main className="layout">
       <aside className="panel">
         <h1>Maritime Forecast Lab</h1>
-        <p className="muted">Historical AIS explorer · Milestone 1</p>
+        <p className="muted">Historical AIS forecast workbench</p>
 
         <label>
           Dataset
@@ -174,6 +194,11 @@ export default function Explorer() {
             </button>
           </span>
         </div>
+        {/^\d{9}$/.test(filter.trim()) && !shown.some((v) => v.vessel_id === filter.trim()) && (
+          <button className="link small" onClick={() => setVesselId(filter.trim())}>
+            Open MMSI {filter.trim()} (not on this page)
+          </button>
+        )}
         <ul className="vessels" data-testid="vessel-list">
           {shown.map((v) => (
             <li key={v.vessel_id}>
@@ -201,8 +226,35 @@ export default function Explorer() {
                 {w}
               </p>
             ))}
+            <label className="check">
+              <input
+                type="checkbox"
+                data-testid="cutoff-toggle"
+                checked={cutoffIdx !== null}
+                disabled={track.n_points < 2}
+                onChange={(e) => setCutoffIdx(e.target.checked ? Math.floor(track.n_points / 2) : null)}
+              />
+              Forecast from a cutoff (hides reports after it)
+            </label>
+            {cutoffIdx !== null && asOf && (
+              <label>
+                Cutoff (as_of): <span className="mono small">{asOf}</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={track.n_points - 1}
+                  value={cutoffIdx}
+                  onChange={(e) => setCutoffIdx(Number(e.target.value))}
+                  data-testid="cutoff-slider"
+                />
+                <span className="muted small">
+                  report {cutoffIdx + 1} of {track.n_points} · {track.points.sog_knots[cutoffIdx] ?? "–"} kn · COG {track.points.cog_deg[cutoffIdx] ?? "–"}°
+                </span>
+              </label>
+            )}
           </section>
         )}
+        {history && asOf && <ForecastPanel dataset={dataset} history={history} asOf={asOf} onOverlay={onOverlay} />}
 
         <div className="legend small">
           <span>
@@ -216,7 +268,14 @@ export default function Explorer() {
           </span>
         </div>
       </aside>
-      <TrackMap geo={geo} onViewChange={onView} />
+      <TrackMap
+        geo={geo}
+        trackKey={track ? `${track.dataset_id}/${track.vessel_id}/${track.from}` : null}
+        forecast={overlay.forecast}
+        truth={overlay.truth}
+        fitKey={overlay.fitKey}
+        onViewChange={onView}
+      />
     </main>
   );
 }

@@ -10,7 +10,9 @@ export type VesselSummary = S["VesselSummary"];
 export type VesselPage = S["VesselPage"];
 export type Track = S["Track"];
 export type ApiErrorBody = S["ErrorBody"];
-// Milestone 2 contracts (served; no UI uses them yet)
+export type ModelList = S["ModelList"];
+export type ModelInfo = S["ModelInfo"];
+export type ModelForecast = S["ModelForecast"];
 export type ForecastRequest = S["ForecastRequest"];
 export type ForecastResponse = S["ForecastResponse"];
 export type ForecastEvaluation = S["ForecastEvaluation"];
@@ -33,12 +35,12 @@ export class ApiError extends Error {
 
 type Query = Record<string, string | number | undefined>;
 
-async function get<T>(path: string, query: Query = {}, signal?: AbortSignal): Promise<T> {
+async function request<T>(path: string, query: Query, init: RequestInit): Promise<T> {
   const url = new URL(path, API_URL);
   for (const [k, v] of Object.entries(query)) if (v !== undefined) url.searchParams.set(k, String(v));
   let res: Response;
   try {
-    res = await fetch(url, { signal });
+    res = await fetch(url, init);
   } catch (e) {
     if ((e as Error).name === "AbortError") throw e;
     throw new ApiError(0, "backend_unreachable", `Cannot reach the API at ${API_URL}. Is it running (make dev)?`);
@@ -55,6 +57,10 @@ async function get<T>(path: string, query: Query = {}, signal?: AbortSignal): Pr
   return (await res.json()) as T;
 }
 
+const get = <T>(path: string, query: Query = {}, signal?: AbortSignal) => request<T>(path, query, { signal });
+const post = <T>(path: string, body: unknown, signal?: AbortSignal) =>
+  request<T>(path, {}, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" }, signal });
+
 export const api = {
   health: (signal?: AbortSignal) => get<Health>("/health", {}, signal),
   datasets: (signal?: AbortSignal) => get<DatasetList>("/datasets", {}, signal),
@@ -64,4 +70,8 @@ export const api = {
   ) => get<VesselPage>("/vessels", q, signal),
   track: (vesselId: string, q: { dataset_id: string; from?: string; to?: string }, signal?: AbortSignal) =>
     get<Track>(`/vessels/${encodeURIComponent(vesselId)}/track`, q, signal),
+  models: (datasetId: string, signal?: AbortSignal) => get<ModelList>("/models", { dataset_id: datasetId }, signal),
+  forecast: (req: ForecastRequest, signal?: AbortSignal) => post<ForecastResponse>("/forecasts", req, signal),
+  /** Withheld truth for the forecast the same request produces (403 holdout_test_period on test). */
+  evaluate: (req: ForecastRequest, signal?: AbortSignal) => post<ForecastEvaluation>("/forecasts/evaluation", req, signal),
 };

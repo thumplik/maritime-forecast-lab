@@ -513,6 +513,8 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
                 "last_report": times[-1] if times else None,
                 "last_report_age_s": (as_of - times[-1]).total_seconds() if times else None,
                 "n_gaps": max(segs) if segs else 0,
+                "motion_state": conformal.motion_state(history.reports),
+                "vessel_class": conformal.last_vessel_class(history.reports) if times else None,
             },
             forecasts=_with_radii(
                 req,

@@ -1586,6 +1586,22 @@
             "description": "as_of minus the last report time",
             "title": "Last Report Age S"
           },
+          "motion_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "underway",
+                  "stationary"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The cutoff sampler's motion rule on the history (None: neither)",
+            "title": "Motion State"
+          },
           "n_gaps": {
             "title": "N Gaps",
             "type": "integer"
@@ -1593,6 +1609,18 @@
           "n_reports": {
             "title": "N Reports",
             "type": "integer"
+          },
+          "vessel_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Class on the last report with one (NOAA back-filled, not as-of)",
+            "title": "Vessel Class"
           }
         },
         "required": [
