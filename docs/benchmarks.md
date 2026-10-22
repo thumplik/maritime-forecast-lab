@@ -515,3 +515,43 @@ Separate runs would therefore compare different cutoff populations, not history 
 - **Moored ships:** longer context makes them drift more.
 - **Retrieval v2 stays far ahead at every horizon.** Context length doesn't change the conclusion that zero-shot Timestral on raw positions is not a product model.
 - **Limits:** one day of cutoffs (Jun 21), horizons up to 6 h only, and the population differs from the 24 h dev runs above. These numbers compare context lengths with each other, not with those runs.
+
+## 2026-10-22 — Hex prediction sets (H1, retrieval ensemble) vs the disc baseline, dev window (Milestone 7 slice 1; development record)
+
+Dev run `P-known_noaa_us_gulf_2023-06-07_dev_20261022T175118Z` (24 h history), underway cutoffs only (2,743). Script `scripts/hexsets_dev.py` at commit `10e0da1`. Outputs are in `data/runs/hexsets/<run>/20261022T193234Z/` (90%) and the sensitivity run beside it (93%). Not held out, not for the README. Retrieval v2's design was frozen on this same window, so absolute numbers are optimistic for both methods; only the comparison counts.
+
+**Design**
+- **Split:** chronological at the median cutoff time (2023-06-19 23:57).
+  - Calibration rows need their label before the split (purge); evaluation rows have `as_of` after it.
+  - A vessel-hashed third of the calibration rows chooses H1's bandwidth from {0.5, 1, 2, 4, 8, 16} km by smallest set area. The other two thirds fit the disc radius and the density threshold.
+- **H1:** retrieval v2 re-run with K = 50; candidates that cover the target time, weighted by similarity. A Gaussian kernel density, mixed (5%) with a broad Gaussian of scale disc radius / 2 around the run's scored v2 point.
+- **Disc:** the conformal disc around that same scored v2 point.
+- **Scoring:** both are scored as H3 cells (res 7 up to 3 h, res 6 beyond). Covered means the truth's cell is in the set.
+- **No failures and no dropped samples:** retrieval re-run failures 0.
+- **24 h is not calibratable:** no calibration label lands before the split.
+
+**Underway pooled, evaluation half (n ≈ 1,170–1,310, vessel-bootstrap 95% CIs)**
+
+| Horizon | Disc @ 90% nominal: coverage / mean km² | H1 @ 90%: coverage / km² (H1/disc area) | H1 @ 93%: coverage / km² |
+|---|---|---|---|
+| 1 h | 0.907 [0.890, 0.922] / 252 | 0.878 [0.856, 0.896] / 46 (0.18) | 0.903 [0.885, 0.922] / 65 |
+| 2 h | 0.898 [0.881, 0.915] / 815 | 0.882 [0.862, 0.899] / 151 (0.19) | 0.909 [0.891, 0.927] / 222 |
+| 3 h | 0.918 [0.902, 0.934] / 2,052 | 0.888 [0.867, 0.908] / 300 (0.15) | 0.925 [0.909, 0.941] / 613 |
+| 6 h | 0.917 [0.900, 0.933] / 7,775 | 0.885 [0.865, 0.905] / 1,159 (0.15) | 0.917 [0.898, 0.935] / 2,216 |
+| 12 h | 0.869 [0.848, 0.890] / 16,258 | 0.859 [0.834, 0.881] / 3,924 (0.24) | 0.883 [0.862, 0.903] / 4,724 |
+
+**Transiting, evaluation half (n ≈ 210–230)**
+
+| Horizon | Disc @ 90% | H1 @ 90% (area ratio) | H1 @ 93% (area ratio against disc @ 93%) |
+|---|---|---|---|
+| 1 h | 0.879 / 295 | 0.871 / 155 (0.53) | 0.918 / 284 (0.58) |
+| 2 h | 0.905 / 2,005 | 0.849 / 424 (0.21) | 0.871 / 810 (0.27) |
+| 3 h | 0.888 / 4,073 | 0.841 / 606 (0.15) | 0.893 / 1,478 (0.21) |
+| 6 h | 0.887 / 17,753 | 0.859 / 9,963 (0.56) | 0.892 / 18,241 (0.79) |
+| 12 h | 0.839 / 56,760 | 0.794 / 16,300 (0.29) | 0.954 / 111,998 (1.12) |
+
+### What this says (dev)
+- **On pooled underway traffic, H1's sets are about 3.5–4 times smaller than the disc at matched real coverage.** At 93% nominal, H1 reaches 0.90–0.93 real coverage, and its areas are 26–29% of the disc's at 90% nominal over 1–12 h. This is the v0.4 hypothesis: the probability mass follows the lanes, a disc does not.
+- **H1 under-covers its nominal level by about 2–3 points; the disc by about 0–1.** Likely causes are the chronological shift between the halves, and the density score being more sensitive to which routes were in use. For the July comparison the level correction must be fixed in advance, not tuned on test.
+- **Transiting is unstable:** bandwidth selection from 32–83 selection samples swings between 0.5 and 16 km, and at 12 h H1 is no smaller. The fix to try is choosing the bandwidth on pooled underway traffic (or as a fraction of the candidate spread) rather than per stratum.
+- **24 h** needs a longer calibration window: the calibration split (Jun 23–30) does that for the hold-out protocol.

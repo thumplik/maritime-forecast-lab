@@ -1555,3 +1555,42 @@ uv run --project backend python scripts/run_benchmark.py --protocol P-known --da
 - conformal multimodal regions: arXiv 2312.07434, 2507.22389, 2508.13362.
 
 **Next step:** Milestone 7, slice 1, on dev. H1 sets against discs converted to cells, calibrated on the first half of the dev window and evaluated on the second, compared at the same coverage.
+
+## 2026-10-22 — Milestone 7 slice 1: H1 hex sets vs discs on dev
+
+**Milestone:** 7 — Hex prediction sets
+**Done** (commits `39c500c`, `10e0da1`):
+- **`evaluation/hexsets.py`:**
+  - a Gaussian-mixture density from candidate positions plus a broad component;
+  - a split-conformal density threshold;
+  - exact level-set enumeration over H3 cells (a bounded seed radius, brute-force tested);
+  - the conformal disc as cells;
+  - large H3 disks grown until the outer ring is outside the radius (tested at res 6 up to 400 km).
+- **`scripts/hexsets_dev.py`:** a dev-only experiment with a chronological split, purged calibration labels, bandwidth selection on a vessel-hashed third, failures kept as broad-only sets, and a full sidecar.
+
+**Leakage review (leakage-reviewer subagent):** no leakage into model inputs. All five findings are fixed before any result was read:
+1. H3 disks were too small for large radii (the first run was stopped and nothing was read).
+2. Failed re-runs were dropped silently.
+3. Calibration labels reached into the evaluation half.
+4. Bandwidth and threshold were chosen on the same rows.
+5. The sidecar was under-labelled.
+
+A crash-check output on the smoke run (every cell skipped) was deleted.
+
+**Commands run:**
+```bash
+make lint && make test     # 320 passed
+uv run --project backend python scripts/hexsets_dev.py --run P-known_noaa_us_gulf_2023-06-07_dev_20261022T175118Z               # 90%
+uv run --project backend python scripts/hexsets_dev.py --run P-known_noaa_us_gulf_2023-06-07_dev_20261022T175118Z --level 0.93   # sensitivity
+```
+
+**Result (dev, `docs/benchmarks.md`):**
+- On pooled underway traffic, H1 sets are about 3.5–4 times smaller than the disc at matched real coverage (H1 at 93% nominal reaches 0.90–0.93).
+- H1 under-covers its nominal level by 2–3 points.
+- Transiting is unstable (bandwidth selection on few samples).
+- 24 h is not calibratable on dev.
+
+**Next step:**
+1. Stabilise the bandwidth: choose it on pooled underway traffic, or scale it with the candidate spread. Re-check transiting on dev.
+2. Pre-register the July comparison against the disc: calibration window Jun 23–30, a fixed level correction, and the adoption rule from §6.7.
+3. In parallel, serve sets from `POST /forecasts` and draw them on the map.
