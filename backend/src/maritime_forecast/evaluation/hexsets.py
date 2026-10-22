@@ -177,3 +177,36 @@ def density_threshold(scores: np.ndarray, level: float) -> float | None:
     with probability >= level (marginal, exchangeable). None if n is too small."""
     q = conformal_quantile(-np.asarray(scores, float), level)
     return None if q is None else -q
+
+
+# -- H1: the retrieval-ensemble set (frozen design, build plan §5 H) -------------------------
+H1_EPS = 0.05
+H1_MIN_BANDWIDTH_M = 500.0
+
+
+def weighted_spread(xy: np.ndarray, w: np.ndarray) -> float:
+    """Per-axis weighted RMS distance of candidate positions from their weighted mean (m);
+    0 for fewer than two weighted candidates."""
+    if len(xy) < 2 or w.sum() <= 0:
+        return 0.0
+    w = w / w.sum()
+    mu = (xy * w[:, None]).sum(0)
+    return float(np.sqrt((w * ((xy - mu) ** 2).sum(1)).sum() / 2))
+
+
+def h1_bandwidth(xy: np.ndarray, w: np.ndarray, c: float,
+                 floor_m: float = H1_MIN_BANDWIDTH_M) -> float:  # fmt: skip
+    """Kernel bandwidth scaled with the candidates' spread: max(floor, c * spread). One factor
+    c per horizon, chosen on pooled underway traffic, serves every stratum."""
+    return max(floor_m, c * weighted_spread(xy, w))
+
+
+def h1_mixture(frame: LocalFrame, lat: np.ndarray, lon: np.ndarray, w: np.ndarray, c: float,
+               broad_m: float, eps: float = H1_EPS) -> Mixture:  # fmt: skip
+    """The H1 density in `frame` (centred on the central point) from candidate positions at one
+    target time (only candidates whose reference covers it) with similarity weights."""
+    use = np.asarray(w, float) > 0
+    x, y = frame.to_xy(np.asarray(lat, float)[use], np.asarray(lon, float)[use])
+    xy = np.column_stack([x, y]) if use.any() else np.zeros((0, 2))
+    ww = np.asarray(w, float)[use]
+    return Mixture(xy, ww, h1_bandwidth(xy, ww, c), (0.0, 0.0), broad_m, eps)

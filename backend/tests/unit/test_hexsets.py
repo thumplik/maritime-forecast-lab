@@ -104,3 +104,16 @@ def test_disk_contains_every_centre_within_large_radii(res, radius_m):
     want = {c for c, d in zip(ref, np.hypot(x, y), strict=True) if d <= radius_m}
     assert want <= set(hx._disk(lat, lon, radius_m, res))
     assert set(hx.disc_cells(lat, lon, radius_m, res)) == want
+
+
+def test_h1_bandwidth_scales_with_candidate_spread():
+    tight = np.array([[0.0, 0.0], [100.0, 0.0], [0.0, 100.0]])
+    wide = tight * 100
+    w = np.ones(3)
+    assert hx.h1_bandwidth(tight, w, 0.5) == hx.H1_MIN_BANDWIDTH_M  # floor
+    assert hx.h1_bandwidth(wide, w, 0.5) == pytest.approx(0.5 * hx.weighted_spread(wide, w))
+    assert hx.weighted_spread(wide[:1], w[:1]) == 0.0
+    la, lo = FRAME.to_latlon(wide[:, 0], wide[:, 1])
+    m = hx.h1_mixture(FRAME, la, lo, np.array([1.0, 0.0, 1.0]), 0.5, 20000.0)
+    assert len(m.xy) == 2 and m.h >= hx.H1_MIN_BANDWIDTH_M  # zero weight is not a candidate
+    assert len(hx.h1_mixture(FRAME, la[:0], lo[:0], w[:0], 0.5, 20000.0).xy) == 0

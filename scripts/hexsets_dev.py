@@ -37,7 +37,8 @@ from maritime_forecast.schemas.manifest import SplitManifest
 from maritime_forecast.storage.parquet_store import ParquetStore
 from maritime_forecast.storage.run_store import RunStore
 
-BANDWIDTHS_M = (500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0)
+BANDWIDTHS_M = (500.0, 1000.0, 2000.0, 4000.0, 8000.0, 16000.0)  # rule "fixed"
+SPREAD_FACTORS = (0.1, 0.2, 0.35, 0.5, 0.75, 1.0)  # rule "spread": h = max(500 m, c * spread)
 EPS = 0.05
 SELECT_N = 300  # calibration samples per cell used to estimate set area for bandwidth choice
 N_BOOT = 500
@@ -63,17 +64,25 @@ def candidates(model, store, dataset_id, cutoffs, history_hours, horizon_h, step
     return out, failed
 
 
+RULE = "spread"  # set from --rule in main()
+
+
 def mixture_for(row, cand, h, broad_m):
-    """H1 mixture in the frame centred on the scored central point at this horizon. Without
-    candidates (a failed re-run) it is the broad component alone."""
+    """H1 mixture in the frame centred on the scored central point at this horizon. `h` is a
+    bandwidth (rule "fixed") or the spread factor c (rule "spread", hexsets.h1_mixture).
+    Without candidates (a failed re-run) it is the broad component alone."""
     frame = LocalFrame(row["pred_lat"], row["pred_lon"])
     if cand is None:
-        return frame, hx.Mixture(np.zeros((0, 2)), np.zeros(0), h, (0.0, 0.0), broad_m, EPS), 0
+        hb = h if RULE == "fixed" else hx.H1_MIN_BANDWIDTH_M
+        return frame, hx.Mixture(np.zeros((0, 2)), np.zeros(0), hb, (0.0, 0.0), broad_m, EPS), 0
     tt, lat, lon, cov, w = cand
     j = tt.index(row["target_time"])
     use = cov[:, j] & (w > 0)
-    x, y = frame.to_xy(lat[use, j], lon[use, j])
-    mix = hx.Mixture(np.column_stack([x, y]), w[use], h, (0.0, 0.0), broad_m, EPS)
+    if RULE == "spread":
+        mix = hx.h1_mixture(frame, lat[use, j], lon[use, j], w[use], h, broad_m, EPS)
+    else:
+        x, y = frame.to_xy(lat[use, j], lon[use, j])
+        mix = hx.Mixture(np.column_stack([x, y]), w[use], h, (0.0, 0.0), broad_m, EPS)
     return frame, mix, int(use.sum())
 
 
@@ -115,7 +124,15 @@ def main() -> None:
     ap.add_argument("--run", required=True)
     ap.add_argument("--k", type=int, default=50)
     ap.add_argument("--level", type=float, default=0.9)
+    ap.add_argument("--rule", choices=["spread", "fixed"], default="spread",
+                    help="spread: h = max(500 m, c * candidate spread), c per horizon chosen on "
+                    "pooled underway and reused for every stratum; fixed: one bandwidth per "
+                    "stratum and horizon")  # fmt: skip
     args = ap.parse_args()
+    global RULE
+    RULE = args.rule
+    grid = SPREAD_FACTORS if RULE == "spread" else BANDWIDTHS_M
+    pooled: dict[float, float] = {}  # horizon -> c chosen on underway:ALL (rule "spread")
     runs = RunStore()
     run = runs.load(args.run)
     if run.sampler.get("split") != "dev":
@@ -187,13 +204,16 @@ def main() -> None:
                     sc.append(hx.density_score(mix, fr, r["truth_lat"], r["truth_lon"], res))
                 return hx.density_threshold(np.array(sc), args.level)
 
-            # Bandwidth: chosen on the selection third only (its own radius and thresholds).
+            # Bandwidth: chosen on the selection third only (its own radius and thresholds);
+            # with the spread rule, once per horizon on pooled underway traffic.
             r_sel = disc_radius(sel)
             best = None
-            if r_sel is not None:
+            if RULE == "spread" and st != "underway:ALL" and hz in pooled:
+                best = (pooled[hz], None)
+            elif r_sel is not None:
                 b_sel = max(r_sel / 2, 1000.0)
                 sub = sel[:: max(1, len(sel) // SELECT_N)]
-                for h in BANDWIDTHS_M:
+                for h in grid:
                     t = tau_for(sel, h, b_sel)
                     if t is not None:
                         a = mean_area(sub, cand, h, b_sel, t, res)
@@ -206,6 +226,8 @@ def main() -> None:
                                 "why": "conformal quantile undefined (n too small)"})  # fmt: skip
                 continue
             h = best[0]
+            if st == "underway:ALL":
+                pooled[hz] = h
             broad = max(radius / 2, 1000.0)
             tau = tau_for(fit, h, broad)
             fitted.append({"stratum": st, "horizon_h": hz, "res": res, "n_select": len(sel),
@@ -224,7 +246,8 @@ def main() -> None:
                     "disc_covered": truth in set(disc), "disc_area_km2": len(disc) * area,
                 })  # fmt: skip
             print(f"{st} {hz:g} h: select {len(sel)}, fit {len(fit)}, eval {len(ev)}, "
-                  f"h={h:.0f} m, disc r={radius / 1000:.1f} km")  # fmt: skip
+                  f"{'c' if RULE == 'spread' else 'h'}={h:g}, "
+                  f"disc r={radius / 1000:.1f} km")  # fmt: skip
     res_df = pl.DataFrame(out)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     d = RUNS_DIR / "hexsets" / args.run / stamp
@@ -232,11 +255,12 @@ def main() -> None:
     res_df.write_parquet(d / "samples.parquet")
     lines = [f"# Hex sets vs disc, {args.run} (dev; development record)", "",
              f"Level {args.level:.0%}; calibration = cutoffs before {boundary.isoformat()}, "
-             f"evaluation = after (labels purged at the boundary). K={args.k}, eps={EPS}, "
+             f"evaluation = after (labels purged at the boundary). Rule {RULE}. K={args.k}, "
+             f"eps={EPS}, "
              f"git `{sha[:12]}`. Retrieval re-run failures: {len(failed)} (broad-only sets).",
              "",
              "| stratum | h | n eval | disc coverage [CI] | H1 coverage [CI] | disc km² | H1 km² | "
-             "H1/disc area [CI] | H1 bandwidth |",
+             "H1/disc area [CI] | H1 bandwidth or c |",
              "|---|---|---|---|---|---|---|---|---|"]  # fmt: skip
     summary = []
     for f in fitted:
@@ -260,7 +284,7 @@ def main() -> None:
             f"[{row['kde_coverage_ci'][0]:.3f}, {row['kde_coverage_ci'][1]:.3f}] | "
             f"{row['disc_area_mean']:,.0f} | {row['kde_area_mean']:,.0f} | "
             f"{row['area_ratio'][0]:.2f} [{row['area_ratio'][1]:.2f}, {row['area_ratio'][2]:.2f}]"
-            f" | {f['bandwidth_m']:.0f} m |"
+            f" | {f['bandwidth_m']:g} |"
         )  # fmt: skip
     (d / "report.md").write_text("\n".join(lines) + "\n")
     (d / "summary.json").write_text(json.dumps({
@@ -270,7 +294,7 @@ def main() -> None:
                                           "seed", "cutoff_region")},
         "retrieval": {"model": "route_retrieval_v2", "config": model.config, "k": args.k},
         "central_point": "the run's stored route_retrieval_v2 prediction (k=10)",
-        "level": args.level, "eps": EPS, "bandwidths_m": BANDWIDTHS_M,
+        "level": args.level, "eps": EPS, "rule": RULE, "grid": grid,
         "boundary": boundary.isoformat(),
         "split_rule": "calibration: label time < boundary; evaluation: as_of >= boundary; "
                       "others purged. Bandwidth chosen on the vessel-hash selection third; "
