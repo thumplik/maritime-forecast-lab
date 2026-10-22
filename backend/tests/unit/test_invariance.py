@@ -38,13 +38,20 @@ PARAMS = {
     # A stand-in for the optional checkpoint: the adapter's context building is what can leak.
     "timestral_pos_v1": {"backend": LinearBackend()},
     "timestral_vel_v1": {"backend": LinearBackend()},
+    "timestral_pos_c24_v1": {"backend": LinearBackend()},
+    "timestral_pos_c48_v1": {"backend": LinearBackend()},
 }
 FEW_REFERENCES = {"route_retrieval_v1", "route_retrieval_v2"}
 # T1 needs 6 observed grid steps (1 h at 10 min). Five of the seven cases have under 1 h of
 # fixture history, so those grids are correctly `insufficient_context`; the 1-min grid
 # forecasts every case. Measured for T1-pos: 54 of 126 comparisons are against an ok forecast.
 # T1-vel also needs a position at as_of (stale_anchor otherwise), so it forecasts fewer.
-SHORT_CONTEXT_OK = {"timestral_pos_v1": 0.4, "timestral_vel_v1": 0.3}
+SHORT_CONTEXT_OK = {
+    "timestral_pos_v1": 0.4,
+    "timestral_vel_v1": 0.3,
+    "timestral_pos_c24_v1": 0.4,
+    "timestral_pos_c48_v1": 0.4,
+}
 
 CASES = [
     (MOVING, T0 + timedelta(minutes=60)),

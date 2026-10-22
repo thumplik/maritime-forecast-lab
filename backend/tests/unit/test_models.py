@@ -64,6 +64,8 @@ def test_registry():
         "persistence_v1",
         "route_retrieval_v1",
         "route_retrieval_v2",
+        "timestral_pos_c24_v1",
+        "timestral_pos_c48_v1",
         "timestral_pos_v1",
         "timestral_vel_v1",
     ]
@@ -81,6 +83,8 @@ def test_registry():
         "route_retrieval_v2",
         "timestral_pos_v1",
         "timestral_vel_v1",
+        "timestral_pos_c24_v1",
+        "timestral_pos_c48_v1",
     }  # fitted params; index; pretrained weights (external corpus)
     with pytest.raises(UnknownModel):
         get_model("oracle")

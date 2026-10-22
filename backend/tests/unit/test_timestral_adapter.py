@@ -95,6 +95,7 @@ def test_typed_errors_when_not_installed_or_context_too_short(monkeypatch):
 def test_optional_models_are_not_in_the_default_benchmark_set():
     assert "timestral_pos_v1" not in product_model_ids()
     assert "timestral_vel_v1" not in product_model_ids()
+    assert not any(m.startswith("timestral") for m in product_model_ids())
     assert "persistence_v1" in product_model_ids()
 
 
@@ -169,3 +170,18 @@ def test_real_checkpoint_velocity_heads_south_west():
     last = _history(range(0, 181, 1)).last()
     assert f.points[-1].latitude_deg < last["latitude_deg"] - 0.05
     assert f.points[-1].longitude_deg < last["longitude_deg"] - 0.05
+
+
+def test_fixed_context_variant_sees_only_its_window():
+    h = _history(range(0, 181, 5))  # 3 h of reports
+    frame = LocalFrame(h.last()["latitude_deg"], h.last()["longitude_deg"])
+    full = ta.context_xy(h, frame, 10, 30)
+    one = ta.context_xy(h, frame, 10, 30, hours=1)
+    assert full.shape == (2, 19) and one.shape == (2, 7)
+    np.testing.assert_array_equal(one[:, 1:], full[:, -6:])  # same grid points, newest hour
+    assert np.isnan(one[:, 0]).all()  # the window start: half-open, no older report used
+    fake = LinearBackend()
+    m = get_model("timestral_pos_c24_v1", ModelContext(params={"backend": fake}))
+    assert m.model_id == "timestral_pos_c24_v1" and m.config["context_hours"] == 24
+    m.predict(_history(range(0, 181, 5)), ForecastHorizon(T0, 1, 10))
+    assert fake.calls[0]["shape"] == (1, 2, 19)  # a 3 h history is shorter than 24 h

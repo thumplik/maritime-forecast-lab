@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 
 import numpy as np
+import polars as pl
 
 from maritime_forecast.config import DATA_DIR
 from maritime_forecast.geo.geodesic import LocalFrame
@@ -104,15 +105,19 @@ def load_backend(repo_id: str = REPO_ID, revision: str = REVISION):
 
 
 def context_xy(history: AISHistory, frame: LocalFrame, step_minutes: int,
-               gap_minutes: float) -> np.ndarray:  # fmt: skip
+               gap_minutes: float, hours: float | None = None) -> np.ndarray:  # fmt: skip
     """(2, T) east/north metres on the grid as_of - k*step (oldest first, k = T-1..0) within
-    the history window; NaN where no report or no gap-free bracket of reports exists."""
-    r = history.reports
+    the last `hours` of the history window (all of it if None); NaN where no report or no
+    gap-free bracket of reports exists. Reports older than the window are not used at all."""
+    hours = history.history_hours if hours is None else min(hours, history.history_hours)
+    r = history.reports.filter(
+        pl.col("observed_at") > history.as_of - timedelta(hours=hours)
+    )  # the same half-open window as the history itself
     t = np.array([x.timestamp() for x in r["observed_at"].to_list()], dtype=float)
     x, y = frame.to_xy(r["latitude_deg"].to_numpy(), r["longitude_deg"].to_numpy())
     as_of = history.as_of.timestamp()
     step = step_minutes * 60.0
-    n = int(history.history_hours * 3600 // step) + 1
+    n = int(hours * 3600 // step) + 1
     grid = as_of - step * np.arange(n - 1, -1, -1)
     out = np.full((2, n), np.nan)
     if not t.size:
@@ -142,6 +147,8 @@ class TimestralPos(BaseForecaster):
             "package_commit": PACKAGE_COMMIT,
             "frame": "local AEQD at the last report (x east, y north, m)",
             "gap_minutes": 30.0,
+            # Context length; None = the request's whole history window.
+            "context_hours": None,
             "min_observed_steps": 6,
             "symmetric_averaging": True,
             "clip_nonnegative": False,
@@ -157,9 +164,15 @@ class TimestralPos(BaseForecaster):
     )
 
     @classmethod
-    def from_context(cls, ctx: ModelContext) -> TimestralPos:
-        backend = (ctx.params or {}).get("backend")
-        return cls(backend=backend)
+    def from_context(cls, ctx: ModelContext, model_id: str | None = None,
+                     context_hours: float | None = None) -> TimestralPos:  # fmt: skip
+        """`model_id` and `context_hours` make a fixed-context variant (history-length study:
+        several context lengths scored on one paired set)."""
+        m = cls(backend=(ctx.params or {}).get("backend"))
+        if model_id is not None:
+            m.model_id = model_id
+            m.config = {**m.config, "context_hours": context_hours}
+        return m
 
     def _installed(self) -> bool:
         return self.backend is not None or (package_available() and weights_present())
@@ -198,7 +211,8 @@ class TimestralPos(BaseForecaster):
         cfg = self.config
         last = history.last()
         frame = LocalFrame(last["latitude_deg"], last["longitude_deg"])
-        ctx = context_xy(history, frame, horizon.step_minutes, cfg["gap_minutes"])
+        ctx = context_xy(history, frame, horizon.step_minutes, cfg["gap_minutes"],
+                         cfg.get("context_hours"))  # fmt: skip
         series = self._series(ctx, horizon.step_minutes)
         observed = int(np.isfinite(series[0]).sum())
         if observed < cfg["min_observed_steps"]:

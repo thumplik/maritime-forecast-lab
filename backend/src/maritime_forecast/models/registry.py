@@ -30,6 +30,9 @@ _FACTORIES: dict[str, Factory] = {
     "route_retrieval_v2": lambda ctx: RouteRetrieval.from_context(ctx, V2),
     "timestral_pos_v1": TimestralPos.from_context,
     "timestral_vel_v1": TimestralVel.from_context,
+    # Fixed-context T1-pos variants for the history-length study (one paired set).
+    "timestral_pos_c24_v1": lambda ctx: TimestralPos.from_context(ctx, "timestral_pos_c24_v1", 24),
+    "timestral_pos_c48_v1": lambda ctx: TimestralPos.from_context(ctx, "timestral_pos_c48_v1", 48),
 }
 
 
