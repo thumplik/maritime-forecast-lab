@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 6 — Timestral** (in progress: slice 1 T1-pos adapter committed `123b4f4`; dev benchmark recorded 2026-10-22). Milestone 5 complete 2026-10-22 (exceptions accepted, entry below). Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 6 — Timestral** (in progress: T1-pos, T1-vel and the history-length study done on dev 2026-10-22; T1-vel+route next). Milestone 5 complete 2026-10-22 (exceptions accepted, entry below). Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -1494,3 +1494,31 @@ uv run --project backend python scripts/run_benchmark.py --protocol P-known --da
 - (c) a longer dev window.
 
 **Next step:** T1-vel+route (retrieval displacement as a known-future covariate) on dev. That is the remaining representation, and the one where route knowledge can enter. The history study waits on the choice above.
+
+## 2026-10-22 — Milestone 6: history-length study (T1-pos 24 / 48 / 72 h context, one paired set)
+
+**Milestone:** 6 — Timestral
+**Decision:** option (b) from the blocker above, with no protocol change. The user left the choice to me.
+- One run gives every model 72 h of history.
+- Fixed-context T1-pos variants (`timestral_pos_c24_v1`, `timestral_pos_c48_v1`, commit `554b61d`) trim their own context. They use only reports inside their window (the same half-open rule as the history), and the stand-in tests check this.
+- A 72 h window on the Jun 18–22 dev period only fits horizons up to 6 h, so the run uses 1/2/3/6 h. The cutoffs fall on Jun 21.
+
+**Run:** `P-known_noaa_us_gulf_2023-06-07_dev_20261022T182637Z`: 3,400 cutoffs, 309 s. Recorded in `docs/benchmarks.md` with direct paired comparisons between context lengths (vessel bootstrap from `records.parquet`).
+
+**Result (dev):**
+- On pooled underway traffic, 72 h of context beats 24 h by 13% at 3 h [3, 21] and 14% at 6 h [5, 23]; at 6 h that brings T1-pos level with the best baseline.
+- On transiting ships there is no detectable effect.
+- On stationary ships longer context hurts (more drift).
+- Retrieval v2 stays far ahead.
+
+**Commands run:**
+```bash
+make test && (cd backend && uv run pytest -q -m timestral)   # 308 passed; 4 passed
+uv run --project backend python scripts/run_benchmark.py --protocol P-known --dataset-id noaa_us_gulf_2023-06-07 --split dev --history-hours 72 \
+  --horizons 1 2 3 6 --no-geojson --models persistence_v1 constant_velocity_v1 damped_velocity_v1 route_retrieval_v2 \
+  timestral_pos_c24_v1 timestral_pos_c48_v1 timestral_pos_v1
+```
+
+**Next step:** T1-vel+route (§5): retrieval v2's central path, as displacement from the anchor, supplied as a known-future covariate.
+- Check that the pinned checkpoint `supports_known_covariates` first.
+- Then run it on dev, paired with T1-pos, T1-vel and retrieval.

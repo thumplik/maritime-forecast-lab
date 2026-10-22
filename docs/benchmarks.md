@@ -475,3 +475,43 @@ Separate runs would therefore compare different cutoff populations, not history 
 - (a) a sampler purge window set independently of the model's history, so all lengths share one cutoff set (a protocol change, for review);
 - (b) one run with per-model context lengths on a shared paired set;
 - (c) a longer dev window.
+
+## 2026-10-22 — Timestral T1-pos history length (24 / 48 / 72 h context) on one paired set (development record, not held out)
+
+**Design:** one run, so every context length is scored on the identical cutoffs. The run gives every model 72 h of history; the T1-pos variants trim their own context to 24 h (`timestral_pos_c24_v1`), 48 h (`timestral_pos_c48_v1`) or keep all 72 h (`timestral_pos_v1`). With 72 h of history the dev window (Jun 18–22) only fits horizons up to 6 h, so the cutoffs come from Jun 21 and the horizons are 1/2/3/6 h. No protocol change.
+
+| | |
+|---|---|
+| Run id | `P-known_noaa_us_gulf_2023-06-07_dev_20261022T182637Z` (commit `554b61d`) |
+| files.json SHA-256 | `7160638b9ebcaefd202dbe86bf4e64a6fa5cf1acefb6981ae645d3c8b038c62c` |
+| Cutoffs / cells / wall time | 3,400 / 532 / 309 s |
+
+**Median km and skill against the best baseline** [paired 95% CI]
+
+| Stratum | Model | 1 h | 2 h | 3 h | 6 h |
+|---|---|---|---|---|---|
+| Underway pooled (n ≈ 1,040–1,150 from ~700 vessels) | T1-pos, 24 h context | 2.54 (+33%) | 4.22 (+27%) | 6.21 (+4% [−10, 20]) | 10.52 (−14% [−31, 2]) |
+| | T1-pos, 48 h | 2.45 (+36%) | 4.19 (+28%) | 5.61 (+14% [0, 28]) | 9.71 (−6% [−21, 10]) |
+| | T1-pos, 72 h | 2.40 (+37%) | 4.19 (+28%) | 5.43 (+16% [1, 31]) | 9.07 (+1% [−12, 16]) |
+| | retrieval v2 | 1.33 (+65%) | 2.34 (+60%) | 3.05 (+53%) | 6.02 (+35%) |
+| Transiting (n ≈ 170–190) | T1-pos 24 / 48 / 72 h | 4.94 / 4.90 / 4.86 | 12.77 / 11.87 / 12.44 | 23.03 / 22.35 / 20.67 | 45.98 / 48.38 / 46.37 |
+| | (all three: skill CIs straddle 0) | | | | |
+| Stationary | T1-pos 24 / 48 / 72 h | 0.01 / 0.02 / 0.03 | 0.02 / 0.03 / 0.04 | 0.03 / 0.04 / 0.06 | 0.10 / 0.13 / 0.18 |
+
+**Longer context, directly** (paired skill of 72 h or 48 h over 24 h, 500 vessel-bootstrap resamples, from `records.parquet`):
+
+| Stratum | Horizon | 48 h vs 24 h | 72 h vs 24 h |
+|---|---|---|---|
+| Underway pooled | 1 h | +4% [−3, 10] | +6% [−1, 13] |
+| | 3 h | +10% [1, 18] | +13% [3, 21] |
+| | 6 h | +8% [0, 15] | +14% [5, 23] |
+| Transiting | 1 h | +1% [−18, 23] | +2% [−20, 23] |
+| | 3 h | +3% [−19, 17] | +10% [−14, 21] |
+| | 6 h | −5% [−22, 4] | −1% [−19, 12] |
+
+### What this says (dev, one day of cutoffs, horizons ≤ 6 h)
+- **Moving vessels:** longer context helps T1-pos at 3–6 h on pooled underway traffic, by about 13–14% from 24 h to 72 h. At 6 h, 72 h of context brings it level with the best baseline.
+- **Transiting ships:** no effect can be detected; the sample is small.
+- **Moored ships:** longer context makes them drift more.
+- **Retrieval v2 stays far ahead at every horizon.** Context length doesn't change the conclusion that zero-shot Timestral on raw positions is not a product model.
+- **Limits:** one day of cutoffs (Jun 21), horizons up to 6 h only, and the population differs from the 24 h dev runs above. These numbers compare context lengths with each other, not with those runs.
