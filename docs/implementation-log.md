@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 4 — Conformal uncertainty** (not started). Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 5 — Workbench UI** (not started). Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -1129,3 +1129,27 @@ uv run --project backend python scripts/conformal.py --protocol P-known --bins h
 ```
 
 **Next step:** `/milestone-check` for Milestone 4.
+
+## 2026-10-22 — Milestone 4 check: complete
+
+**Milestone:** 4 — conformal uncertainty
+
+| Criterion (build plan §7) | Evidence | Status |
+|---|---|---|
+| Split-conformal radii per model × horizon × stratum on a protocol-compliant calibration window | `evaluation/conformal.py`. Radii in `data/model_params/conformal/*.json`, fitted on the calibration-split runs (Jun 23–30; disjoint from the train/index period and from the July test). Tests in `test_conformal.py` | met |
+| Report empirical coverage and area on test | July coverage analyses (`docs/benchmarks.md`, "Conformal displacement radii"): coverage with vessel CIs, mean disc area, per stratum and per July week, at 80/90/95%. Each analysis is recorded in the test-access ledger | met |
+| API returns radii with nominal level and calibration-set id | `POST /forecasts` → `ModelForecast.uncertainty` (`ConformalRegion`: radii at fitted horizons, nominal level, calibration run id, strata, calibration n and vessels). `test_api.py`; real-data smoke check | met |
+| **Done when:** empirical coverage within a stated tolerance of nominal per admitted horizon, **or deviations reported per stratum** | Tolerance ±0.03 (n ≥ 200), stated before any coverage was seen. P-known: 69/72 motion-level cells within tolerance at 90%; the 3 deviations (v1 stationary 1–3 h) are reported. P-unseen: 50/72, and its under-coverage of underway traffic (5% vessel calibration bucket) is reported per stratum. Per-class strata are in each `coverage.parquet` | met (deviations reported) |
+
+Beyond the plan, the H3 Mondrian variant was pre-registered, evaluated and **not adopted** (P-known coverage fails).
+
+**Commands run:** `make test` (294 passed), `make lint` (clean); evidence as above.
+
+**Outcome:** Milestone 4 is complete.
+
+**Known limitations carried forward:**
+- Retrieval's coverage drifts down through July as its frozen pool ages. A rolling refresh of the pool would need its own protocol work.
+- P-unseen radii are under-powered.
+- Radii exist only at the fitted horizons.
+
+**Next step:** Milestone 5, the workbench UI (§9). Smallest first slice: the forecast comparison screen. It shows the models' paths for a chosen vessel and cutoff, the conformal discs at the fitted horizons, the retrieval candidates (labelled similarity), and the withheld-truth overlay only after the forecast exists.
