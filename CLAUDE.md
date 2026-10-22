@@ -4,7 +4,7 @@ Research workbench for forecasting where an AIS-tracked vessel will be 1 h – 3
 
 ## Where we are
 
-**Current milestone: 5 — workbench UI** (Milestone 4 complete 2026-10-22: conformal radii fitted on the calibration window, July coverage reported, served by `POST /forecasts`; H3 bins tried, not adopted). API serves data, forecasts, forecast evaluation and benchmarks (`make api`); minimal web explorer; CI; `make dev` runs both. Baselines B0, `route_retrieval_v1` (P-known, P-unseen, P-region benchmarked; failure review in `docs/failure-review.md`), the paired evaluator, feasibility and calibration are in place. June+July dataset `noaa_us_gulf_2023-06-07`: develop on `SPLIT=dev`; July is an enforced hold-out.
+**Current milestone: 6 — Timestral** (Milestone 5 complete 2026-10-22: workbench with forecast comparison, benchmark dashboard at `/benchmarks`, failure gallery with sample replay, Playwright smoke test `make e2e`; per-sample July records are refused by the API by design). API serves data, forecasts (predicted at the radii's calibrated horizon and sliced), forecast evaluation and benchmarks (`make api`); CI; `make dev` runs both. Baselines B0, `route_retrieval_v1` (P-known, P-unseen, P-region benchmarked; failure review in `docs/failure-review.md`), the paired evaluator, feasibility and calibration are in place. June+July dataset `noaa_us_gulf_2023-06-07`: develop on `SPLIT=dev`; July is an enforced hold-out.
 Status, blockers and next step live in [docs/implementation-log.md](docs/implementation-log.md) — read it first, append to it last.
 
 ## Commands
@@ -15,6 +15,7 @@ All Python runs through `uv` against the `backend/` project (Python 3.12). Node 
 make setup        # uv sync the backend env + npm ci the frontend
 make dev          # API :8000 + web :3000 (Ctrl-C stops both)
 make web-test     # frontend typecheck + vitest
+make e2e          # Playwright smoke test on the SYNTHETIC fixture (API :8100, web :3100)
 make gen-api      # after any API change: regenerate openapi.json + TS types (CI checks drift)
 make test         # unit tests (no network, no local data)
 make lint         # ruff check + format check

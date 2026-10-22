@@ -141,8 +141,8 @@ The success condition for every model is the same: **beat the best of persistenc
 | 2 | Baselines & the evaluator: paired benchmark, calibration, invariance, feasibility, benchmark API | ✓ |
 | 3 | Historical-route retrieval: kNN over train-period segments, aligned and continued along real routes ([failure review](docs/failure-review.md)); v2 holds moored ships; scored on the July hold-out | ✓ |
 | 4 | Conformal uncertainty: calibrated displacement radii per stratum, served by the API (H3 bins tried, not adopted) | ✓ |
-| 5 | **Workbench UI:** forecast comparison, truth overlay, benchmark dashboard | ← next |
-| 6 | Timestral zero-shot adapter (position, velocity, velocity + retrieved route) | |
+| 5 | Workbench UI: forecast comparison, truth overlay, benchmark dashboard, failure gallery with sample replay, Playwright smoke test | ✓ |
+| 6 | **Timestral zero-shot adapter** (position, velocity, velocity + retrieved route) | ← next |
 | 7 | Research models: TrAISformer via the calibration paper's reimplementation | |
 | 8 | Multi-day credibility with longer-range AIS; optional live ingest | |
 

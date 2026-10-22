@@ -260,6 +260,12 @@ function Explorer() {
               {track.segments.length === 1 ? "" : "s"} · {track.gaps.length} gap{track.gaps.length === 1 ? "" : "s"}
               {track.gaps.length > 0 && ` (longest ${formatDuration(longestGap)})`}
             </p>
+            {track.n_points > 0 && (
+              <p className="small" data-testid="last-report">
+                Last report in window: <span className="mono">{track.points.observed_at[track.n_points - 1]}</span> ·{" "}
+                {track.points.sog_knots[track.n_points - 1] ?? "–"} kn · COG {track.points.cog_deg[track.n_points - 1] ?? "–"}°
+              </p>
+            )}
             {track.warnings.map((w) => (
               <p key={w} className="warning small">
                 {w}

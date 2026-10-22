@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 5 — Workbench UI** (in progress: slices 1–3, forecast comparison, benchmark dashboard and failure gallery, done 2026-10-22). Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 6 — Timestral** (not started). Milestone 5 complete 2026-10-22 (exceptions accepted, entry below). Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -1321,3 +1321,68 @@ uv run --project backend python scripts/conformal.py --protocol P-known --params
 - **Browser:** the gallery replay of the worst June transiting sample reproduces ("predicted at 24 h as benchmarked, shown to 6 h").
 
 **Next step:** Playwright smoke test (select vessel → set cutoff → run baseline → overlay truth → view error), then `/milestone-check` for Milestone 5.
+
+## 2026-10-22 — Milestone 5: Playwright smoke test, then milestone check
+
+**Milestone:** 5 — workbench UI
+**Done** (uncommitted):
+- **`scripts/e2e_api.py`** serves the API on the committed SYNTHETIC fixture. It ingests the fixture into a temporary store; there is no NOAA data, network or model.
+- **`frontend/playwright.config.ts`** starts that API (:8100) and a Next dev server (:3100, build directory `.next-e2e`), so it runs beside `make dev`.
+- **`frontend/e2e/smoke.spec.ts`:**
+  1. selects vessel 999000001 and checks the track summary and last report;
+  2. sets the cutoff to 00:30 and runs persistence + constant velocity at 1 h, after checking that no truth button exists before the forecast;
+  3. reveals the truth and checks the error table: persistence 22.2 km (12 kn × 1 h), CV < 0.1 km, truth available.
+
+  A mutation check (expecting 30 km) fails as it should.
+- `make e2e`; a CI `e2e` job (uv + Node + Chromium; uploads the report on failure); `@playwright/test` 1.64.1 pinned.
+- **Screen A gap closed:** the track summary shows the last report's time, SOG and COG.
+
+**Commands run:**
+```bash
+make e2e         # 1 passed
+make test        # 298 passed
+make lint        # clean
+make web-test    # 26 passed; npm run build ok
+```
+
+### Milestone 5 check (build plan §7, §9)
+
+| Criterion | Evidence | Status |
+|---|---|---|
+| **Task: Explorer (§9 Screen A)** | `app/page.tsx`: full-bleed MapLibre map; dataset, day/span, MMSI search, class, reports/segments/gaps (coverage), last report time/SOG/COG, cutoff scrubber over real report times, Forecast action | met |
+| **Task: Forecast comparison (§9 Screen B)** | `components/forecast/ForecastPanel.tsx`, `lib/forecast.ts` (`tests/forecast.test.ts`):<br>• history clipped to the cutoff; dashed per-model paths with timed steps<br>• conformal discs at fitted horizons; candidates labelled similarity<br>• horizon slider, model toggles, warnings, forecast id / data version / model versions<br>• truth solid green, never bridged<br>• horizons labelled first-class / experimental / not audited | met (see note 3) |
+| **Task: Benchmark dashboard (§9 Screen C)** | `app/benchmarks/page.tsx`, `lib/benchmark.ts` (`tests/benchmark.test.ts`), `GET /benchmarks`:<br>• model × horizon table with 95% CIs and paired skill CIs<br>• along/cross table; error vs lead time (log–log, CI bands)<br>• strata selector (headline flags); paired n / vessels per cell; run-level `not_evaluable` reasons; dropped cells<br>• reproducibility block. Numbers checked against `docs/benchmarks.md` for `P-known_…_20261021T213109Z` | met |
+| **Task: Withheld truth only after a forecast, styled distinctly** | `ForecastPanel`: the truth button appears only with a forecast for the identical request; any change clears both. `/forecasts/evaluation` refuses the hold-out. Asserted in `e2e/smoke.spec.ts` | met |
+| **Task: Failure gallery linked to the map** | `GET /benchmarks/{id}/samples` (`test_api_benchmarks.py::test_samples_gallery`), `components/benchmark/FailureGallery.tsx`, sample replay in the explorer with a reproduction check against the stored prediction | met |
+| **Task: One Playwright smoke test** (select vessel → set cutoff → run baseline → overlay truth → view error) | `frontend/e2e/smoke.spec.ts`, `make e2e` passes locally. The CI job is added but has not run on GitHub yet (nothing pushed) | met locally; CI unverified |
+| **Done when: an operator can reproduce any benchmark sample on the map from its run id** | Gallery link → explorer replays at the run's request (`predict_horizon_hours`, history, step) and checks the stored prediction:<br>• 64/64 and 8/8 programmatic checks (dev run `…204207Z`, June run `…152618Z`)<br>• browser check on `…152618Z` #21441 (246.7 km, as stored)<br>**Exceptions:** (a) the two July hold-out runs: per-sample records refused by protocol (403), forecasts still replayable, truth withheld; (b) the 8 earliest B0 runs (before 2026-10-21 03:46): records lack positions (409), superseded by later runs of the same models | met with documented exceptions, for review |
+| **Done when: the dashboard shows paired results with CIs and evaluable counts** | Screen C table (paired n / vessels per cell, CIs, skill CIs) + `not_evaluable` table | met |
+
+**Notes for review:**
+1. **"Any benchmark sample"** is not literal: July test samples are deliberately not served per sample (test-access ledger, CLI only), and 8 superseded early runs have no stored positions. Both are refused with explicit codes, not silently.
+2. **The CI `e2e` job** is unverified until pushed.
+3. **Experimental-horizon labels** only exist for `noaa_us_gulf_2023-06`, the only dataset with a §6.4 audit. On `noaa_us_gulf_2023-06-07` every horizon reads "not audited".
+4. **Open items carried forward:**
+   - raw July tracks are served by `GET /vessels/{id}/track` without a ledger entry (the protocol doc should state whether that is intended);
+   - radii aren't tied to `data_version`;
+   - feasibility rates aren't on the dashboard.
+
+**Outcome:** every Milestone 5 task is implemented and both acceptance criteria are met, apart from the documented exceptions in note 1. Not marked complete until those exceptions are accepted for review (AGENTS.md rule 11).
+
+**Next step:**
+1. **Human review** of note 1, and a push to see the CI `e2e` job pass.
+2. **Then Milestone 6 (Timestral).** Smallest first slice: a lazy, pinned `Timestral-28M` adapter for T1-pos only behind the forecaster contract, which:
+   - returns a typed `not_installed` error when the package or weights are absent;
+   - records the checkpoint revision hash;
+   - passes `evaluation/invariance.py`;
+   - is run on a handful of dev-window cutoffs before any benchmark.
+
+## 2026-10-22 — Milestone 5: exceptions accepted, complete
+
+The two exceptions in the check above were accepted by the user:
+- July hold-out runs are refused per sample (403);
+- the 8 earliest B0 runs have no stored positions (409).
+
+**Outcome:** Milestone 5 is complete. The CI `e2e` job is verified on the push of this commit (result recorded below once known).
+
+**Next step:** Milestone 6, first slice as proposed above (pinned, lazy `Timestral-28M` adapter for T1-pos, typed `not_installed`, invariance test, a few dev cutoffs).

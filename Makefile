@@ -12,7 +12,7 @@ SPLIT ?= test
 
 NPM := npm --prefix frontend
 
-.PHONY: help setup dev web-test gen-api test lint format fetch fetch-list canonical audit calibrate splits import fetch-dma api benchmark fit notebook fetch-land mask index
+.PHONY: help setup dev web-test e2e gen-api test lint format fetch fetch-list canonical audit calibrate splits import fetch-dma api benchmark fit notebook fetch-land mask index
 
 help:  ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -26,6 +26,9 @@ dev:  ## Start API (:8000) and web app (:3000) together
 
 web-test:  ## Frontend typecheck + unit tests
 	$(NPM) run typecheck && $(NPM) test
+
+e2e:  ## Playwright smoke test on the SYNTHETIC fixture (API :8100 + web :3100; runs beside make dev)
+	cd frontend && npx playwright test
 
 gen-api:  ## Regenerate OpenAPI JSON and TypeScript types after API changes
 	$(PY) scripts/export_openapi.py && $(NPM) run gen:api
