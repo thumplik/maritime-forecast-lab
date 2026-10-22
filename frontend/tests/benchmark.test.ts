@@ -73,7 +73,7 @@ describe("helpers", () => {
 describe("sample links", () => {
   it("round-trips through the explorer URL", async () => {
     const { sampleHref, parseSampleLink } = await import("@/lib/benchmark");
-    const l = { dataset: "d", vessel: "367000001", as_of: "2023-06-28T19:47:04Z", models: ["a_v1", "b_v1"], horizon_h: 6, run: "r", cutoff: 7, expect: { model_id: "a_v1", horizon_minutes: 360, lat: 29.5, lon: -92.25 } };
+    const l = { dataset: "d", vessel: "367000001", as_of: "2023-06-28T19:47:04Z", models: ["a_v1", "b_v1"], horizon_h: 6, predict_h: 24, history_h: 24, step_min: 10, run: "r", cutoff: 7, expect: { model_id: "a_v1", horizon_minutes: 360, lat: 29.5, lon: -92.25 } };
     const href = sampleHref(l);
     expect(parseSampleLink(new URLSearchParams(href.slice(2)))).toEqual(l);
     expect(parseSampleLink(new URLSearchParams("dataset=d"))).toBeNull();

@@ -417,6 +417,8 @@ def test_forecasts_carry_conformal_radii_at_fitted_horizons_only(client, tmp_pat
         "calibration_set_id": "P-known_syn_calibration_X",
         "manifest_sha256": hashlib.sha256(raw).hexdigest(),
         "config": {"levels": [0.8, 0.9]},
+        # The calibration run asked for 2 h paths with 3 h history at 10-min steps.
+        "request": {"horizon_h": 2.0, "step_minutes": 10, "history_hours": 3},
         "models": {"persistence_v1": {"model_version": "1.0.0", "config_sha256": config_sha(
             get_model("persistence_v1").config)}},  # fmt: skip
         "radii": [
@@ -431,7 +433,10 @@ def test_forecasts_carry_conformal_radii_at_fitted_horizons_only(client, tmp_pat
     short = client.post("/forecasts", json=_req(model_ids=["persistence_v1"])).json()
     assert short["forecasts"][0]["uncertainty"] is None  # 2 h history: not calibration-like
     assert any("history shorter" in w for w in short["forecasts"][0]["warnings"])
-    f = client.post("/forecasts", json=_req(**base)).json()["forecasts"][0]
+    r = client.post("/forecasts", json=_req(**base)).json()
+    f = r["forecasts"][0]
+    assert f["predicted_horizon_hours"] == 2.0  # predicted as calibrated, served as asked (1 h)
+    assert len(f["target_times"]) == len(f["points"]) == 6
     u = f["uncertainty"]
     assert u["nominal_level"] == 0.9 and u["calibration_set_id"] == "P-known_syn_calibration_X"
     assert u["radii_m"] == [None] * 5 + [1234.0]  # only the 1 h target time is fitted
@@ -443,3 +448,70 @@ def test_forecasts_carry_conformal_radii_at_fitted_horizons_only(client, tmp_pat
     stale = client.post("/forecasts", json=_req(**base, as_of="2023-06-01T02:30:00Z")).json()
     assert any("older than as_of" in w for w in stale["forecasts"][0]["warnings"])
     assert any("no radii at level 0.95" in w for w in lvl["forecasts"][0]["warnings"])
+
+    # Radii only for forecasts requested the way the calibration run requested them.
+    def why(**kw):
+        g = client.post("/forecasts", json=_req(**base | kw)).json()["forecasts"][0]
+        assert g["uncertainty"] is None
+        return " ".join(g["warnings"])
+
+    assert "differs from the calibration run's" in why(history_hours=4)
+    assert "differs from the calibration run's" in why(step_minutes=5, horizon_hours=1)
+    assert "predicted a 3 h path" in why(horizon_hours=3)
+    assert "predicted a 3 h path" in why(predict_horizon_hours=3)  # explicit replay horizon
+    del params["request"]
+    (tmp_path / "conformal" / "P-known__syn.json").write_text(json.dumps(params))
+    assert "does not record its calibration request" in why()
+
+
+def test_forecast_is_the_prefix_of_the_calibrated_horizon(client, tmp_path):
+    """A short request is served as the prefix of a forecast at the calibration run's longest
+    horizon; without a radii file the models predict exactly the requested horizon."""
+    ids = ["persistence_v1", "constant_velocity_v1"]
+    plain = client.post("/forecasts", json=_req(model_ids=ids)).json()
+    assert all(f["predicted_horizon_hours"] is None for f in plain["forecasts"])
+    (tmp_path / "conformal").mkdir()
+    # Only models with radii are extended (constant velocity has none here).
+    (tmp_path / "conformal" / "P-known__syn.json").write_text(json.dumps(
+        {"request": {"horizon_h": 2.0, "step_minutes": 10, "history_hours": 2},
+         "models": {"persistence_v1": {}}}))  # fmt: skip
+    short = client.post("/forecasts", json=_req(model_ids=ids)).json()
+    long = client.post("/forecasts", json=_req(model_ids=ids, horizon_hours=2)).json()
+    assert [f["predicted_horizon_hours"] for f in short["forecasts"]] == [2.0, None]
+    assert all(f["predicted_horizon_hours"] is None for f in long["forecasts"])
+    for a, b in zip(short["forecasts"], long["forecasts"], strict=True):
+        n = len(a["target_times"])
+        assert n == 6 and a["target_times"] == b["target_times"][:n]
+        assert a["points"] == b["points"][:n]
+    # A request that differs from the calibration's step or history is predicted as asked
+    # (a step that does not divide the calibrated horizon must not break the request).
+    odd = client.post("/forecasts", json=_req(model_ids=ids, step_minutes=7, horizon_hours=0.35))
+    assert odd.status_code == 200, odd.text
+    assert all(f["predicted_horizon_hours"] is None for f in odd.json()["forecasts"])
+    # An explicit replay horizon wins, and must be whole steps and not shorter than the request.
+    rep = client.post("/forecasts", json=_req(model_ids=ids, predict_horizon_hours=1.5)).json()
+    assert [f["predicted_horizon_hours"] for f in rep["forecasts"]] == [1.5, 1.5]
+    for bad in (0.5, 1.25):
+        r = client.post("/forecasts", json=_req(model_ids=ids, predict_horizon_hours=bad))
+        assert r.status_code == 422
+
+
+def test_prefix_cuts_points_and_candidate_paths():
+    from maritime_forecast.api.app import _prefix
+    from maritime_forecast.schemas.forecast import CandidateTrajectory, ModelForecast, TrackPoint
+
+    ts = [T0 + timedelta(minutes=10 * (i + 1)) for i in range(6)]
+    pts = [TrackPoint(timestamp=t, latitude_deg=29 + i / 100, longitude_deg=-94)
+           for i, t in enumerate(ts)]  # fmt: skip
+    cands = [CandidateTrajectory(trajectory_id=k, points=pts, similarity=0.5,
+                                 reference_segment_ids=["s"], reference_ends_at=end)
+             for k, end in (("a", ts[1]), ("b", ts[4]), ("c", None))]  # fmt: skip
+    f = ModelForecast(model_id="m", model_version="1", status="ok", target_times=ts, points=pts,
+                      trajectories=cands)  # fmt: skip
+    g = _prefix(f, 3, 1.0)
+    assert g.predicted_horizon_hours == 1.0
+    assert g.target_times == ts[:3] and g.points == pts[:3]
+    assert [len(t.points) for t in g.trajectories] == [3, 3, 3]
+    # a reference that runs out after the last kept target time covers all of them -> null
+    assert [t.reference_ends_at for t in g.trajectories] == [ts[1], None, None]
+    assert _prefix(f, 6, 1.0) is f

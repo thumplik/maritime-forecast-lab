@@ -100,9 +100,12 @@ export default function FailureGallery({ run, stratum, cells }: Props) {
               vessel: s.vessel_id,
               as_of: s.as_of,
               models: data.reference_id && data.reference_id !== model ? [model, data.reference_id] : [model],
-              // The runner predicts once at its longest horizon and scores shorter ones on that
-              // path; retrieval's choice depends on the requested horizon, so replay the same.
-              horizon_h: Math.max(...run.horizons_minutes) / 60,
+              horizon_h: [1, 2, 3, 6, 12, 24].find((h) => h * 60 >= horizon) ?? 24,
+              // The runner predicted once at its longest horizon with this history and step
+              // (retrieval's path depends on the horizon asked for): replay exactly that.
+              predict_h: Math.max(...run.horizons_minutes) / 60,
+              history_h: Number((run.sampler as Record<string, unknown>).history_hours) || undefined,
+              step_min: Number((run.sampler as Record<string, unknown>).step_minutes) || undefined,
               run: data.run_id,
               cutoff: s.cutoff_id,
               expect: s.pred_lat != null && s.pred_lon != null ? { model_id: model, horizon_minutes: horizon, lat: s.pred_lat, lon: s.pred_lon } : undefined,

@@ -29,6 +29,12 @@ class ForecastRequest(BaseModel):
     horizon_hours: float = Field(6, gt=0, le=72)
     step_minutes: int = Field(10, ge=1, le=60)
     model_ids: list[str] = Field(min_length=1, max_length=10)
+    predict_horizon_hours: float | None = Field(
+        None, gt=0, le=72,
+        description="Ask the models for this longer horizon and serve its prefix (replaying a "
+        "benchmark run, which predicts once at its longest horizon). Default: the calibration "
+        "run's when the request matches its step and history, else horizon_hours",
+    )  # fmt: skip
     conformal_level: Literal[0.8, 0.9, 0.95] | None = Field(
         0.9, description="Attach split-conformal radii at this nominal level (null: none)"
     )
@@ -43,6 +49,14 @@ class ForecastRequest(BaseModel):
             raise ValueError("horizon_hours must be a whole number of step_minutes")
         if steps > MAX_TARGET_STEPS:
             raise ValueError(f"at most {MAX_TARGET_STEPS} target steps")
+        if self.predict_horizon_hours is not None:
+            p = self.predict_horizon_hours * 60 / self.step_minutes
+            if self.predict_horizon_hours < self.horizon_hours:
+                raise ValueError("predict_horizon_hours must be at least horizon_hours")
+            if not math.isclose(p, round(p), abs_tol=1e-9) or p > MAX_TARGET_STEPS:
+                raise ValueError(
+                    f"predict_horizon_hours must be whole steps, at most {MAX_TARGET_STEPS}"
+                )
         return self
 
 
@@ -131,6 +145,12 @@ class ModelForecast(BaseModel):
 
     model_id: str
     model_version: str = Field(description="Pinned version / checkpoint revision")
+    predicted_horizon_hours: float | None = Field(
+        None,
+        description="Set when the model was asked for a longer horizon than the request and "
+        "this is the prefix of that forecast: the benchmark runner predicts once at its longest "
+        "horizon, so served forecasts match the calibrated ones (some models depend on it)",
+    )
     config: dict = Field(default_factory=dict)
     status: Literal["ok", "unsupported", "failed"]
     error: ModelError | None = None

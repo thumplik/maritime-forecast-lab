@@ -67,10 +67,12 @@ from maritime_forecast.models.registry import get_model, model_ids
 from maritime_forecast.provenance import git_sha
 from maritime_forecast.schemas.dataset import DatasetManifest
 from maritime_forecast.schemas.forecast import (
+    MAX_TARGET_STEPS,
     ConformalRegion,
     ForecastEvaluation,
     ForecastRequest,
     ForecastResponse,
+    ModelForecast,
 )
 from maritime_forecast.schemas.manifest import SplitManifest
 from maritime_forecast.storage.parquet_store import CANONICAL_ROOT, ParquetStore, connect
@@ -425,14 +427,18 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
 
     cache: OrderedDict[str, ForecastResponse] = OrderedDict()
 
-    def _file_sha(p: Path) -> str | None:
-        return hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else None
+    def _radii_file(dataset_id: str) -> tuple[dict | None, str | None]:
+        """The radii file's params and sha256, read once per request."""
+        p = settings.conformal_dir / f"{settings.deployment_protocol}__{dataset_id}.json"
+        if not p.exists():
+            return None, None
+        raw = p.read_bytes()
+        return json.loads(raw), hashlib.sha256(raw).hexdigest()
 
-    def _with_radii(req, mctx, history, horizon, forecasts):
+    def _with_radii(req, mctx, history, horizon, forecasts, params):
         """Attach split-conformal radii (Milestone 4) to every ok forecast, or say why not."""
         if req.conformal_level is None:
             return forecasts
-        p = settings.conformal_dir / f"{settings.deployment_protocol}__{req.dataset_id}.json"
         mpath = (
             settings.manifest_dir
             / "splits"
@@ -443,13 +449,24 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
             return [f.model_copy(update={"warnings": [*f.warnings, f"no radii: {why}"]})
                     if f.status == "ok" else f for f in forecasts]  # fmt: skip
 
-        if not p.exists() or not mpath.exists():
+        if params is None or not mpath.exists():
             return refuse(f"none fitted for {settings.deployment_protocol} on {req.dataset_id}")
         why = conformal.calibration_like(history.reports, history.as_of, req.history_hours,
                                          default_region("cutoff_region"))  # fmt: skip
         if why:
             return refuse(f"the forecast does not resemble the calibration samples ({why})")
-        params = json.loads(p.read_text())
+        # The radii describe forecasts requested exactly as the calibration run requested them.
+        creq = params.get("request")
+        if creq is None:
+            return refuse("the radii file does not record its calibration request; refit it "
+                          "(scripts/conformal.py --params-only)")  # fmt: skip
+        if (req.step_minutes, req.history_hours) != (creq["step_minutes"],
+                                                     creq["history_hours"]):  # fmt: skip
+            return refuse(
+                f"the request (history {req.history_hours:g} h, step {req.step_minutes} min) "
+                f"differs from the calibration run's (history {creq['history_hours']:g} h, "
+                f"step {creq['step_minutes']} min)"
+            )
         manifest = SplitManifest.model_validate_json(mpath.read_bytes())
         motion = conformal.motion_state(history.reports)
         cls = conformal.last_vessel_class(history.reports)
@@ -458,6 +475,12 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         for f in forecasts:
             if f.status != "ok":
                 out.append(f)
+                continue
+            predicted_h = f.predicted_horizon_hours or req.horizon_hours
+            if predicted_h != creq["horizon_h"]:
+                why = (f"{f.model_id} predicted a {predicted_h:g} h path; the radii were "
+                       f"calibrated on {creq['horizon_h']:g} h paths")  # fmt: skip
+                out.append(f.model_copy(update={"warnings": [*f.warnings, f"no radii: {why}"]}))
                 continue
             region, why = conformal.region_for(
                 params, manifest, mctx.manifest_sha256, f.model_id, f.model_version, motion, cls,
@@ -481,6 +504,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         ctx = _model_context(settings, store, req.dataset_id)
         built = {m: get_model(m, ctx) for m in req.model_ids}
         data_version = _data_version(settings, store, req.dataset_id)
+        params, radii_sha = _radii_file(req.dataset_id)
         key_basis = json.dumps(
             {
                 "request": req.model_dump(mode="json", exclude={"show_ground_truth"}),
@@ -488,10 +512,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
                 "versions": {m: built[m].capabilities().model_version for m in req.model_ids},
                 "data_version": data_version,
                 "code": app.state.ctx.git_sha,
-                "radii": _file_sha(
-                    settings.conformal_dir
-                    / f"{settings.deployment_protocol}__{req.dataset_id}.json"
-                ),
+                "radii": radii_sha,
                 "manifest": ctx.manifest_sha256,
             },
             sort_keys=True,
@@ -504,6 +525,9 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         as_of = req.as_of.astimezone(UTC)
         history = history_from_store(store, req.dataset_id, req.vessel_id, as_of, req.history_hours)
         horizon = ForecastHorizon(as_of, req.horizon_hours, req.step_minutes)
+        n_steps = len(horizon.target_times)
+        predict_h = {m: _predict_horizon(req, params, m, built[m].capabilities().max_horizon_hours)
+                     for m in req.model_ids}  # fmt: skip
         times = history.reports["observed_at"].to_list()
         segs = gap_segments(times, settings.gap_minutes) if times else []
         manifest = _manifest(settings, req.dataset_id)
@@ -528,7 +552,17 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
                 ctx,
                 history,
                 horizon,
-                [built[m].predict(history, horizon) for m in req.model_ids],
+                [
+                    _prefix(
+                        built[m].predict(
+                            history, ForecastHorizon(as_of, predict_h[m], req.step_minutes)
+                        ),
+                        n_steps,
+                        predict_h[m],
+                    )
+                    for m in req.model_ids
+                ],
+                params,
             ),
         )
         cache[forecast_id] = resp  # request-independent: no per-request warnings inside
@@ -825,6 +859,54 @@ def _holdout_records(settings: ApiSettings, run, cutoffs_path: Path) -> str | No
     if touches_test(manifest, lo, end):
         return "has records whose labels reach into the held-out test period"
     return None
+
+
+def _predict_horizon(req: ForecastRequest, params: dict | None, model_id: str,
+                     max_horizon_h: float) -> float:  # fmt: skip
+    """The horizon a model is asked for. An explicit `predict_horizon_hours` wins (replaying a
+    benchmark run). Otherwise a model with conformal radii predicts as their calibration run
+    did, once at its longest horizon, when the request matches that run's step and history
+    (retrieval chooses its path over the whole horizon asked for). Else the requested one."""
+    if req.predict_horizon_hours is not None:
+        return req.predict_horizon_hours
+    creq = (params or {}).get("request")
+    if (
+        creq is None
+        or model_id not in params.get("models", {})
+        or (req.step_minutes, req.history_hours) != (creq["step_minutes"], creq["history_hours"])
+        or req.horizon_hours >= creq["horizon_h"]
+        or creq["horizon_h"] > max_horizon_h
+        or creq["horizon_h"] * 60 / req.step_minutes > MAX_TARGET_STEPS
+    ):
+        return req.horizon_hours
+    return float(creq["horizon_h"])
+
+
+def _prefix(f: ModelForecast, n: int, predicted_h: float) -> ModelForecast:
+    """The first `n` target times of a forecast predicted at `predicted_h` (and of each
+    candidate path), labelled with the horizon it was predicted at."""
+    if len(f.target_times) <= n:
+        return f
+    end = f.target_times[n - 1]
+    trajectories = [
+        t.model_copy(
+            update={
+                "points": t.points[:n],
+                # null means the reference covers every (remaining) target time
+                "reference_ends_at": t.reference_ends_at
+                if t.reference_ends_at is not None and t.reference_ends_at <= end
+                else None,
+            }
+        )  # fmt: skip
+        for t in f.trajectories
+    ]
+    note = (f"predicted at {predicted_h:g} h (as the calibration run did) and cut to the "
+            "request; warnings may refer to times after the last one shown")  # fmt: skip
+    return f.model_copy(update={
+        "target_times": f.target_times[:n], "points": f.points[:n],
+        "trajectories": trajectories, "predicted_horizon_hours": predicted_h,
+        "warnings": [*f.warnings, note] if f.warnings else f.warnings,
+    })  # fmt: skip
 
 
 def summarize(run, strata: set[str] | None = None, headline_only: bool = False):

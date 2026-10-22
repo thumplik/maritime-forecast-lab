@@ -1704,6 +1704,20 @@
             "title": "Model Ids",
             "type": "array"
           },
+          "predict_horizon_hours": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 72.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Ask the models for this longer horizon and serve its prefix (replaying a benchmark run, which predicts once at its longest horizon). Default: the calibration run's when the request matches its step and history, else horizon_hours",
+            "title": "Predict Horizon Hours"
+          },
           "show_ground_truth": {
             "default": false,
             "description": "Request a ForecastEvaluation as well; truth is never in this response",
@@ -2186,6 +2200,18 @@
             },
             "title": "Points",
             "type": "array"
+          },
+          "predicted_horizon_hours": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Set when the model was asked for a longer horizon than the request and this is the prefix of that forecast: the benchmark runner predicts once at its longest horizon, so served forecasts match the calibrated ones (some models depend on it)",
+            "title": "Predicted Horizon Hours"
           },
           "runtime_ms": {
             "anyOf": [

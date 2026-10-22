@@ -73,14 +73,16 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay, link 
       dataset_id: datasetId,
       vessel_id: history.vessel_id,
       as_of: asOf,
-      history_hours: 24,
+      history_hours: link?.history_h ?? 24,
       horizon_hours: horizon,
-      step_minutes: 10,
+      step_minutes: link?.step_min ?? 10,
+      // Replaying a benchmark sample: ask the models what the run asked them.
+      ...(link?.predict_h && link.predict_h >= horizon ? { predict_horizon_hours: link.predict_h } : {}),
       model_ids: [...selected].sort(),
       conformal_level: level,
       show_ground_truth: false,
     }),
-    [datasetId, history.vessel_id, asOf, horizon, selected, level],
+    [datasetId, history.vessel_id, asOf, horizon, selected, level, link],
   );
   const key = JSON.stringify(req);
   // Anything that changes the request invalidates the forecast and, with it, the truth.
@@ -187,7 +189,7 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay, link 
       {current && (
         <>
           <p className="muted small">
-            {cov?.n_reports} reports in the 24 h history · last {cov?.last_report_age_s != null ? `${Math.round(cov.last_report_age_s)} s` : "–"} before cutoff · {cov?.n_gaps} gap
+            {cov?.n_reports} reports in the {req.history_hours} h history · last {cov?.last_report_age_s != null ? `${Math.round(cov.last_report_age_s)} s` : "–"} before cutoff · {cov?.n_gaps} gap
             {cov?.n_gaps === 1 ? "" : "s"} · stratum {cov?.motion_state ?? "no motion state"}:{cov?.vessel_class ?? "unknown"}
           </p>
           {link?.expect && <Reproduction resp={current} expect={link.expect} />}
@@ -230,6 +232,7 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay, link 
                           : `no radius at this target time (fitted at ${(f.uncertainty.fitted_horizons_h ?? []).join(", ")} h)`
                         : "no radii"}
                       {(f.trajectories?.length ?? 0) > 0 && ` · ${f.trajectories!.length} candidate routes (similarity, not probability)`}
+                      {f.predicted_horizon_hours != null && ` · predicted at ${f.predicted_horizon_hours} h as benchmarked, shown to ${horizon} h`}
                     </p>
                   )}
                   {(f.warnings?.length ?? 0) > 0 && (

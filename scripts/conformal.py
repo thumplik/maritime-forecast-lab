@@ -84,6 +84,16 @@ def main() -> None:
     test_models = {m.model_id: (m.model_version, m.config) for m in test.models}
     if any(test_models.get(k) != v for k, v in cal_models.items()):
         raise SystemExit("model versions or configs differ between the calibration and test runs")
+
+    # The radii describe forecasts requested as the calibration run requested them (longest
+    # horizon, step, history); coverage on test is only meaningful for the same request.
+    def request(run):
+        return (max(run.sampler["horizons_h"]), run.sampler["step_minutes"],
+                run.sampler["history_hours"])  # fmt: skip
+
+    if request(cal) != request(test):
+        raise SystemExit(f"calibration request {request(cal)} differs from the test run's "
+                         f"{request(test)} (longest horizon h, step min, history h)")  # fmt: skip
     sha = git_sha()
     if sha.endswith("-dirty") or sha == "unknown":
         raise SystemExit("run from a clean, committed tree (the outputs are stamped with its SHA)")
@@ -113,6 +123,12 @@ def main() -> None:
             + timedelta(minutes=cal.sampler["max_bracket_gap_minutes"])
         ).isoformat(),
         "class_source": "backfilled (NOAA; not as-of)",
+        # The request the calibration errors came from. The runner predicts once at its longest
+        # horizon and scores shorter ones on that path, and some models (retrieval) depend on
+        # the requested horizon: the API serves radii only for forecasts made the same way.
+        "request": {"horizon_h": max(cal.sampler["horizons_h"]),
+                    "step_minutes": cal.sampler["step_minutes"],
+                    "history_hours": cal.sampler["history_hours"]},
         "radii": radii.to_dicts(), "git_sha": sha,
         "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }, indent=1) + "\n")  # fmt: skip

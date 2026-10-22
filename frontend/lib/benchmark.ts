@@ -175,6 +175,10 @@ export interface SampleLink {
   as_of: string;
   models: string[];
   horizon_h: number;
+  /** The run's request: it predicted once at `predict_h` with this history and step. */
+  predict_h?: number;
+  history_h?: number;
+  step_min?: number;
   run: string;
   cutoff: number;
   /** The run's stored prediction for one model at one horizon: the map checks it reproduces. */
@@ -193,8 +197,16 @@ export function sampleHref(l: SampleLink): string {
     run: l.run,
     cutoff: String(l.cutoff),
   });
+  if (l.predict_h) p.set("predict", String(l.predict_h));
+  if (l.history_h) p.set("history", String(l.history_h));
+  if (l.step_min) p.set("step", String(l.step_min));
   if (l.expect) p.set("expect", [l.expect.model_id, l.expect.horizon_minutes, l.expect.lat, l.expect.lon].join(","));
   return `/?${p.toString()}`;
+}
+
+function num<K extends string>(k: K, v: string | null): Partial<Record<K, number>> {
+  const n = Number(v);
+  return v !== null && Number.isFinite(n) && n > 0 ? ({ [k]: n } as Record<K, number>) : {};
 }
 
 export function parseSampleLink(q: URLSearchParams): SampleLink | null {
@@ -210,6 +222,9 @@ export function parseSampleLink(q: URLSearchParams): SampleLink | null {
     as_of,
     models: (q.get("models") ?? "").split(",").filter(Boolean),
     horizon_h: Number(q.get("horizon") ?? 6) || 6,
+    ...num("predict_h", q.get("predict")),
+    ...num("history_h", q.get("history")),
+    ...num("step_min", q.get("step")),
     run: q.get("run") ?? "",
     cutoff: Number(q.get("cutoff") ?? -1),
     expect: e && n && n.length === 3 && n.every(Number.isFinite) ? { model_id: e[0]!, horizon_minutes: n[0]!, lat: n[1]!, lon: n[2]! } : undefined,

@@ -906,6 +906,11 @@ export interface components {
             /** Model Ids */
             model_ids: string[];
             /**
+             * Predict Horizon Hours
+             * @description Ask the models for this longer horizon and serve its prefix (replaying a benchmark run, which predicts once at its longest horizon). Default: the calibration run's when the request matches its step and history, else horizon_hours
+             */
+            predict_horizon_hours?: number | null;
+            /**
              * Show Ground Truth
              * @description Request a ForecastEvaluation as well; truth is never in this response
              * @default false
@@ -1098,6 +1103,11 @@ export interface components {
              * @description Central prediction; empty unless status=ok
              */
             points: components["schemas"]["TrackPoint"][];
+            /**
+             * Predicted Horizon Hours
+             * @description Set when the model was asked for a longer horizon than the request and this is the prefix of that forecast: the benchmark runner predicts once at its longest horizon, so served forecasts match the calibrated ones (some models depend on it)
+             */
+            predicted_horizon_hours?: number | null;
             /** Runtime Ms */
             runtime_ms?: number | null;
             /**
