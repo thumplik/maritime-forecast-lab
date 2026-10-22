@@ -58,6 +58,11 @@ def main() -> None:
         default=None,
         help="required to score an already-scored model version on a held-out test",
     )
+    ap.add_argument(
+        "--cutoff-region",
+        default="houston_galveston",
+        help="region (config/regions.yaml) where cutoffs start; truth stays Gulf-wide",
+    )
     ap.add_argument("--max-cutoffs-per-set", type=int, default=None, help="smoke runs only")
     ap.add_argument("--no-geojson", action="store_true", help="skip the GeoJSON export")
     args = ap.parse_args()
@@ -73,6 +78,7 @@ def main() -> None:
         n_boot=args.n_boot,
         max_cutoffs_per_set=args.max_cutoffs_per_set,
         split=args.split,
+        cutoff_region=args.cutoff_region,
         confirm_test=args.confirm_test,
         informed_by=tuple(args.informed_by),
         test_rerun_reason=args.test_rerun_reason,

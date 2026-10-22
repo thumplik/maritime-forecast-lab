@@ -11,6 +11,29 @@ regions:
     lon_min: -96.0
     lon_max: -93.3
 
+  # Other Gulf ports, for the cross-port check of Milestone 7 (cutoffs start here; truth and
+  # the retrieval pool are the whole Gulf as usual). Outside the Houston-Galveston box.
+  new_orleans_mississippi:   # lower Mississippi River and the passes, Baton Rouge to the Gulf
+    lat_min: 28.8
+    lat_max: 30.5
+    lon_min: -91.3
+    lon_max: -89.0
+  corpus_christi:
+    lat_min: 27.4
+    lat_max: 28.1
+    lon_min: -97.6
+    lon_max: -96.7
+  mobile_pascagoula:
+    lat_min: 30.0
+    lat_max: 30.8
+    lon_min: -88.8
+    lon_max: -87.8
+  tampa_bay:
+    lat_min: 27.3
+    lat_max: 28.0
+    lon_min: -83.0
+    lon_max: -82.3
+
   # Truth region: withheld ground truth may be drawn from anywhere in here.
   # U.S. Gulf coast terrestrial AIS coverage, Brownsville TX to the Florida Keys
   # (Gulf side; stops at -81.0 to exclude the Atlantic coast of Florida).

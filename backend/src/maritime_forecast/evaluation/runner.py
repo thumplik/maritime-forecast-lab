@@ -406,6 +406,8 @@ def run_benchmark(
     started = datetime.now(UTC).replace(microsecond=0)
     manifest, ctx = benchmark_context(cfg, store)
     split_tag = "" if cfg.split == "test" else f"_{cfg.split}"
+    if cfg.cutoff_region != "houston_galveston":  # name runs started elsewhere (the default is
+        split_tag += f"_{cfg.cutoff_region}"  # unnamed, so existing ids are unchanged)
     run_id = run_id or f"{manifest.protocol}_{cfg.dataset_id}{split_tag}_{started:%Y%m%dT%H%M%SZ}"
     preflight(cfg, ctx)  # fail before creating a run, not halfway through it
     model_refs = [
