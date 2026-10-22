@@ -1383,6 +1383,6 @@ The two exceptions in the check above were accepted by the user:
 - July hold-out runs are refused per sample (403);
 - the 8 earliest B0 runs have no stored positions (409).
 
-**Outcome:** Milestone 5 is complete. The CI `e2e` job is verified on the push of this commit (result recorded below once known).
+**Outcome:** Milestone 5 is complete. CI run 39818248971 on `abeb3d7` passed: backend, frontend and `e2e` all green, and the smoke test passed on GitHub (1 passed, 8.9 s).
 
 **Next step:** Milestone 6, first slice as proposed above (pinned, lazy `Timestral-28M` adapter for T1-pos, typed `not_installed`, invariance test, a few dev cutoffs).
