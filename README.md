@@ -142,9 +142,10 @@ The success condition for every model is the same: **beat the best of persistenc
 | 3 | Historical-route retrieval: kNN over train-period segments, aligned and continued along real routes ([failure review](docs/failure-review.md)); v2 holds moored ships; scored on the July hold-out | ✓ |
 | 4 | Conformal uncertainty: calibrated displacement radii per stratum, served by the API (H3 bins tried, not adopted) | ✓ |
 | 5 | Workbench UI: forecast comparison, truth overlay, benchmark dashboard, failure gallery with sample replay, Playwright smoke test | ✓ |
-| 6 | **Timestral zero-shot adapter** (position, velocity, velocity + retrieved route) | ← next |
-| 7 | Research models: TrAISformer via the calibration paper's reimplementation | |
-| 8 | Multi-day credibility with longer-range AIS; optional live ingest | |
+| 6 | Timestral zero-shot adapter (position, velocity, context length): closed as a negative result on the dev window; it never beat retrieval or, on transiting ships, the best kinematic baseline ([notes](docs/model-integration-notes.md)) | ✗ closed |
+| 7 | **Hex prediction sets:** a calibrated set of H3 cells per horizon ("which hexes will the ship be in?"), built on historical traffic | ← next |
+| 8 | Research models: TrAISformer via the calibration paper's reimplementation, scored as a distribution | |
+| 9 | Multi-day credibility with longer-range AIS; optional live ingest | |
 
 Full specification: [docs/build-plan.md](docs/build-plan.md). Progress, decisions and every command run: [docs/implementation-log.md](docs/implementation-log.md).
 

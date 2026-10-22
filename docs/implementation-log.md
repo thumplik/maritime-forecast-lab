@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 6 — Timestral** (in progress: T1-pos, T1-vel and the history-length study done on dev 2026-10-22; T1-vel+route next). Milestone 5 complete 2026-10-22 (exceptions accepted, entry below). Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 7 — Hex prediction sets** (build plan v0.4; started 2026-10-22). Milestone 6 (Timestral) closed 2026-10-22 as a negative result (entry below). Milestone 5 complete 2026-10-22. Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -1522,3 +1522,36 @@ uv run --project backend python scripts/run_benchmark.py --protocol P-known --da
 **Next step:** T1-vel+route (§5): retrieval v2's central path, as displacement from the anchor, supplied as a known-future covariate.
 - Check that the pinned checkpoint `supports_known_covariates` first.
 - Then run it on dev, paired with T1-pos, T1-vel and retrieval.
+
+## 2026-10-22 — Milestone 6 closed (negative result); build plan v0.4: hex prediction sets
+
+**Decision (the user, after a review of the findings and the literature):** stop Timestral, close Milestone 6, and change the product output to a calibrated set of H3 cells per horizon.
+
+**Milestone 6 outcome:** closed as a negative result on the dev window. Timestral was never scored on July, and nothing about it reaches the README's results.
+
+| Criterion (§7 M6) | Evidence | Status |
+|---|---|---|
+| Lazy, pinned Timestral-28M adapter with clear missing-dependency warnings | `models/timestral_adapter.py`, `research/adapters/timestral/README.md`, typed `not_installed` | met |
+| T1-pos, T1-vel, T1-vel+route; history 24/48/72 h; resolution and rollout recorded | T1-pos and T1-vel done; context study on one paired set; single-block rollout recorded in config. **T1-vel+route not built** (v0.4: route knowledge is retrieval's) | partly, by decision |
+| Benchmarked against baselines and retrieval on identical samples | Dev runs `…173857Z`, `…175118Z`, `…182637Z` (`docs/benchmarks.md`) | met (dev) |
+| Side-by-side map comparison; marginals never shown as a corridor | The forecast screen shows any registered model; no quantiles served | met |
+
+**Findings carried forward:**
+1. Route knowledge is where the skill is; nothing without it beats the baselines past about 6 h.
+2. A point plus a disc is the wrong output shape: futures branch, and the discs are huge.
+3. Calibration itself works (U1 coverage within tolerance in most cells).
+
+**Build plan v0.4** (`docs/build-plan.md` §0):
+- **Milestone 7, hex prediction sets** (§5 H, §6.7): H1 retrieval ensemble, H2 H3 transition model, conformal density level sets, and the disc-to-cells baseline.
+- **Milestone 8:** TrAISformer, as a distribution model.
+- **Milestone 9:** multi-day credibility.
+- README roadmap and CLAUDE.md status updated.
+
+**Literature read for the switch:**
+- arXiv 2310.18948 (hex-grid route/destination probabilities: point output, probabilities used as inputs);
+- arXiv 2608.14349 (non-parametric transition sampling);
+- JMSE 14(16):1496 (H3-indexed context);
+- arXiv 2506.00025 (Markov models on a hex grid);
+- conformal multimodal regions: arXiv 2312.07434, 2507.22389, 2508.13362.
+
+**Next step:** Milestone 7, slice 1, on dev. H1 sets against discs converted to cells, calibrated on the first half of the dev window and evaluated on the second, compared at the same coverage.

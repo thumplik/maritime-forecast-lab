@@ -1,10 +1,20 @@
 # Maritime Forecast Lab — Codex Build Plan
 
-**Version:** 0.3  
-**Date:** 2026-10-19  
+**Version:** 0.4  
+**Date:** 2026-10-22  
 **Purpose:** Build a reproducible, extensible system for forecasting a vessel's geographic trajectory over the next hours to days from AIS history.
 
 ## 0. What changed
+
+### v0.4 (2026-10-22, from Milestones 3–6 measured on real data; `docs/benchmarks.md`)
+
+1. **The product output becomes a calibrated set of H3 cells per horizon** ("where will the ship be, within which hexes"), replacing a point plus a conformal disc as the headline. Futures branch at junctions, and the 90% discs at 6 h are 87–160 km across, covering land and both branches at once. A cell set can be multimodal and follow the water. New **Milestone 7** (§5 H, §6.7).
+2. **Milestone 6 (Timestral) is closed as a documented negative result** (dev window only; never scored on July).
+   - Zero-shot Timestral on positions (T1-pos) or velocities (T1-vel) never beat retrieval, and on transiting ships it never beat the best kinematic baseline.
+   - Longer context helps only short port moves.
+   - T1-vel+route was not built: it would mostly re-derive what retrieval already provides.
+3. **Route knowledge is where the skill is.** Retrieval v2 beats every kinematic baseline by 50–75% on transiting ships up to 12 h; everything without route knowledge loses from about 6 h. The set models are therefore built on historical traffic: retrieval candidates first (H1), then an H3 transition model (H2).
+4. **TrAISformer moves to Milestone 8** and is reframed as a candidate *distribution* model (its output is already a classification over position bins), scored by the §6.7 set metrics. Multi-day credibility becomes Milestone 9.
 
 ### v0.3 (2026-10-19, from the Milestone 0 findings in `docs/coverage-audit.md`)
 
@@ -263,7 +273,7 @@ class TrajectoryForecaster(Protocol):
 - For each model, horizon and stratum (vessel class × motion state), fit split-conformal radii on a calibration window that is disjoint from both the retrieval index period and the test period.
 - Report nominal level, empirical coverage on test, and mean area. This is the honest uncertainty baseline that any later probabilistic model must beat.
 
-### T1 — Timestral zero-shot adapter (Milestone 6)
+### T1 — Timestral zero-shot adapter (Milestone 6; closed, negative result)
 
 Timestral was released 2026-10-15 and is pretrained mostly on synthetic series. It has no knowledge of coastlines or shipping lanes. Expect it to behave roughly like a smoothed kinematic extrapolator unless given route information; test that expectation rather than assuming either way.
 
@@ -281,12 +291,29 @@ Timestral was released 2026-10-15 and is pretrained mostly on synthetic series. 
 - Timestral provides marginal quantiles per variable. **Never combine marginal x/y or lat/lon intervals into a claimed route-confidence corridor.** Use U1 conformal radii for uncertainty instead.
 - Smoke inference is optional in CI; ordinary tests never download checkpoints.
 
-### N1 — TrAISformer (Milestone 7)
+### N1 — TrAISformer (Milestone 8)
 
 - Prefer the leakage paper's released reimplementation and split manifests over the original upstream repository. That reimplementation reproduced the published Danish numbers within a few percent, and it already runs on the NOAA Houston corpus.
 - If the paper's artifacts can't be obtained, fall back to the upstream repo (`CIA-Oceanix/TrAISformer`): reproduce one native checkpoint first, then build the conversion.
 - Report greedy (deterministic) decoding as the operational number. Best-of-N may be shown only as a separately labeled diagnostic, next to the same oracle applied to a noise-perturbed constant-velocity control.
 - TrAISformer uses absolute position bins, so it is expected to fail on region-disjoint tests. Document this rather than treat it as a bug.
+
+### H — Hex prediction sets (Milestone 7)
+
+The answer to "where will this vessel be at horizon h?" is a **probability over H3 cells** and a **calibrated prediction set**: the smallest group of cells holding the true position with the nominal probability (e.g. 90%).
+
+- **Resolution:** H3 res 7 (about 5.2 km² per cell) up to 3 h, res 6 (about 36 km²) beyond. Fixed per horizon; the set is reported in km².
+- **H1 — retrieval ensemble:** the top-K (e.g. 50) retrieved continuations that cover the horizon, weighted by similarity, as a kernel density in the local frame.
+  - It is mixed with a small broad component around the central path, so the truth always has non-zero density.
+  - The density is evaluated at cell centres. Land cells can be removed with the train-split navigable mask.
+- **H2 — H3 transition model:** a table of (cell, course bin, speed bin) → cell after Δt, fitted on protocol-permitted training data only. It is rolled out by Monte Carlo to give the distribution at each horizon, and it reaches long horizons by chaining. Candidates from the literature: hex-grid route/destination probabilities (arXiv 2310.18948), Markov models over grids, non-parametric transition sampling (arXiv 2608.14349).
+- **Calibration:** split-conformal density level sets.
+  - Score = density at the true position.
+  - Threshold = the calibration quantile.
+  - Set = cells at or above it.
+  - Fitted per horizon × stratum on a calibration window, exactly like U1. Marginal coverage only; stated as such.
+- **Baseline to beat:** U1's conformal disc around the best point model, converted to cells at the same resolution. Success means the same coverage with a clearly smaller area.
+- Similarity-derived weights become probabilities only after this calibration; until then they are labelled densities.
 
 ### Watch list (not scheduled)
 
@@ -357,6 +384,14 @@ Strata that fail are marked experimental at that horizon in the UI and API. Resu
 - Ground-truth availability, evaluable counts and `not_evaluable` reasons by horizon.
 - Runtime and approximate memory.
 - Uncertainty (once added): empirical coverage versus nominal level, and region area.
+
+### 6.7 Prediction-set metrics (Milestone 7)
+
+- **Coverage:** whether the true position's H3 cell is in the set, against the nominal level, with vessel-bootstrap CIs, per stratum and horizon.
+- **Size:** set area in km² (cells × cell area), mean and median.
+- **Proper score:** the log score of the cell probability at the truth (with a stated floor). Also the hit rate of the single most probable cell.
+- **Pairing:** every set model and the disc baseline are scored on the identical evaluable samples; the same rules as §6.5.
+- **Adoption:** a set model replaces the disc baseline only if it is within the coverage tolerance on the held-out set and has a smaller mean area. The rule is pre-registered before any July look.
 
 No accuracy target is advertised before analysis. The basic success condition is **reliably outperforming the best of persistence, constant velocity and damped velocity, per admitted stratum, on an untouched held-out set under P-known and P-unseen**, with the transiting stratum reported separately. If that doesn't happen, surface it clearly.
 
@@ -458,16 +493,34 @@ Goal: learn what the data can support before building product.
 
 **Done when:** all three variants run reproducibly on real replays, and the dashboard shows their error relative to baselines and retrieval, even if they lose.
 
-### Milestone 7 — Research models
+**Status (2026-10-22): closed, negative result.**
+- T1-pos and T1-vel were built, pinned and benchmarked on the dev window.
+- A context-length study (24/48/72 h) was run on one paired set.
+- Neither variant beat retrieval anywhere, and neither beat the best kinematic baseline on transiting ships. T1-vel+route was not built (v0.4).
+- Findings: `docs/benchmarks.md`, `docs/model-integration-notes.md`. The adapter stays as an optional, unscored reference.
+
+### Milestone 7 — Hex prediction sets
 
 **Tasks**
-- TrAISformer via the calibration paper's reimplementation (§5 N1); greedy decoding as the operational number.
+- A set representation in the forecaster contract: per target time, H3 cells with probabilities, and the calibrated set with its nominal level, calibration-set id and area.
+- H1 (retrieval ensemble) and the disc-to-cells baseline, compared on the dev window first. Calibrate on its first half, evaluate on its second.
+- H2 (H3 transition model fitted on train).
+- §6.7 metrics in the benchmark runner and dashboard. Draw sets on the map (MapLibre H3 polygons).
+- Land-cell removal with the train-split navigable mask.
+- Pre-registered July comparison against the disc baseline.
+
+**Done when:** at least one set model is calibrated within tolerance on the July hold-out with a smaller mean area than the disc baseline, or the failure is documented per stratum. The workbench shows sets for any forecast.
+
+### Milestone 8 — Research models
+
+**Tasks**
+- TrAISformer via the calibration paper's reimplementation (§5 N1); greedy decoding as the operational point, and its bin probabilities scored as a distribution under §6.7.
 - Log every adaptation difference from the source papers.
 - Decide on further model work (hybrid, intent modeling, SKETCH) from measured failure categories.
 
 **Done when:** each integrated model runs through the same API, evaluator and map with documented limitations. A blocked integration never blocks other milestones.
 
-### Milestone 8 — Multi-day credibility and optional near-real-time ingest
+### Milestone 9 — Multi-day credibility and optional near-real-time ingest
 
 **Tasks**
 - Source data suitable for 24–72 h horizons (licensed satellite AIS or additional regional networks). Verify data rights, coverage, cadence, gaps and label sufficiency.

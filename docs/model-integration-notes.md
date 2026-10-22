@@ -88,6 +88,17 @@ Limitation of both CV modes: no turns, channel geometry or land.
 _Conformal, Timestral and TrAISformer sections are added in Milestones 4–7._
 
 
+## Timestral (Milestone 6): closed as a negative result (2026-10-22)
+
+Dev window only; never scored on July. Records are in `docs/benchmarks.md`.
+- **T1-pos:**
+  - beats the best kinematic baseline on pooled underway traffic at 1–3 h, mostly harbour moves, and loses from 6 h;
+  - never beats constant velocity on transiting ships, and is worse than persistence on moored ships.
+- **T1-vel:** worse than T1-pos everywhere except transiting ships at 1–3 h, where it ties constant velocity.
+- **Context length:** 72 h beats 24 h by about 14% at 3–6 h on pooled underway traffic, with no detectable effect on transiting ships, and longer context hurts on moored ships.
+- **Retrieval v2 beats every variant everywhere up to 12 h.** T1-vel+route was not built: route knowledge is retrieval's, and the product goal moved to calibrated hex sets (build plan v0.4).
+- The adapters stay registered as optional models, outside the default benchmark set, for reference.
+
 ## Timestral zero-shot, positions (`timestral_pos_v1`, §5 T1-pos)
 - **Source and pins:** [research/adapters/timestral/README.md](../research/adapters/timestral/README.md). The package is at commit `a534bdb`; the Timestral-28M weights are at revision `49b2640`. Both are optional (`uv sync --extra timestral`, `make timestral-weights`). Without them the model reports `installed=false`, and every request gets the typed error `not_installed`.
 - **Representation:** the vessel's own east/north positions, in metres, in the local AEQD frame centred on the last report. That is a two-variate series on a regular grid at the request's step, ending at `as_of` and spanning the request's history.
