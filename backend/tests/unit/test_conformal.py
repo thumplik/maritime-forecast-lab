@@ -97,3 +97,37 @@ def test_records_without_a_radius_are_counted_not_hidden():
     radii = fit_radii(cal, ConformalConfig(min_n=30))
     a = assign_radii(_records(2, 10, rng, 1000.0), radii, 0.9)
     assert a["radius_m"].null_count() == a.height
+
+
+def test_region_for_refuses_hindsight_mismatches_and_unfitted_times():
+    from datetime import UTC, datetime, timedelta
+
+    from maritime_forecast.evaluation.conformal import motion_state, region_for
+    from maritime_forecast.schemas.manifest import Period, SplitManifest
+
+    t0 = datetime(2023, 7, 10, tzinfo=UTC)
+    rep = pl.DataFrame({"observed_at": [t0 - timedelta(minutes=k) for k in (12, 8, 0)],
+                        "sog_knots": [0.0, 3.0, 3.0]})  # fmt: skip
+    assert motion_state(rep) == "underway"  # the 12-min-old report is outside the window
+    assert motion_state(rep.with_columns(sog_knots=pl.lit(1.0))) is None
+    assert motion_state(rep.with_columns(sog_knots=pl.lit(0.1))) == "stationary"
+    man = SplitManifest(protocol="P-known", dataset_id="d", description="SYNTHETIC", periods=[
+        Period(split="calibration", start=t0 - timedelta(days=9), end=t0 - timedelta(days=2))])  # fmt: skip
+    params = {"calibration_set_id": "cal", "manifest_sha256": "abc", "config": {"levels": [0.9]},
+              "models": {"m": {"model_version": "1"}},
+              "radii": [{"model_id": "m", "horizon_h": h, "level": 0.9, "stratum": s, "radius_m": r}
+                        for h, s, r in [(1.0, "ALL", 900.0), (2.0, "underway:ALL", 1500.0),
+                                        (2.0, "underway:tanker", None)]]}  # fmt: skip
+    tt = [t0 + timedelta(minutes=30 * k) for k in range(1, 5)]  # 0.5, 1, 1.5, 2 h
+    reg, why = region_for(params, man, "abc", "m", "1", "underway", "tanker", t0, tt, 0.9)
+    assert region_for(params, man, "abc", "m", "1", "underway", "tanker", t0, tt, 0.9,
+                      config_sha256="other")[0] is None  # fitted for another config  # fmt: skip
+    assert why is None and reg["radii_m"] == [None, 900.0, None, 1500.0]
+    assert reg["strata"] == [None, "ALL", None, "underway:ALL"]  # tanker radius null -> fallback
+    assert region_for(params, man, "zzz", "m", "1", "underway", "x", t0, tt, 0.9)[0] is None
+    assert region_for(params, man, "abc", "m", "2", "underway", "x", t0, tt, 0.9)[0] is None
+    assert region_for(params, man, "abc", "m", "1", None, "x", t0, tt, 0.9)[0] is None
+    early = t0 - timedelta(days=3)  # before the calibration window ended: hindsight
+    _, why = region_for(params, man, "abc", "m", "1", "underway", "x", early,
+                        [early + timedelta(hours=1)], 0.9)  # fmt: skip
+    assert "labels' reach" in why

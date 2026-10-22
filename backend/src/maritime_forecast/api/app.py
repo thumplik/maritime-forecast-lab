@@ -47,14 +47,15 @@ from maritime_forecast.api.models import (
     VesselPage,
     VesselSummary,
 )
-from maritime_forecast.config import MANIFEST_DIR, RUNS_DIR, BBox
+from maritime_forecast.config import DATA_DIR, MANIFEST_DIR, RUNS_DIR, BBox, default_region
 from maritime_forecast.data.segment import (
     DEFAULT_SEGMENT_CONFIG,
     gap_segments,
     segments_and_gaps,
 )
+from maritime_forecast.evaluation import conformal
 from maritime_forecast.evaluation.forecast_eval import evaluate_forecast
-from maritime_forecast.evaluation.holdout import is_holdout, touches_test
+from maritime_forecast.evaluation.holdout import config_sha, is_holdout, touches_test
 from maritime_forecast.evaluation.runner import BenchmarkConfig, benchmark_context, preflight
 from maritime_forecast.geo.navigable_mask import MaskMismatchError, load_navigable_mask
 from maritime_forecast.models.base import ForecastHorizon, ModelContext, history_from_store
@@ -62,6 +63,7 @@ from maritime_forecast.models.registry import get_model, model_ids
 from maritime_forecast.provenance import git_sha
 from maritime_forecast.schemas.dataset import DatasetManifest
 from maritime_forecast.schemas.forecast import (
+    ConformalRegion,
     ForecastEvaluation,
     ForecastRequest,
     ForecastResponse,
@@ -86,6 +88,8 @@ class ApiSettings:
     gap_minutes: float = DEFAULT_SEGMENT_CONFIG.gap_minutes
     # Fitted parameters for the API come from this protocol's TRAIN split (deployment fit).
     deployment_protocol: str = "P-known"
+    # Split-conformal radii per (protocol, dataset), fitted on the calibration split.
+    conformal_dir: Path = DATA_DIR / "model_params" / "conformal"
     forecast_cache_size: int = 256
     # Truth for POST /forecasts/evaluation: the benchmark's bracketing rule (§6.1 step 4).
     max_bracket_gap_minutes: float = 30.0
@@ -414,6 +418,51 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
 
     cache: OrderedDict[str, ForecastResponse] = OrderedDict()
 
+    def _file_sha(p: Path) -> str | None:
+        return hashlib.sha256(p.read_bytes()).hexdigest() if p.exists() else None
+
+    def _with_radii(req, mctx, history, horizon, forecasts):
+        """Attach split-conformal radii (Milestone 4) to every ok forecast, or say why not."""
+        if req.conformal_level is None:
+            return forecasts
+        p = settings.conformal_dir / f"{settings.deployment_protocol}__{req.dataset_id}.json"
+        mpath = (
+            settings.manifest_dir
+            / "splits"
+            / f"{settings.deployment_protocol}__{req.dataset_id}.json"
+        )
+
+        def refuse(why):
+            return [f.model_copy(update={"warnings": [*f.warnings, f"no radii: {why}"]})
+                    if f.status == "ok" else f for f in forecasts]  # fmt: skip
+
+        if not p.exists() or not mpath.exists():
+            return refuse(f"none fitted for {settings.deployment_protocol} on {req.dataset_id}")
+        why = conformal.calibration_like(history.reports, history.as_of, req.history_hours,
+                                         default_region("cutoff_region"))  # fmt: skip
+        if why:
+            return refuse(f"the forecast does not resemble the calibration samples ({why})")
+        params = json.loads(p.read_text())
+        manifest = SplitManifest.model_validate_json(mpath.read_bytes())
+        motion = conformal.motion_state(history.reports)
+        cls = conformal.last_vessel_class(history.reports)
+        configs = {m: get_model(m, mctx).config for m in req.model_ids}
+        out = []
+        for f in forecasts:
+            if f.status != "ok":
+                out.append(f)
+                continue
+            region, why = conformal.region_for(
+                params, manifest, mctx.manifest_sha256, f.model_id, f.model_version, motion, cls,
+                history.as_of, horizon.target_times, req.conformal_level,
+                config_sha(configs[f.model_id]),
+            )  # fmt: skip
+            if region is None:
+                out.append(f.model_copy(update={"warnings": [*f.warnings, f"no radii: {why}"]}))
+            else:
+                out.append(f.model_copy(update={"uncertainty": ConformalRegion(**region)}))
+        return out
+
     def _forecast(store: ParquetStore, req: ForecastRequest) -> ForecastResponse:
         """The causal forecast for a request, cached by request, models, data and code."""
         _partitions(store, req.dataset_id)
@@ -432,6 +481,11 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
                 "versions": {m: built[m].capabilities().model_version for m in req.model_ids},
                 "data_version": data_version,
                 "code": app.state.ctx.git_sha,
+                "radii": _file_sha(
+                    settings.conformal_dir
+                    / f"{settings.deployment_protocol}__{req.dataset_id}.json"
+                ),
+                "manifest": ctx.manifest_sha256,
             },
             sort_keys=True,
             default=str,
@@ -460,7 +514,13 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
                 "last_report_age_s": (as_of - times[-1]).total_seconds() if times else None,
                 "n_gaps": max(segs) if segs else 0,
             },
-            forecasts=[built[m].predict(history, horizon) for m in req.model_ids],
+            forecasts=_with_radii(
+                req,
+                ctx,
+                history,
+                horizon,
+                [built[m].predict(history, horizon) for m in req.model_ids],
+            ),
         )
         cache[forecast_id] = resp  # request-independent: no per-request warnings inside
         if len(cache) > settings.forecast_cache_size:

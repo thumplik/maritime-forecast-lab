@@ -29,6 +29,9 @@ class ForecastRequest(BaseModel):
     horizon_hours: float = Field(6, gt=0, le=72)
     step_minutes: int = Field(10, ge=1, le=60)
     model_ids: list[str] = Field(min_length=1, max_length=10)
+    conformal_level: Literal[0.8, 0.9, 0.95] | None = Field(
+        0.9, description="Attach split-conformal radii at this nominal level (null: none)"
+    )
     show_ground_truth: bool = Field(
         False, description="Request a ForecastEvaluation as well; truth is never in this response"
     )
@@ -68,17 +71,39 @@ class CandidateTrajectory(BaseModel):
 
 
 class ConformalRegion(BaseModel):
-    """Calibrated displacement radius per target time (build plan §5 U1)."""
+    """Split-conformal displacement radius per target time (build plan §5 U1). Marginal coverage
+    claim: over forecasts exchangeable with the stratum's calibration samples, at least
+    `nominal_level` of true positions fall within `radii_m[i]` of the forecast point. It is not a
+    probability for this particular ship, and it assumes exchangeability (measured empirical
+    coverage on the held-out test is in docs/benchmarks.md). Radii exist only at fitted
+    horizons; other target times are null (never interpolated)."""
 
     kind: Literal["conformal_radius"] = "conformal_radius"
     nominal_level: float = Field(gt=0, lt=1)
-    calibration_set_id: str
-    radii_m: list[float] = Field(description="One radius per target time, metres")
+    calibration_set_id: str = Field(description="The calibration benchmark run the radii came from")
+    radii_m: list[float | None] = Field(
+        description="One per target time, metres; null where no radius was fitted"
+    )
+    strata: list[str | None] = Field(
+        default_factory=list, description="Stratum each radius came from (after any fallback)"
+    )
+    fitted_horizons_h: list[float] = Field(default_factory=list)
+    calibration_n: list[int | None] = Field(
+        default_factory=list, description="Calibration errors behind each radius"
+    )
+    calibration_vessels: list[int | None] = Field(
+        default_factory=list, description="Distinct vessels behind each radius"
+    )
+    class_source: str = Field(
+        "backfilled", description="Vessel class used for the stratum: NOAA back-filled, not as-of"
+    )
 
     @model_validator(mode="after")
     def _nonneg(self) -> ConformalRegion:
-        if any(r < 0 for r in self.radii_m):
+        if any(r is not None and r < 0 for r in self.radii_m):
             raise ValueError("radii must be non-negative")
+        if self.strata and len(self.strata) != len(self.radii_m):
+            raise ValueError("one stratum per radius")
         return self
 
 

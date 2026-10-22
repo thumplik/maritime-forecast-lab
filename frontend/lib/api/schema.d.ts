@@ -506,11 +506,37 @@ export interface components {
         };
         /**
          * ConformalRegion
-         * @description Calibrated displacement radius per target time (build plan §5 U1).
+         * @description Split-conformal displacement radius per target time (build plan §5 U1). Marginal coverage
+         *     claim: over forecasts exchangeable with the stratum's calibration samples, at least
+         *     `nominal_level` of true positions fall within `radii_m[i]` of the forecast point. It is not a
+         *     probability for this particular ship, and it assumes exchangeability (measured empirical
+         *     coverage on the held-out test is in docs/benchmarks.md). Radii exist only at fitted
+         *     horizons; other target times are null (never interpolated).
          */
         ConformalRegion: {
-            /** Calibration Set Id */
+            /**
+             * Calibration N
+             * @description Calibration errors behind each radius
+             */
+            calibration_n?: (number | null)[];
+            /**
+             * Calibration Set Id
+             * @description The calibration benchmark run the radii came from
+             */
             calibration_set_id: string;
+            /**
+             * Calibration Vessels
+             * @description Distinct vessels behind each radius
+             */
+            calibration_vessels?: (number | null)[];
+            /**
+             * Class Source
+             * @description Vessel class used for the stratum: NOAA back-filled, not as-of
+             * @default backfilled
+             */
+            class_source: string;
+            /** Fitted Horizons H */
+            fitted_horizons_h?: number[];
             /**
              * Kind
              * @default conformal_radius
@@ -521,9 +547,14 @@ export interface components {
             nominal_level: number;
             /**
              * Radii M
-             * @description One radius per target time, metres
+             * @description One per target time, metres; null where no radius was fitted
              */
-            radii_m: number[];
+            radii_m: (number | null)[];
+            /**
+             * Strata
+             * @description Stratum each radius came from (after any fallback)
+             */
+            strata?: (string | null)[];
         };
         /** DatasetList */
         DatasetList: {
@@ -685,6 +716,12 @@ export interface components {
              * @description Cutoff: only reports at or before this are used
              */
             as_of: string;
+            /**
+             * Conformal Level
+             * @description Attach split-conformal radii at this nominal level (null: none)
+             * @default 0.9
+             */
+            conformal_level: (0.8 | 0.9 | 0.95) | null;
             /** Dataset Id */
             dataset_id: string;
             /**

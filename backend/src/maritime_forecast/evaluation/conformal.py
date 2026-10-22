@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import asdict, dataclass
+from datetime import datetime, timedelta
 
 import numpy as np
 import polars as pl
@@ -170,3 +171,110 @@ def coverage_table(assigned: pl.DataFrame, level: float, group_cols: list[str],
         })  # fmt: skip
     out = pl.DataFrame(rows).join(no_radius, on=keys, how="left")
     return out.with_columns(pl.col("n_no_radius").fill_null(0)).sort(keys)
+
+
+# -- serving radii with a forecast -----------------------------------------------------------
+def motion_state(reports: pl.DataFrame, underway_min_kn: float = 2.0,
+                 stationary_max_kn: float = 0.5) -> str | None:  # fmt: skip
+    """The cutoff sampler's motion rule on a history: mean SOG over the 10 min up to the last
+    report (inclusive). Between the two thresholds there is no stratum (None)."""
+    if not reports.height:
+        return None
+    t = reports["observed_at"][-1]
+    sog = reports.filter(pl.col("observed_at") >= t - timedelta(minutes=10))["sog_knots"]
+    sog = sog.drop_nulls()
+    if not sog.len():
+        return None
+    m = float(sog.mean())
+    return "underway" if m >= underway_min_kn else "stationary" if m < stationary_max_kn else None
+
+
+MAX_STALENESS_MIN = 10.0  # declared: calibration cutoffs sit exactly on a report (0 min)
+MIN_HISTORY_HOURS = 3.0  # the sampler's trailing window for its report-count rule
+
+
+def calibration_like(reports: pl.DataFrame, as_of: datetime, history_hours: float, cutoff_box,
+                     min_reports_3h: int = 6) -> str | None:  # fmt: skip
+    """Why a forecast does not resemble the calibration samples (None if it does). The radii
+    are only claimed for the population they were calibrated on: the sampler's cutoff region,
+    Class A/B transceivers, at least `min_reports_3h` reports in the trailing 3 h, and an as_of
+    at (or within MAX_STALENESS_MIN of) the last report, since lead times count from as_of."""
+    if history_hours < MIN_HISTORY_HOURS:
+        return f"history shorter than {MIN_HISTORY_HOURS:g} h"
+    if not reports.height:
+        return "no report in the history"
+    last = reports.row(-1, named=True)
+    if (as_of - last["observed_at"]).total_seconds() > MAX_STALENESS_MIN * 60:
+        return f"the last report is more than {MAX_STALENESS_MIN:g} min older than as_of"
+    if not cutoff_box.contains(last["latitude_deg"], last["longitude_deg"]):
+        return f"the last report is outside the {cutoff_box.name} cutoff region"
+    if last.get("transceiver_class") not in ("A", "B"):
+        return "transceiver class is not A or B"
+    n3 = reports.filter(pl.col("observed_at") > last["observed_at"] - timedelta(hours=3)).height
+    if n3 < min_reports_3h:
+        return f"fewer than {min_reports_3h} reports in the last 3 h"
+    return None
+
+
+def last_vessel_class(reports: pl.DataFrame) -> str:
+    """The class on the last report with one (the benchmark strata use the cutoff row's)."""
+    if "vessel_class" not in reports.columns:
+        return "unknown"
+    c = reports["vessel_class"].drop_nulls()
+    return str(c[-1]) if c.len() else "unknown"
+
+
+def region_for(params: dict, manifest, manifest_sha256: str | None, model_id: str,
+               model_version: str, motion: str | None,
+               vessel_class: str, as_of: datetime, target_times: list[datetime],
+               level: float,
+               config_sha256: str | None = None) -> tuple[dict | None, str | None]:  # fmt: skip
+    """The ConformalRegion fields for one forecast, or (None, why). Refuses: radii fitted for a
+    different manifest, model version or model config, a level that was not fitted, an as_of
+    before the calibration labels' reach (calibration end + truth bracket: the radii would carry
+    errors from after as_of), or no stratum."""
+    if manifest is None or params.get("manifest_sha256") != manifest_sha256:
+        return None, "conformal radii were fitted for a different split manifest"
+    fitted = params.get("models", {}).get(model_id)
+    if fitted is None:
+        return None, f"no conformal radii for {model_id}"
+    if fitted.get("model_version") != model_version:
+        return None, f"conformal radii are for {model_id} {fitted.get('model_version')}"
+    if config_sha256 is not None and fitted.get("config_sha256") != config_sha256:
+        return None, f"conformal radii were fitted for a different {model_id} configuration"
+    if level not in params["config"]["levels"]:
+        return None, f"no radii at level {level}"
+    cal_end = max((p.end for p in manifest.periods or [] if p.split == "calibration"), default=None)
+    if cal_end is None:
+        return None, "the split manifest has no calibration period"
+    reach = (datetime.fromisoformat(params["label_reach_end"]) if params.get("label_reach_end")
+             else cal_end + timedelta(minutes=30))  # fmt: skip
+    if as_of < reach:
+        return None, (f"as_of is before the calibration labels' reach ({reach:%Y-%m-%d %H:%M}): "
+                      "its radii were fitted on later errors")  # fmt: skip
+    if motion is None:
+        return None, "no motion stratum (10-min mean SOG between 0.5 and 2 kn, or no SOG)"
+    rows = {(r["horizon_h"], r["stratum"]): r for r in params["radii"]
+            if r["model_id"] == model_id and r["level"] == level}  # fmt: skip
+    table = {k: r["radius_m"] for k, r in rows.items()}
+    horizons = sorted({h for h, _ in table})
+    chain = (f"{motion}:{vessel_class}", f"{motion}:{ALL}", ALL)
+    radii, strata, ns, nvs = [], [], [], []
+    for t in target_times:
+        lead_h = (t - as_of).total_seconds() / 3600
+        h = next((x for x in horizons if abs(x - lead_h) < 1e-6), None)
+        r, s = None, None
+        if h is not None:
+            s = next((c for c in chain if table.get((h, c)) is not None), None)
+            r = table.get((h, s)) if s else None
+        radii.append(r)
+        strata.append(s)
+        ns.append(rows[(h, s)].get("n") if s else None)
+        nvs.append(rows[(h, s)].get("n_vessels") if s else None)
+    if all(r is None for r in radii):
+        return None, "no target time coincides with a fitted horizon (1, 2, 3, 6, 12, 24 h)"
+    return {
+        "nominal_level": level, "calibration_set_id": params["calibration_set_id"],
+        "radii_m": radii, "strata": strata, "fitted_horizons_h": horizons,
+        "calibration_n": ns, "calibration_vessels": nvs, "class_source": "backfilled",
+    }, None  # fmt: skip

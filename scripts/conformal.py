@@ -18,14 +18,16 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import polars as pl
 
 from maritime_forecast.config import DATA_DIR, RUNS_DIR
 from maritime_forecast.evaluation import conformal as cf
-from maritime_forecast.evaluation.holdout import read_ledger, record_analysis
+from maritime_forecast.evaluation.holdout import config_sha, read_ledger, record_analysis
 from maritime_forecast.provenance import git_sha
+from maritime_forecast.schemas.manifest import SplitManifest
 from maritime_forecast.storage.run_store import RunStore
 
 DATASET = "noaa_us_gulf_2023-06-07"
@@ -53,6 +55,11 @@ def main() -> None:
     ap.add_argument("--dataset-id", default=DATASET)
     ap.add_argument("--calibration-run", default=None, help="default: latest calibration run")
     ap.add_argument("--test-run", default=None, help="default: the ledger's run for the protocol")
+    ap.add_argument(
+        "--params-only",
+        action="store_true",
+        help="refit and write the radii only; read no test records (no analysis)",
+    )
     args = ap.parse_args()
     runs = RunStore()
     cal_id = args.calibration_run or _latest(args.protocol, args.dataset_id, "calibration")
@@ -62,6 +69,7 @@ def main() -> None:
     if test_id is None or test_id not in {e["run_id"] for e in ledger}:
         raise SystemExit("the test run must be a recorded held-out run (test-access ledger)")
     cal, test = runs.load(cal_id), runs.load(test_id)
+    man = SplitManifest.model_validate_json(Path(cal.sampler["manifest_path"]).read_text())
     if cal.sampler.get("split") != "calibration" or test.sampler.get("split") != "test":
         raise SystemExit("need a calibration-split run and a test-split run")
     if cal.protocol.manifest_sha256 != test.protocol.manifest_sha256:
@@ -84,12 +92,22 @@ def main() -> None:
         "kind": "conformal_radius", "protocol": args.protocol, "dataset_id": args.dataset_id,
         "calibration_set_id": cal_id, "calibration_files_json_sha256": _digest(cal_id),
         "manifest_sha256": cal.protocol.manifest_sha256, "config": cfg.as_dict(),
-        "models": {m.model_id: {"model_version": m.model_version} for m in cal.models},
+        "models": {m.model_id: {"model_version": m.model_version,
+                                "config_sha256": config_sha(m.config)} for m in cal.models},
+        # Calibration labels reach the calibration end plus the truth bracket: an as_of before
+        # this would be served radii fitted on its own future.
+        "label_reach_end": (
+            max(p.end for p in man.periods if p.split == "calibration")
+            + timedelta(minutes=cal.sampler["max_bracket_gap_minutes"])
+        ).isoformat(),
         "class_source": "backfilled (NOAA; not as-of)",
         "radii": radii.to_dicts(), "git_sha": sha,
         "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }, indent=1) + "\n")  # fmt: skip
 
+    if args.params_only:
+        print(f"{args.protocol}: radii -> {out_params} (params only; no test records read)")
+        return
     test_records = runs.table(test_id, "records")
     failed = cf.failures_by_cell(test_records)
     tables = []

@@ -691,11 +691,55 @@
         "type": "object"
       },
       "ConformalRegion": {
-        "description": "Calibrated displacement radius per target time (build plan \u00a75 U1).",
+        "description": "Split-conformal displacement radius per target time (build plan \u00a75 U1). Marginal coverage\nclaim: over forecasts exchangeable with the stratum's calibration samples, at least\n`nominal_level` of true positions fall within `radii_m[i]` of the forecast point. It is not a\nprobability for this particular ship, and it assumes exchangeability (measured empirical\ncoverage on the held-out test is in docs/benchmarks.md). Radii exist only at fitted\nhorizons; other target times are null (never interpolated).",
         "properties": {
+          "calibration_n": {
+            "description": "Calibration errors behind each radius",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Calibration N",
+            "type": "array"
+          },
           "calibration_set_id": {
+            "description": "The calibration benchmark run the radii came from",
             "title": "Calibration Set Id",
             "type": "string"
+          },
+          "calibration_vessels": {
+            "description": "Distinct vessels behind each radius",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Calibration Vessels",
+            "type": "array"
+          },
+          "class_source": {
+            "default": "backfilled",
+            "description": "Vessel class used for the stratum: NOAA back-filled, not as-of",
+            "title": "Class Source",
+            "type": "string"
+          },
+          "fitted_horizons_h": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Fitted Horizons H",
+            "type": "array"
           },
           "kind": {
             "const": "conformal_radius",
@@ -710,11 +754,33 @@
             "type": "number"
           },
           "radii_m": {
-            "description": "One radius per target time, metres",
+            "description": "One per target time, metres; null where no radius was fitted",
             "items": {
-              "type": "number"
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "title": "Radii M",
+            "type": "array"
+          },
+          "strata": {
+            "description": "Stratum each radius came from (after any fallback)",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Strata",
             "type": "array"
           }
         },
@@ -1156,6 +1222,24 @@
             "format": "date-time",
             "title": "As Of",
             "type": "string"
+          },
+          "conformal_level": {
+            "anyOf": [
+              {
+                "enum": [
+                  0.8,
+                  0.9,
+                  0.95
+                ],
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": 0.9,
+            "description": "Attach split-conformal radii at this nominal level (null: none)",
+            "title": "Conformal Level"
           },
           "dataset_id": {
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",

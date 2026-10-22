@@ -56,6 +56,7 @@ def client(tmp_path, monkeypatch):
         runs_dir=tmp_path / "runs",
         max_window_days=3,
         max_track_points=1000,
+        conformal_dir=tmp_path / "conformal",
     )
     return TestClient(create_app(settings))
 
@@ -391,3 +392,53 @@ def test_holdout_test_period_is_not_evaluable_or_benchmarkable(client, tmp_path)
     e = err(client.post("/benchmarks", json={"dataset_id": "syn", "protocol": "P-known"}),
             422, "benchmark_refused")  # fmt: skip
     assert "held-out" in e["message"]
+
+
+def test_forecasts_carry_conformal_radii_at_fitted_horizons_only(client, tmp_path):
+    import hashlib
+
+    from maritime_forecast.evaluation.holdout import config_sha
+    from maritime_forecast.models.registry import get_model
+    from maritime_forecast.schemas.manifest import Period, SplitManifest
+
+    m = SplitManifest(
+        protocol="P-known", dataset_id="syn", description="SYNTHETIC",
+        periods=[Period(split="train", start=T0 - timedelta(days=30), end=T0 - timedelta(days=12)),
+                 Period(split="calibration", start=T0 - timedelta(days=10),
+                        end=T0 - timedelta(days=2))],
+    )  # fmt: skip
+    d = tmp_path / "manifests" / "splits"
+    d.mkdir(parents=True, exist_ok=True)
+    raw = m.model_dump_json().encode()
+    (d / "P-known__syn.json").write_bytes(raw)
+    (tmp_path / "conformal").mkdir()
+    params = {
+        "calibration_set_id": "P-known_syn_calibration_X",
+        "manifest_sha256": hashlib.sha256(raw).hexdigest(),
+        "config": {"levels": [0.8, 0.9]},
+        "models": {"persistence_v1": {"model_version": "1.0.0", "config_sha256": config_sha(
+            get_model("persistence_v1").config)}},  # fmt: skip
+        "radii": [
+            {"model_id": "persistence_v1", "horizon_h": 1.0, "level": 0.9, "stratum": "ALL",
+             "n": 99, "n_vessels": 9, "radius_m": 4321.0},
+            {"model_id": "persistence_v1", "horizon_h": 1.0, "level": 0.9,
+             "stratum": "underway:cargo", "n": 40, "n_vessels": 5, "radius_m": 1234.0},
+        ],
+    }  # fmt: skip
+    (tmp_path / "conformal" / "P-known__syn.json").write_text(json.dumps(params))
+    base = {"model_ids": ["persistence_v1"], "history_hours": 3}
+    short = client.post("/forecasts", json=_req(model_ids=["persistence_v1"])).json()
+    assert short["forecasts"][0]["uncertainty"] is None  # 2 h history: not calibration-like
+    assert any("history shorter" in w for w in short["forecasts"][0]["warnings"])
+    f = client.post("/forecasts", json=_req(**base)).json()["forecasts"][0]
+    u = f["uncertainty"]
+    assert u["nominal_level"] == 0.9 and u["calibration_set_id"] == "P-known_syn_calibration_X"
+    assert u["radii_m"] == [None] * 5 + [1234.0]  # only the 1 h target time is fitted
+    assert u["strata"][-1] == "underway:cargo" and u["class_source"] == "backfilled"
+    assert u["calibration_n"][-1] == 40 and u["calibration_vessels"][-1] == 5
+    none = client.post("/forecasts", json=_req(**base, conformal_level=None)).json()
+    assert none["forecasts"][0]["uncertainty"] is None
+    lvl = client.post("/forecasts", json=_req(**base, conformal_level=0.95)).json()
+    stale = client.post("/forecasts", json=_req(**base, as_of="2023-06-01T02:30:00Z")).json()
+    assert any("older than as_of" in w for w in stale["forecasts"][0]["warnings"])
+    assert any("no radii at level 0.95" in w for w in lvl["forecasts"][0]["warnings"])
