@@ -1002,6 +1002,23 @@ export interface components {
             version: string;
         };
         /**
+         * HexLayer
+         * @description One nested band of a hex set: the highest-density cells holding `level` of the
+         *     probability (split-conformal threshold at that level, same calibration window).
+         */
+        HexLayer: {
+            /** Area Km2 */
+            area_km2: number;
+            /** Boundary */
+            boundary?: {
+                [key: string]: unknown;
+            } | null;
+            /** Level */
+            level: number;
+            /** N Cells */
+            n_cells: number;
+        };
+        /**
          * HexSet
          * @description A calibrated hex prediction set at one target time (build plan v0.4 §5 H): the H3 cells
          *     holding the true position with the nominal probability. Split-conformal on the calibration
@@ -1039,6 +1056,11 @@ export interface components {
              * @constant
              */
             kind: "h1_hex_set";
+            /**
+             * Layers
+             * @description Nested bands (e.g. 50% inside 80% inside 90%): where the vessel is most likely to be. Empty when only the main level is fitted
+             */
+            layers?: components["schemas"]["HexLayer"][];
             /**
              * N Candidates
              * @description Retrieved continuations behind the density

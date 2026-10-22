@@ -143,6 +143,16 @@ class ModelError(BaseModel):
     message: str
 
 
+class HexLayer(BaseModel):
+    """One nested band of a hex set: the highest-density cells holding `level` of the
+    probability (split-conformal threshold at that level, same calibration window)."""
+
+    level: float
+    n_cells: int
+    area_km2: float
+    boundary: dict | None = None
+
+
 class HexSet(BaseModel):
     """A calibrated hex prediction set at one target time (build plan v0.4 §5 H): the H3 cells
     holding the true position with the nominal probability. Split-conformal on the calibration
@@ -160,6 +170,11 @@ class HexSet(BaseModel):
     calibration_vessels: int
     n_candidates: int = Field(description="Retrieved continuations behind the density")
     boundary: dict | None = Field(None, description="GeoJSON MultiPolygon outline of the cells")
+    layers: list[HexLayer] = Field(
+        default_factory=list,
+        description="Nested bands (e.g. 50% inside 80% inside 90%): where the vessel is most "
+        "likely to be. Empty when only the main level is fitted",
+    )
     adoption: Literal["adopted", "not_adopted", "pending"] = Field(
         "pending",
         description="The pre-registered held-out comparison against the conformal disc: "

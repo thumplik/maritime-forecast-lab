@@ -137,6 +137,12 @@ def density_score(mix: Mixture, frame: LocalFrame, truth_lat: float, truth_lon: 
 
 
 def level_set_cells(mix: Mixture, frame: LocalFrame, tau: float, res: int) -> list[str]:
+    """Every cell whose centre density is >= tau (see level_set_with_density)."""
+    return level_set_with_density(mix, frame, tau, res)[0]
+
+
+def level_set_with_density(mix: Mixture, frame: LocalFrame, tau: float,
+                           res: int) -> tuple[list[str], np.ndarray]:  # fmt: skip
     """Every cell whose centre density is >= tau, enumerated exactly but only where possible.
 
     Weights sum to 1, so the kernel part at a point is at most (1 - eps) K(d_min), with K the
@@ -165,12 +171,13 @@ def level_set_cells(mix: Mixture, frame: LocalFrame, tau: float, res: int) -> li
     for a, o, r in seeds:
         cells.update(_disk(a, o, r, res))
     if not cells:
-        return []
+        return [], np.zeros(0)
     cl = sorted(cells)
     la, lo = cell_centres(cl)
     x, y = frame.to_xy(la, lo)
-    keep = mix.density(x, y) >= tau
-    return [c for c, k in zip(cl, keep, strict=True) if k]
+    dens = mix.density(x, y)
+    keep = dens >= tau
+    return [c for c, k in zip(cl, keep, strict=True) if k], dens[keep]
 
 
 def density_threshold(scores: np.ndarray, level: float) -> float | None:
@@ -237,21 +244,33 @@ def is_transiting(reports, min_mean_sog_kn: float = 2.0, min_sog_kn: float = 0.5
 
 def h1_set(cell: dict, central_lat: float, central_lon: float, lat: np.ndarray, lon: np.ndarray,
            w: np.ndarray) -> dict:  # fmt: skip
-    """The calibrated H1 set at one target time from its fitted cell (stratum x horizon)."""
+    """The calibrated H1 set at one target time from its fitted cell (stratum x horizon), and,
+    when the cell carries thresholds for several levels (`taus`), the nested layers: the
+    cells of higher density hold the lower levels (e.g. 50% inside 80% inside 90%)."""
     import h3
 
     frame = LocalFrame(central_lat, central_lon)
     mix = h1_mixture(
         frame, lat, lon, w, cell["c"], cell["broad_m"], cell["eps"], cell["min_bandwidth_m"]
     )  # the fitted values, never module defaults
-    cells = level_set_cells(mix, frame, cell["tau"], cell["res"])
+    taus = {float(k): v for k, v in (cell.get("taus") or {}).items()}
+    lowest = min([cell["tau"], *taus.values()])
+    every, dens = level_set_with_density(mix, frame, lowest, cell["res"])
+    cells = [c for c, d in zip(every, dens, strict=True) if d >= cell["tau"]]
+    area = cell_area_km2(cell["res"])
+    layers = []
+    for level in sorted(taus):
+        inner = [c for c, d in zip(every, dens, strict=True) if d >= taus[level]]
+        layers.append({"level": level, "n_cells": len(inner), "area_km2": len(inner) * area,
+                       "boundary": h3.cells_to_geo(inner) if inner else None})  # fmt: skip
     return {
         "resolution": cell["res"],
         "cells": cells,
-        "area_km2": len(cells) * cell_area_km2(cell["res"]),
+        "area_km2": len(cells) * area,
         "stratum": cell["stratum"],
         "calibration_n": cell["n"],
         "calibration_vessels": cell["n_vessels"],
         "n_candidates": len(mix.xy),
         "boundary": h3.cells_to_geo(cells) if cells else None,
+        "layers": layers,
     }

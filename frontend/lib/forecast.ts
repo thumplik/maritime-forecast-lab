@@ -131,6 +131,13 @@ export interface HexProps extends PathProps {
   area_km2: number;
   level: number;
   cells: number;
+  /** Fill opacity: the more probable (inner) the band, the darker. */
+  opacity: number;
+}
+
+/** Fill opacity per nested level: 50% core darkest, 90% outer band lightest. */
+export function bandOpacity(level: number): number {
+  return level <= 0.5 ? 0.5 : level <= 0.8 ? 0.3 : 0.14;
 }
 
 export interface ForecastGeo {
@@ -187,13 +194,21 @@ export function forecastToGeo(resp: ForecastResponse, anchor: Anchor | null, ste
     }
     const hs = f.hex_sets?.[step];
     if (hs?.boundary) {
-      const g = hs.boundary as unknown as Polygon | MultiPolygon;
-      geo.hexes.features.push({
-        type: "Feature",
-        geometry: g,
-        properties: { model_id: f.model_id, color, area_km2: hs.area_km2, level: hs.nominal_level, cells: hs.cells.length },
-      });
-      const rings = g.type === "Polygon" ? g.coordinates : g.coordinates.flat();
+      // Nested bands when fitted (outer first, so inner bands draw on top), else the main set.
+      const bands = (hs.layers ?? []).length
+        ? [...hs.layers!].sort((a, b) => b.level - a.level).map((l) => ({ level: l.level, area: l.area_km2, n: l.n_cells, g: l.boundary }))
+        : [{ level: hs.nominal_level, area: hs.area_km2, n: hs.cells.length, g: hs.boundary }];
+      for (const band of bands) {
+        if (!band.g) continue;
+        const g = band.g as unknown as Polygon | MultiPolygon;
+        geo.hexes.features.push({
+          type: "Feature",
+          geometry: g,
+          properties: { model_id: f.model_id, color, area_km2: band.area, level: band.level, cells: band.n, opacity: bandOpacity(band.level) },
+        });
+      }
+      const outer = hs.boundary as unknown as Polygon | MultiPolygon;
+      const rings = outer.type === "Polygon" ? outer.coordinates : outer.coordinates.flat();
       for (const ring of rings) all.push(...ring.map(([lon, la]) => pos(la, lon)));
     }
     const r = f.uncertainty?.radii_m[step];

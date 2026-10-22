@@ -117,13 +117,13 @@ export default function TrackMap({ geo, forecast = null, truth = null, fitKey = 
           id: "hexes-fill",
           type: "fill",
           source: "hexes",
-          paint: { "fill-color": ["get", "color"], "fill-opacity": 0.22 },
+          paint: { "fill-color": ["get", "color"], "fill-opacity": ["get", "opacity"] },
         });
         m.addLayer({
           id: "hexes-edge",
           type: "line",
           source: "hexes",
-          paint: { "line-color": ["get", "color"], "line-width": 1.2 },
+          paint: { "line-color": ["get", "color"], "line-width": 1, "line-opacity": 0.8 },
         });
         m.addLayer({
           id: "discs-fill",

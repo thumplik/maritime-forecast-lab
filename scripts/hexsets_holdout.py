@@ -44,6 +44,7 @@ PARAMS_DIR = DATA_DIR / "model_params" / "hexsets"
 STRATA = {"underway:ALL": pl.lit(True), "underway:TRANSITING": pl.col("transiting")}
 TOLERANCE, TOLERANCE_MIN_N = 0.03, 200  # pre-registered (implementation log, 2026-10-22)
 LEVEL = 0.9  # pre-registered: 90% nominal, no level correction (not a command-line option)
+BANDS = (0.5, 0.8)  # nested inner bands (pre-registered 2026-10-22, before their July check)
 EPS_TOL = 1e-9  # coverage exactly at 0.87 or 0.93 counts as within (decided before the look)
 N_BOOT = 500
 
@@ -189,7 +190,10 @@ def fit(design: dict, cal_run) -> tuple[list[dict], list[dict], dict]:
                 }
             )
             continue
-        cells.append({**cell, "tau": tau})
+        taus = {f"{lv:g}": hx.density_threshold(np.array(sc), lv) for lv in (*BANDS, LEVEL)}
+        if any(t is None for t in taus.values()):
+            taus = None
+        cells.append({**cell, "tau": tau, "taus": taus})
         print(f"  {st} {hz:g} h: n={len(g)}, c={c}, disc r={radius / 1000:.1f} km")
     info = {
         "failed": len(failed),
@@ -217,6 +221,17 @@ def main() -> None:
         "no params written, no ledger entry",
     )
     ap.add_argument("--rerun-reason", help="required to look at the test run a second time")
+    ap.add_argument(
+        "--add-levels",
+        action="store_true",
+        help="refit on the calibration run, check the 90%% thresholds are unchanged, "
+        "and add the band thresholds to the served params (verdict kept; no test read)",
+    )
+    ap.add_argument(
+        "--levels-check",
+        action="store_true",
+        help="one pre-registered July check of the nested bands' coverage",
+    )
     args = ap.parse_args()
     sha = git_sha()
     if not args.dry_run and (sha.endswith("-dirty") or sha == "unknown"):
@@ -269,6 +284,36 @@ def main() -> None:
         "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }
     out_params = PARAMS_DIR / f"{args.protocol}__{args.dataset_id}.json"
+    if args.add_levels or args.levels_check:
+        served = json.loads(out_params.read_text())
+        if (served["design_sha256"], served["calibration_set_id"]) != (
+            params["design_sha256"],
+            cal_id,
+        ):
+            raise SystemExit("served params come from another design or calibration run")
+        old = {(c["stratum"], c["horizon_h"]): c for c in served["cells"]}
+        for c in cells:
+            o = old[(c["stratum"], c["horizon_h"])]
+            if abs(o["tau"] - c["tau"]) > 1e-12 * max(1.0, abs(o["tau"])):
+                raise SystemExit(
+                    f"refit changed the 90% threshold of {c['stratum']} "
+                    f"{c['horizon_h']:g} h: the served set would differ"
+                )
+        if args.levels_check:
+            if any(not c.get("taus") for c in served["cells"]):
+                raise SystemExit("add and commit the band thresholds first (--add-levels)")
+            evaluate_levels(args, served, sha)
+            return
+        for c in served["cells"]:
+            c["taus"] = next(
+                x["taus"]
+                for x in cells
+                if (x["stratum"], x["horizon_h"]) == (c["stratum"], c["horizon_h"])
+            )
+        served["bands"] = list(BANDS)
+        out_params.write_text(json.dumps(served, indent=1, default=str) + "\n")
+        print(f"band thresholds {BANDS} added to {out_params} (90% unchanged; verdict kept)")
+        return
     if args.dry_run:
         evaluate(args, params, sha, dry=True)
         return
@@ -549,6 +594,152 @@ def report(d: Path, test_id, params, rows, verdict, n_failed, sha, informed, dry
         f"**{'adopted' if verdict['adopted'] else 'not adopted'}**.",
     ]
     (d / "report.md").write_text("\n".join(lines) + "\n")
+
+
+def evaluate_levels(args, params: dict, sha: str) -> None:
+    """One look at the test run for the nested bands (50/80/90%): coverage and area per cell
+    and level. Reported as pre-registered; no model or level is chosen from it."""
+    runs = RunStore()
+    dry = bool(args.dry_run)
+    entries = [] if dry else read_ledger(args.dataset_id)
+    test_id = args.dry_run if dry else params["verdict"]["test_run_id"]
+    again = [
+        e
+        for e in entries
+        if e["run_id"] == test_id
+        and e.get("kind", "") in ("hexsets_h1_levels_started", "hexsets_h1_levels")
+    ]
+    if again and not args.rerun_reason:
+        raise SystemExit(f"{test_id} bands were already checked; pass --rerun-reason")
+    informed = [
+        f"{e['kind']}@{e['accessed_at']}"
+        for e in entries
+        if e["run_id"] == test_id
+        and e.get("kind")
+        and not e["kind"].startswith("hexsets_h1_levels")
+    ]
+    test = runs.load(test_id)
+    if dry and test.sampler.get("split") == "test":
+        raise SystemExit("--dry-run never touches a test-split run")
+    hashed = {
+        "design_sha256": params["design_sha256"],
+        "levels": [*BANDS, LEVEL],
+        "calibration_set_id": params["calibration_set_id"],
+    }
+    if not dry:
+        record_analysis(
+            args.dataset_id,
+            test_id,
+            "hexsets_h1_levels_started",
+            hashed,
+            sha,
+            "(started)",
+            informed_by=informed,
+            rerun_reason=args.rerun_reason,
+        )
+    rows = underway_v2(runs.table(test_id, "records"), runs.table(test_id, "cutoffs"))
+    cutoffs = runs.table(test_id, "cutoffs").filter(
+        pl.col("cutoff_id").is_in(rows["cutoff_id"].unique().implode())
+    )
+    print(f"bands on {test_id}: retrieval v2 on {cutoffs.height} underway cutoffs ...")
+    cand, failed, _ = rerun_candidates(test, params["design"]["k"], cutoffs)
+    out = []
+    for f in params["cells"]:
+        st, hz, res = f["stratum"], f["horizon_h"], f["res"]
+        area = hx.cell_area_km2(res)
+        taus = {float(k): v for k, v in f["taus"].items()}
+        g = rows.filter(STRATA[st] & (pl.col("horizon_h") == hz)).to_dicts()
+        for r in g:
+            fr, mix = mixture(r, cand.get(r["cutoff_id"]), f)
+            every, dens = hx.level_set_with_density(mix, fr, min(taus.values()), res)
+            truth = hx.cell_of(r["truth_lat"], r["truth_lon"], res)
+            td = dict(zip(every, dens, strict=True)).get(truth, 0.0)
+            for lv, t in taus.items():
+                out.append(
+                    {
+                        "stratum": st,
+                        "horizon_h": hz,
+                        "level": lv,
+                        "vessel_id": r["vessel_id"],
+                        "covered": bool(td >= t),
+                        "area_km2": int((dens >= t).sum()) * area,
+                    }
+                )
+        print(f"  {st} {hz:g} h: {len(g)} samples")
+    df = pl.DataFrame(out)
+    summary = []
+    for (st, hz, lv), g in df.group_by("stratum", "horizon_h", "level", maintain_order=True):
+        n, k = g.height, int(g["covered"].sum())
+        tol = n >= TOLERANCE_MIN_N and abs(k - lv * n) <= TOLERANCE * n + EPS_TOL
+        summary.append(
+            {
+                "stratum": st,
+                "horizon_h": hz,
+                "level": lv,
+                "n": n,
+                "coverage": k / n,
+                "ci": _boot(g, "covered", None),
+                "area_mean": float(g["area_km2"].mean()),
+                "within": tol,
+            }
+        )
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    d = RUNS_DIR / "hexsets" / test_id / (f"levels_dryrun_{stamp}" if dry else f"levels_{stamp}")
+    d.mkdir(parents=True)
+    df.write_parquet(d / "samples.parquet")
+    lines = [
+        f"# H1 nested bands on {'a DRY RUN (not a result)' if dry else 'the held-out test run'} "
+        f"{test_id}",
+        "",
+        f"Served params (calibration `{params['calibration_set_id']}`), git `{sha[:12]}`. "
+        f"Earlier analyses of this run: {', '.join(informed)}. Tolerance ±{TOLERANCE} on "
+        f"n ≥ {TOLERANCE_MIN_N}.",
+        "",
+        "| stratum | h | level | n | coverage [CI] | mean km² |",
+        "|---|---|---|---|---|---|",
+    ]
+    for r in sorted(summary, key=lambda x: (x["stratum"], x["horizon_h"], x["level"])):
+        lines.append(
+            f"| {r['stratum']} | {r['horizon_h']:g} h | {r['level']:.0%} | {r['n']} | "
+            f"{r['coverage']:.3f} [{r['ci'][0]:.3f}, {r['ci'][1]:.3f}]"
+            f"{'' if r['within'] else ' ✗'} | {r['area_mean']:,.0f} |"
+        )
+    within = {lv: sum(r["within"] for r in summary if r["level"] == lv) for lv in (*BANDS, LEVEL)}
+    lines += [
+        "",
+        "Cells within tolerance by level: "
+        + ", ".join(f"{lv:.0%}: {n}/12" for lv, n in within.items()),
+    ]
+    (d / "report.md").write_text("\n".join(lines) + "\n")
+    (d / "summary.json").write_text(
+        json.dumps(
+            {
+                "test_run_id": test_id,
+                "cells": summary,
+                "within_by_level": within,
+                "informed_by": informed,
+                "retrieval_failures": len(failed),
+                "git_sha": sha,
+                "created_at": stamp,
+            },
+            indent=1,
+            default=str,
+        )
+        + "\n"
+    )
+    if not dry:
+        record_analysis(
+            args.dataset_id,
+            test_id,
+            "hexsets_h1_levels",
+            hashed,
+            sha,
+            str(d),
+            informed_by=informed,
+            rerun_reason=args.rerun_reason,
+        )
+    print((d / "report.md").read_text())
+    print(f"-> {d}")
 
 
 if __name__ == "__main__":

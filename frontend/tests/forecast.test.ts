@@ -79,6 +79,14 @@ describe("forecastToGeo", () => {
     const h = forecastToGeo(r, anchor, 2).hexes.features;
     expect(h).toHaveLength(1);
     expect(h[0]!.properties.area_km2).toBe(72);
+    // with nested bands: one feature per band, outer first, inner darker
+    r.forecasts[0]!.hex_sets![2]!.layers = [
+      { level: 0.5, n_cells: 1, area_km2: 36, boundary: { type: "Polygon", coordinates: [ring] } },
+      { level: 0.9, n_cells: 2, area_km2: 72, boundary: { type: "Polygon", coordinates: [ring] } },
+    ];
+    const b = forecastToGeo(r, anchor, 2).hexes.features;
+    expect(b.map((x) => x.properties.level)).toEqual([0.9, 0.5]);
+    expect(b[1]!.properties.opacity).toBeGreaterThan(b[0]!.properties.opacity);
   });
   it("honours the model toggle", () => {
     expect(forecastToGeo(forecast(), anchor, 0, new Set()).paths.features).toHaveLength(0);

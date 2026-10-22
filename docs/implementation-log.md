@@ -1665,3 +1665,20 @@ README results and roadmap updated (AGENTS.md rule 13).
 - Sets still include land cells; navigable-mask removal is the next Milestone 7 task.
 - Pooled underway coverage drifts to 0.84–0.87 in July, for both sets and discs.
 - No P-unseen hex sets.
+
+## 2026-10-22 — Milestone 7: nested probability bands; their July check PRE-REGISTERED (before any look at them)
+
+**Why:** the goal is where the vessel is *most likely* to be, not just a 90% outline. The H1 density already ranks hexes. The calibrated way to show that is nested bands: the highest-density hexes holding 50%, then 80%, then 90%. Each band is a split-conformal level set with its own threshold, fitted on the same calibration window and density.
+
+**Done:**
+- `hexsets.level_set_with_density` (one enumeration serves every band).
+- `h1_set` returns `layers`; the API serves `HexSet.layers` (level, cells, area, outline).
+- The map draws graded bands (50% darkest).
+- `scripts/hexsets_holdout.py --add-levels` refits on the calibration run only. It refuses unless every 90% threshold is reproduced exactly, so the adopted 90% set does not change. It then adds the 50/80/90 thresholds to the served parameters and keeps the verdict.
+
+**Pre-registered band check (one look; `--levels-check`):**
+1. On the same July run (`…213109Z`), with the served parameters as committed after `--add-levels`: coverage of the 50%, 80% and 90% bands per stratum (underway:ALL, underway:TRANSITING) × horizon (1/2/3/6/12/24 h), with vessel-bootstrap CIs and mean areas.
+2. A band counts as calibrated in a cell if |coverage − level| ≤ 0.03 with n ≥ 200, tested in counts.
+3. Reported as is; nothing is chosen from it: no other levels, bandwidth or design.
+4. The ledger gets `hexsets_h1_levels_started` then `hexsets_h1_levels`. `informed_by` lists every earlier analysis of the run, including the H1 look: the 90% band's July coverage is already known.
+5. A dry run on the dev run comes first (`--levels-check --dry-run`): no ledger entry.

@@ -1893,6 +1893,42 @@
         "title": "Health",
         "type": "object"
       },
+      "HexLayer": {
+        "description": "One nested band of a hex set: the highest-density cells holding `level` of the\nprobability (split-conformal threshold at that level, same calibration window).",
+        "properties": {
+          "area_km2": {
+            "title": "Area Km2",
+            "type": "number"
+          },
+          "boundary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Boundary"
+          },
+          "level": {
+            "title": "Level",
+            "type": "number"
+          },
+          "n_cells": {
+            "title": "N Cells",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "level",
+          "n_cells",
+          "area_km2"
+        ],
+        "title": "HexLayer",
+        "type": "object"
+      },
       "HexSet": {
         "description": "A calibrated hex prediction set at one target time (build plan v0.4 \u00a75 H): the H3 cells\nholding the true position with the nominal probability. Split-conformal on the calibration\nwindow: a MARGINAL coverage claim over the calibration population (underway vessels in the\ncutoff region, per stratum and horizon), not a per-forecast probability.",
         "properties": {
@@ -1948,6 +1984,14 @@
             "default": "h1_hex_set",
             "title": "Kind",
             "type": "string"
+          },
+          "layers": {
+            "description": "Nested bands (e.g. 50% inside 80% inside 90%): where the vessel is most likely to be. Empty when only the main level is fitted",
+            "items": {
+              "$ref": "#/components/schemas/HexLayer"
+            },
+            "title": "Layers",
+            "type": "array"
           },
           "n_candidates": {
             "description": "Retrieved continuations behind the density",
