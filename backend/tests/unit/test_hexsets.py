@@ -155,10 +155,11 @@ def test_h1_set_layers_are_nested_and_the_main_set_unchanged():
             "n_vessels": 120, "eps": 0.05, "min_bandwidth_m": 500.0}  # fmt: skip
     la, lo = FRAME.to_latlon(np.array([0.0, 8000.0, 30000.0]), np.array([0.0, 0.0, 5000.0]))
     w = np.array([3.0, 2.0, 1.0])
-    plain = hx.h1_set({**base, "tau": 2e-10}, LAT0, LON0, la, lo, w)
-    layered = hx.h1_set({**base, "tau": 2e-10, "taus": {"0.5": 2e-9, "0.8": 8e-10, "0.9": 2e-10}},
+    plain = hx.h1_set({**base, "tau": 2e-9}, LAT0, LON0, la, lo, w)
+    layered = hx.h1_set({**base, "tau": 2e-9, "taus": {"0.9": 2e-9, "0.95": 8e-10, "0.98": 2e-10}},
                         LAT0, LON0, la, lo, w)  # fmt: skip
     assert layered["cells"] == plain["cells"] and plain["layers"] == []
     sizes = [x["n_cells"] for x in layered["layers"]]
-    assert [x["level"] for x in layered["layers"]] == [0.5, 0.8, 0.9]
-    assert sizes == sorted(sizes) and sizes[-1] == len(plain["cells"]) and sizes[0] > 0
+    assert [x["level"] for x in layered["layers"]] == [0.9, 0.95, 0.98]
+    # the main set is the 90% band (innermost); the 95% and 98% bands contain it
+    assert sizes == sorted(sizes) and sizes[0] == len(plain["cells"]) > 0 and sizes[-1] > sizes[0]

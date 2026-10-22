@@ -44,7 +44,9 @@ PARAMS_DIR = DATA_DIR / "model_params" / "hexsets"
 STRATA = {"underway:ALL": pl.lit(True), "underway:TRANSITING": pl.col("transiting")}
 TOLERANCE, TOLERANCE_MIN_N = 0.03, 200  # pre-registered (implementation log, 2026-10-22)
 LEVEL = 0.9  # pre-registered: 90% nominal, no level correction (not a command-line option)
-BANDS = (0.5, 0.8)  # nested inner bands (pre-registered 2026-10-22, before their July check)
+BANDS = (0.95, 0.98)  # nested outer bands around the 90% set (pre-registered 2026-10-22,
+# revised from 50/80 at the user's request before any band was checked)
+BAND_TOLERANCE = {0.9: 0.03, 0.95: 0.02, 0.98: 0.01}  # pre-registered with the bands
 EPS_TOL = 1e-9  # coverage exactly at 0.87 or 0.93 counts as within (decided before the look)
 N_BOOT = 500
 
@@ -670,7 +672,7 @@ def evaluate_levels(args, params: dict, sha: str) -> None:
     summary = []
     for (st, hz, lv), g in df.group_by("stratum", "horizon_h", "level", maintain_order=True):
         n, k = g.height, int(g["covered"].sum())
-        tol = n >= TOLERANCE_MIN_N and abs(k - lv * n) <= TOLERANCE * n + EPS_TOL
+        tol = n >= TOLERANCE_MIN_N and abs(k - lv * n) <= BAND_TOLERANCE[lv] * n + EPS_TOL
         summary.append(
             {
                 "stratum": st,
@@ -692,7 +694,7 @@ def evaluate_levels(args, params: dict, sha: str) -> None:
         f"{test_id}",
         "",
         f"Served params (calibration `{params['calibration_set_id']}`), git `{sha[:12]}`. "
-        f"Earlier analyses of this run: {', '.join(informed)}. Tolerance ±{TOLERANCE} on "
+        f"Earlier analyses of this run: {', '.join(informed)}. Tolerance {BAND_TOLERANCE} on "
         f"n ≥ {TOLERANCE_MIN_N}.",
         "",
         "| stratum | h | level | n | coverage [CI] | mean km² |",

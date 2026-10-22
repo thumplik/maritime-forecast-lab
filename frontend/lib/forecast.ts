@@ -135,9 +135,9 @@ export interface HexProps extends PathProps {
   opacity: number;
 }
 
-/** Fill opacity per nested level: 50% core darkest, 90% outer band lightest. */
+/** Fill opacity per nested level: the 90% core darkest, then 95%, the 98% outer band lightest. */
 export function bandOpacity(level: number): number {
-  return level <= 0.5 ? 0.5 : level <= 0.8 ? 0.3 : 0.14;
+  return level <= 0.9 ? 0.38 : level <= 0.95 ? 0.2 : 0.09;
 }
 
 export interface ForecastGeo {

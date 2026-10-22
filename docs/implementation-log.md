@@ -1682,3 +1682,9 @@ README results and roadmap updated (AGENTS.md rule 13).
 3. Reported as is; nothing is chosen from it: no other levels, bandwidth or design.
 4. The ledger gets `hexsets_h1_levels_started` then `hexsets_h1_levels`. `informed_by` lists every earlier analysis of the run, including the H1 look: the 90% band's July coverage is already known.
 5. A dry run on the dev run comes first (`--levels-check --dry-run`): no ledger entry.
+
+**Revision before any band was checked (the user's request): the bands are 90%, 95% and 98%, not 50/80/90.**
+- The adopted 90% set is the innermost band; 95% and 98% are wider rings around it.
+- Pre-registered tolerance per level, tested in counts with n ≥ 200: ±0.03 at 90%, ±0.02 at 95%, ±0.01 at 98% (a ±0.03 band means little at 98%).
+- The 50/80 thresholds that `--add-levels` had written were discarded uncommitted. No band coverage has been computed on any test data.
+- Everything else in the registration above is unchanged.

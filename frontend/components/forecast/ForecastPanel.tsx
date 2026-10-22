@@ -234,7 +234,7 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay, link 
                         : "no radii"}
                       {(f.trajectories?.length ?? 0) > 0 && ` · ${f.trajectories!.length} candidate routes (similarity, not probability)`}
                       {f.hex_sets?.[s]?.layers?.length
-                        ? ` · most likely: ${f.hex_sets[s]!.layers!.map((l) => `${Math.round(l.level * 100)}% in ${Math.round(l.area_km2).toLocaleString()} km²`).join(", ")}`
+                        ? ` · bands: ${f.hex_sets[s]!.layers!.map((l) => `${Math.round(l.level * 100)}% in ${Math.round(l.area_km2).toLocaleString()} km²`).join(", ")}`
                         : ""}
                       {f.hex_sets?.[s] &&
                         ` · ${Math.round(f.hex_sets[s]!.nominal_level * 100)}% hex set: ${f.hex_sets[s]!.cells.length} cells, ${Math.round(f.hex_sets[s]!.area_km2).toLocaleString()} km² (${f.hex_sets[s]!.stratum}, n=${f.hex_sets[s]!.calibration_n}; ${f.hex_sets[s]!.adoption === "adopted" ? "adopted" : f.hex_sets[s]!.adoption === "pending" ? "not yet tested on the hold-out" : "experimental: not adopted"})`}
@@ -323,7 +323,7 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay, link 
               <i className="ring" /> conformal radius at the target time
             </span>
             <span>
-              <i className="hex" /> hex bands at the target time: darkest = the 50% most likely hexes, then 80%, then 90% (calibrated)
+              <i className="hex" /> hex bands at the target time: darkest = 90% of ships end up here, then 95%, then 98% (calibrated)
             </span>
             <span>
               <i style={{ background: TRUTH_COLOR }} /> withheld truth (after reveal)
