@@ -1,0 +1,91 @@
+"""Hex prediction sets (evaluation/hexsets.py) on SYNTHETIC inputs."""
+
+import math
+
+import numpy as np
+import pytest
+
+from maritime_forecast.evaluation import hexsets as hx
+from maritime_forecast.geo.geodesic import LocalFrame
+
+LAT0, LON0 = 29.0, -94.0
+FRAME = LocalFrame(LAT0, LON0)
+
+
+def _mix(xy, w=None, h=2000.0, broad=20000.0, eps=0.05, centre=(0.0, 0.0)):
+    xy = np.asarray(xy, float)
+    return hx.Mixture(xy, np.ones(len(xy)) if w is None else np.asarray(w, float), h, centre,
+                      broad, eps)  # fmt: skip
+
+
+def test_mixture_is_a_density():
+    m = _mix([[0, 0], [30000, 0]], w=[1, 3])
+    g = np.linspace(-150000, 180000, 661)
+    gx, gy = np.meshgrid(g, g)
+    total = m.density(gx, gy).sum() * (g[1] - g[0]) ** 2
+    assert total == pytest.approx(1.0, abs=1e-3)
+
+
+def test_level_set_matches_brute_force_and_is_multimodal():
+    m = _mix([[-25000, 0], [25000, 0]], h=3000.0, broad=40000.0, eps=0.02)
+    res = 7
+    tau = float(m.density(np.array([-25000.0 + 4000]), np.array([0.0]))[0])
+    got = set(hx.level_set_cells(m, FRAME, tau, res))
+    brute = hx._disk(LAT0, LON0, 120000, res)
+    la, lo = hx.cell_centres(brute)
+    x, y = FRAME.to_xy(la, lo)
+    want = {c for c, d in zip(brute, m.density(x, y), strict=True) if d >= tau}
+    assert got == want and got
+    assert hx.cell_of(LAT0, LON0, res) not in got  # the gap between the two branches
+    xs = FRAME.to_xy(*hx.cell_centres(sorted(got)))[0]
+    assert (xs < -15000).any() and (xs > 15000).any()  # both branches
+
+
+def test_broad_component_alone_when_there_are_no_candidates():
+    m = _mix(np.zeros((0, 2)), broad=10000.0)
+    assert m.broad_peak() == pytest.approx(1 / (2 * math.pi * 1e8))
+    cells = hx.level_set_cells(m, FRAME, m.broad_peak() * math.exp(-0.5), 7)  # r = 1 sigma
+    area = len(cells) * hx.cell_area_km2(7)
+    assert area == pytest.approx(math.pi * 10**2, rel=0.15)
+
+
+def test_conformal_density_threshold_covers_at_the_nominal_level():
+    rng = np.random.default_rng(0)
+    m = _mix([[0, 0], [20000, 5000]], w=[2, 1], h=4000.0, broad=30000.0, eps=0.05)
+
+    def draw(n):  # samples from the mixture itself
+        comp = rng.choice(3, n, p=[0.95 * 2 / 3, 0.95 / 3, 0.05])
+        mu = np.array([[0, 0], [20000, 5000], [0, 0]])[comp]
+        sd = np.array([4000.0, 4000.0, 30000.0])[comp][:, None]
+        return mu + sd * rng.standard_normal((n, 2))
+
+    cal, test = draw(2000), draw(4000)
+    tau = hx.density_threshold(m.density(cal[:, 0], cal[:, 1]), 0.9)
+    cover = (m.density(test[:, 0], test[:, 1]) >= tau).mean()
+    assert 0.88 <= cover <= 0.92
+    assert hx.density_threshold(np.array([1.0, 2.0]), 0.9) is None  # n too small
+
+
+def test_disc_cells_and_scores():
+    cells = hx.disc_cells(LAT0, LON0, 10000.0, 7)
+    assert len(cells) * hx.cell_area_km2(7) == pytest.approx(math.pi * 100, rel=0.1)
+    import h3
+
+    # a point's own cell centre is within one edge length of it
+    assert hx.disc_score(FRAME, LAT0, LON0, 7) < h3.average_hexagon_edge_length(7, "m")
+    assert hx.cell_of(LAT0, LON0, 7) in cells
+    assert hx.resolution_for(3) == 7 and hx.resolution_for(6) == 6
+
+
+@pytest.mark.parametrize("tau_scale", [0.3, 1.0, 3.0, 30.0])
+def test_level_set_is_exact_across_thresholds(tau_scale):
+    """Brute force over a wide disk equals the bounded enumeration, whether the broad part,
+    the kernels or both decide the set."""
+    rng = np.random.default_rng(3)
+    m = _mix(rng.normal(0, 15000, (30, 2)), w=rng.random(30), h=2500.0, broad=25000.0, eps=0.05)
+    tau = tau_scale * m.broad_peak()
+    got = set(hx.level_set_cells(m, FRAME, tau, 6))
+    brute = hx._disk(LAT0, LON0, 250000, 6)
+    la, lo = hx.cell_centres(brute)
+    x, y = FRAME.to_xy(la, lo)
+    assert got == {c for c, d in zip(brute, m.density(x, y), strict=True) if d >= tau}
