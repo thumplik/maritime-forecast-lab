@@ -87,6 +87,18 @@ def test_get_finalized_run_and_summary(env):
     assert all(c["headline"] for c in head["cells"])
 
 
+def test_list_runs(env):
+    client, store, runs, cfg = env
+    assert client.get("/benchmarks").json() == {"runs": []}
+    run_benchmark(cfg, store, runs, run_id="syn-run")
+    runs.create("half")
+    got = {r["run_id"]: r for r in client.get("/benchmarks").json()["runs"]}
+    assert got["half"]["status"] == "incomplete"
+    r = got["syn-run"]
+    assert r["status"] == "succeeded" and r["protocol"] == "P-known" and r["dataset_id"] == "syn"
+    assert set(r["model_ids"]) == set(cfg.model_ids) and r["horizons_minutes"] == [15.0, 30.0]
+
+
 def test_tampered_run_is_refused(env):
     client, store, runs, cfg = env
     run_benchmark(cfg, store, runs, run_id="t")

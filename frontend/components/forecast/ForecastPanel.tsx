@@ -124,7 +124,6 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay }: Pro
     }
   }
 
-  const ids = current?.forecasts.map((f) => f.model_id) ?? [];
   const cov = current?.input_coverage;
   const times = current?.forecasts[0]?.target_times ?? [];
   const cols = current ? tableSteps(current.as_of, times) : [];
@@ -202,7 +201,7 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay }: Pro
                         })
                       }
                     />
-                    <i className="swatch" style={{ borderColor: modelColor(ids, f.model_id) }} />
+                    <i className="swatch" style={{ borderColor: modelColor(f.model_id) }} />
                     <span className="mono small">{f.model_id}</span>
                   </label>
                   {f.status !== "ok" ? (
@@ -255,7 +254,7 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay }: Pro
                   {truth.models.map((m) => (
                     <tr key={m.model_id}>
                       <td className="mono">
-                        <i className="swatch" style={{ borderColor: modelColor(ids, m.model_id) }} />
+                        <i className="swatch" style={{ borderColor: modelColor(m.model_id) }} />
                         {m.model_id.replace(/_v\d+$/, "")}
                       </td>
                       {cols.map((i) => (
@@ -292,10 +291,10 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay }: Pro
           </p>
           <div className="legend small">
             <span>
-              <i className="dashed" style={{ borderColor: "#7c3aed" }} /> predicted path (colour per model)
+              <i className="dashed" style={{ borderColor: "#6b7280" }} /> predicted path (colour per model)
             </span>
             <span>
-              <i style={{ background: "#7c3aed", opacity: 0.3, height: 1 }} /> retrieved candidate (similarity)
+              <i style={{ background: "#6b7280", opacity: 0.4, height: 1 }} /> retrieved candidate (similarity)
             </span>
             <span>
               <i className="ring" /> conformal radius at the target time

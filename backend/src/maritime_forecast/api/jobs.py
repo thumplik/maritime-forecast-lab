@@ -13,13 +13,15 @@ under uvicorn that is safe; an ad-hoc script driving the app must use `if __name
 
 from __future__ import annotations
 
+import json
 import multiprocessing as mp
 import threading
+from datetime import UTC, datetime
 from multiprocessing.process import BaseProcess
 from pathlib import Path
 
 from maritime_forecast.api.errors import ApiError
-from maritime_forecast.api.models import BenchmarkStatus
+from maritime_forecast.api.models import BenchmarkListItem, BenchmarkStatus
 from maritime_forecast.evaluation.runner import BenchmarkConfig, run_benchmark
 from maritime_forecast.storage.parquet_store import ParquetStore
 from maritime_forecast.storage.run_store import RunStore, RunTamperedError
@@ -85,3 +87,38 @@ class BenchmarkJobs:
                 message=f"the run process exited (code {p.exitcode}) before creating the run",
             )  # fmt: skip
         raise ApiError(404, "run_not_found", f"no benchmark run {run_id!r}")
+
+    def list(self) -> list[BenchmarkListItem]:
+        """Every run directory, newest first: finalized headers plus running/incomplete ones."""
+        out = []
+        root = self.runs.root
+        for d in root.iterdir() if root.exists() else []:
+            if not d.is_dir():
+                continue
+            f = d / "run.json"
+            if not f.exists():
+                p = self._procs.get(d.name)
+                alive = p is not None and p.is_alive()
+                out.append(
+                    BenchmarkListItem(run_id=d.name, status="running" if alive else "incomplete")
+                )
+                continue
+            r = json.loads(f.read_text())
+            sampler = r.get("sampler") or {}
+            out.append(
+                BenchmarkListItem(
+                    run_id=r["run_id"],
+                    status=r["status"],
+                    created_at=r.get("created_at"),
+                    dataset_id=r.get("dataset_id"),
+                    protocol=(r.get("protocol") or {}).get("protocol"),
+                    split=sampler.get("split"),
+                    operational=r.get("operational"),
+                    model_ids=[m["model_id"] for m in r.get("models", [])],
+                    horizons_minutes=r.get("horizons_minutes", []),
+                    n_cutoffs=sampler.get("n_cutoffs"),
+                    git_sha=r.get("git_sha"),
+                )
+            )
+        far = datetime.min.replace(tzinfo=UTC)
+        return sorted(out, key=lambda x: (x.created_at or far, x.run_id), reverse=True)

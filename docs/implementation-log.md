@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 5 — Workbench UI** (in progress: slice 1, forecast comparison, done 2026-10-22). Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 5 — Workbench UI** (in progress: slices 1–2, forecast comparison and benchmark dashboard, done 2026-10-22). Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -1195,3 +1195,40 @@ cd frontend && npm run typecheck && npm test && npm run build   # 18 passed; bui
 - The explorer fetches the whole day's track to the browser and clips it client-side. Post-cutoff reports are not drawn, but they are in the browser's memory. That is the same data `GET /track` already serves.
 
 **Next step:** slice 2, the benchmark dashboard (Screen C): model × horizon table with CIs, along/cross, error versus lead time, strata, evaluable/`not_evaluable` counts, reproducibility metadata. Then the failure gallery: open a benchmark sample on the map by run id. Then the Playwright smoke test.
+
+## 2026-10-22 — Milestone 5 slice 2: benchmark dashboard (Screen C)
+
+**Milestone:** 5 — workbench UI
+**Done** (slice 1 committed as `c125662`; slice 2 uncommitted):
+- **`GET /benchmarks`:** every run directory, newest first. It returns header fields from `run.json` (protocol, dataset, sampler split, operational, models, horizons, cutoffs, git SHA) plus running/incomplete directories. Checksums are verified only by `GET /benchmarks/{run_id}`, which the dashboard reads for the full record. Unit test added; types regenerated.
+- **`/benchmarks` page:** run list with split badges. The run and stratum are in the URL (`?run=&stratum=`), so a view can be reproduced from its run id. Every number comes from the immutable record:
+  - **Paired model × horizon table:** median km with the 95% vessel-bootstrap CI. A second line gives skill against the best baseline, with its paired CI, coloured by whether the CI excludes 0. The lowest median is bold. The best-baseline column is marked. Column headers show paired samples / vessels. Non-headline cells get an asterisk. Hovering a cell shows p90 and failures. Dropped cells are listed.
+  - **Error versus lead time:** log–log, CI bands, crosshair tooltip.
+  - **Along/cross-track medians**, with n decomposed.
+  - **Run-level `not_evaluable` reasons** by horizon.
+  - **Reproducibility block:** git, manifest version and hash, sampler seed / n_boot / history / step / region / bracket, `informed_by`, model versions with their configs, and the `make benchmark` command.
+  - Dev and calibration runs carry a "not a held-out result" note.
+- **Model colours** are now fixed per model, so a model keeps its colour whatever else is selected. They come from the dataviz reference categorical order with blue and green left out, because those mean the observed track and truth on the map. Validated: lightness, chroma, adjacent CVD ΔE ≥ 9.1 and normal-vision ΔE ≥ 19.6 all pass. The contrast warning for the lighter hues is covered by legends, direct table labels and the table views.
+- Explorer/Benchmarks nav. Pure shaping in `lib/benchmark.ts`, with Vitest tests on a synthetic run.
+
+**Commands run:**
+```bash
+make gen-api; make lint; make test           # 295 passed
+cd frontend && npm run typecheck && npm test && npm run build   # 24 passed
+node <dataviz>/scripts/validate_palette.js "#eb6834,#1baf7a,#eda100,#e87ba4,#6250d6,#e34948" --mode light
+```
+
+**Checked in the browser** against `docs/benchmarks.md` for the July P-known hold-out run `…_20261021T213109Z`. The dashboard reproduces the ledger:
+- transiting v2 1.71 / 5.97 / 13.4 / 20.2 / 25.4 km at 1/3/6/12/24 h;
+- transiting skill +60% [57, 63] at 1 h;
+- underway skill +53% [50, 56] at 1 h;
+- v1 = v2 on underway cells.
+
+`GET /benchmarks` takes about 0.1 s for 27 runs. The full record takes about 0.26 s (0.8 MB, checksums verified).
+
+**Known gaps:**
+- Which runs are kept or superseded is recorded only in `docs/benchmarks.md`. The list shows every run and points there.
+- Feasibility rates are not on the dashboard yet.
+- No per-sample view yet.
+
+**Next step:** slice 3, the failure gallery. List the worst paired samples of a run (per stratum and horizon) from `records.parquet` and open one on the map at its cutoff, with the same forecast and truth overlay. The July test samples need a design decision: the evaluation endpoint refuses July truth, but those truths are already scored in the immutable run. Then the Playwright smoke test and `/milestone-check`.

@@ -6,7 +6,7 @@ import math
 from datetime import date, datetime
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 from maritime_forecast.schemas.benchmark import (
     BenchmarkRun,
@@ -191,6 +191,27 @@ class BenchmarkStatus(BaseModel):
     run: BenchmarkRun | None = Field(
         None, description="The immutable run record, once finalized (checksums verified)"
     )
+
+
+class BenchmarkListItem(BaseModel):
+    """A run's header, read from its run.json for listing. Checksums are not verified here;
+    `GET /benchmarks/{run_id}` verifies them before returning the record."""
+
+    run_id: str
+    status: Literal["running", "incomplete", "queued", "succeeded", "failed"]
+    created_at: AwareDatetime | None = None
+    dataset_id: str | None = None
+    protocol: str | None = None
+    split: str | None = Field(None, description="Sampler split: test, dev, calibration, ...")
+    operational: bool | None = None
+    model_ids: list[str] = Field(default_factory=list)
+    horizons_minutes: list[float] = Field(default_factory=list)
+    n_cutoffs: int | None = None
+    git_sha: str | None = None
+
+
+class BenchmarkList(BaseModel):
+    runs: list[BenchmarkListItem] = Field(description="Newest first")
 
 
 class SummaryModelCell(BaseModel):

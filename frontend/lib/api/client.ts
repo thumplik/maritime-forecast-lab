@@ -20,6 +20,8 @@ export type BenchmarkRequest = S["BenchmarkRequest"];
 export type BenchmarkStatus = S["BenchmarkStatus"];
 export type BenchmarkSummary = S["BenchmarkSummary"];
 export type BenchmarkRun = S["BenchmarkRun"];
+export type BenchmarkList = S["BenchmarkList"];
+export type BenchmarkListItem = S["BenchmarkListItem"];
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -73,5 +75,8 @@ export const api = {
   models: (datasetId: string, signal?: AbortSignal) => get<ModelList>("/models", { dataset_id: datasetId }, signal),
   forecast: (req: ForecastRequest, signal?: AbortSignal) => post<ForecastResponse>("/forecasts", req, signal),
   /** Withheld truth for the forecast the same request produces (403 holdout_test_period on test). */
+  benchmarks: (signal?: AbortSignal) => get<BenchmarkList>("/benchmarks", {}, signal),
+  /** The full immutable run record (checksums verified by the API). */
+  benchmark: (runId: string, signal?: AbortSignal) => get<BenchmarkStatus>(`/benchmarks/${encodeURIComponent(runId)}`, {}, signal),
   evaluate: (req: ForecastRequest, signal?: AbortSignal) => post<ForecastEvaluation>("/forecasts/evaluation", req, signal),
 };

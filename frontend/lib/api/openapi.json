@@ -37,6 +37,142 @@
         "title": "Admission",
         "type": "object"
       },
+      "BenchmarkList": {
+        "properties": {
+          "runs": {
+            "description": "Newest first",
+            "items": {
+              "$ref": "#/components/schemas/BenchmarkListItem"
+            },
+            "title": "Runs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "runs"
+        ],
+        "title": "BenchmarkList",
+        "type": "object"
+      },
+      "BenchmarkListItem": {
+        "description": "A run's header, read from its run.json for listing. Checksums are not verified here;\n`GET /benchmarks/{run_id}` verifies them before returning the record.",
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "dataset_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dataset Id"
+          },
+          "git_sha": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Sha"
+          },
+          "horizons_minutes": {
+            "items": {
+              "type": "number"
+            },
+            "title": "Horizons Minutes",
+            "type": "array"
+          },
+          "model_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Model Ids",
+            "type": "array"
+          },
+          "n_cutoffs": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "N Cutoffs"
+          },
+          "operational": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Operational"
+          },
+          "protocol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Protocol"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "split": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sampler split: test, dev, calibration, ...",
+            "title": "Split"
+          },
+          "status": {
+            "enum": [
+              "running",
+              "incomplete",
+              "queued",
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "status"
+        ],
+        "title": "BenchmarkListItem",
+        "type": "object"
+      },
       "BenchmarkRequest": {
         "additionalProperties": false,
         "description": "A paired benchmark (build plan \u00a76) run by the API in a local background process.",
@@ -2600,6 +2736,26 @@
   "openapi": "3.1.0",
   "paths": {
     "/benchmarks": {
+      "get": {
+        "description": "Every benchmark run, newest first (headers only; open one to verify and read it).",
+        "operationId": "benchmarks_benchmarks_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkList"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Benchmarks",
+        "tags": [
+          "benchmarks"
+        ]
+      },
       "post": {
         "description": "Start an unattended paired benchmark in a background process; poll its status.",
         "operationId": "start_benchmark_benchmarks_post",

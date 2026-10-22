@@ -29,6 +29,7 @@ from maritime_forecast.api.errors import ApiError, dataset_not_found, invalid
 from maritime_forecast.api.jobs import BenchmarkJobs
 from maritime_forecast.api.models import (
     Admission,
+    BenchmarkList,
     BenchmarkRequest,
     BenchmarkStatus,
     BenchmarkSummary,
@@ -642,6 +643,11 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         return BenchmarkStatus(run_id=run_id, status="running")
 
     RunIdP = Annotated[str, PathParam(pattern=RUN_ID_PATTERN)]
+
+    @app.get("/benchmarks", response_model=BenchmarkList, tags=["benchmarks"])
+    def benchmarks(ctx: CtxDep) -> BenchmarkList:
+        """Every benchmark run, newest first (headers only; open one to verify and read it)."""
+        return BenchmarkList(runs=ctx.jobs.list())
 
     @app.get(
         "/benchmarks/{run_id}", response_model=BenchmarkStatus, responses=R, tags=["benchmarks"]

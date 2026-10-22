@@ -5,6 +5,7 @@
 // forecast comparison (Milestone 5, Screen B).
 import { useCallback, useEffect, useMemo, useState } from "react";
 import ForecastPanel from "@/components/forecast/ForecastPanel";
+import Nav from "@/components/Nav";
 import TrackMap, { COLORS } from "@/components/map/TrackMap";
 import { clipTrack, type ForecastGeo, type TruthGeo } from "@/lib/forecast";
 import { api, ApiError, type DatasetSummary, type Track, type VesselPage } from "@/lib/api/client";
@@ -116,6 +117,7 @@ export default function Explorer() {
   return (
     <main className="layout">
       <aside className="panel">
+        <Nav />
         <h1>Maritime Forecast Lab</h1>
         <p className="muted">Historical AIS forecast workbench</p>
 

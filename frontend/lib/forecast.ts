@@ -23,12 +23,22 @@ export interface Anchor {
   lon: number;
 }
 
-/** Fixed per-model colours, so a model keeps its colour across forecasts. */
-const PALETTE = ["#7c3aed", "#db2777", "#0891b2", "#ea580c", "#4d7c0f", "#a16207", "#475569"];
+/** One fixed colour per model, so a model keeps its colour whatever else is selected
+ * (colour follows the entity, never its rank). Hues from the validated reference categorical
+ * order with blue and green left out: those mean "observed track" and "truth" on the map.
+ * A model not listed here is drawn grey and still labelled; it never gets a generated hue. */
+const MODEL_COLORS: Record<string, string> = {
+  constant_turn_rate_v1: "#eb6834",
+  constant_velocity_v1: "#1baf7a",
+  damped_velocity_v1: "#eda100",
+  persistence_v1: "#e87ba4",
+  route_retrieval_v1: "#6250d6",
+  route_retrieval_v2: "#e34948",
+};
+export const OTHER_MODEL_COLOR = "#6b7280";
 export const TRUTH_COLOR = "#065f46";
-export function modelColor(modelIds: string[], modelId: string): string {
-  const i = [...modelIds].sort().indexOf(modelId);
-  return PALETTE[(i < 0 ? 0 : i) % PALETTE.length]!;
+export function modelColor(modelId: string): string {
+  return MODEL_COLORS[modelId] ?? OTHER_MODEL_COLOR;
 }
 
 /** The track as it was known at as_of: reports after the cutoff are removed, not hidden. */
@@ -129,7 +139,6 @@ export interface ForecastGeo {
 
 /** Map layers for a forecast; `step` indexes the shared target-time grid. */
 export function forecastToGeo(resp: ForecastResponse, anchor: Anchor | null, step: number, shown?: Set<string>): ForecastGeo {
-  const ids = resp.forecasts.map((f) => f.model_id);
   const geo: ForecastGeo = {
     paths: { type: "FeatureCollection", features: [] },
     steps: { type: "FeatureCollection", features: [] },
@@ -145,7 +154,7 @@ export function forecastToGeo(resp: ForecastResponse, anchor: Anchor | null, ste
 
   for (const f of resp.forecasts) {
     if (f.status !== "ok" || (shown && !shown.has(f.model_id))) continue;
-    const color = modelColor(ids, f.model_id);
+    const color = modelColor(f.model_id);
     const coords = f.points.map((p) => pos(p.latitude_deg, p.longitude_deg));
     all.push(...coords);
     geo.paths.features.push({
@@ -224,7 +233,6 @@ export function truthToGeo(ev: ForecastEvaluation, resp: ForecastResponse, ancho
 
   const truth = ev.truth[step];
   if (truth) {
-    const ids = resp.forecasts.map((f) => f.model_id);
     for (const f of resp.forecasts) {
       const p = f.points[step];
       const s = ev.models.find((m) => m.model_id === f.model_id)?.scores[step];
@@ -232,7 +240,7 @@ export function truthToGeo(ev: ForecastEvaluation, resp: ForecastResponse, ancho
       geo.errors.features.push({
         type: "Feature",
         geometry: { type: "LineString", coordinates: [pos(p.latitude_deg, p.longitude_deg), pos(truth.latitude_deg, truth.longitude_deg)] },
-        properties: { model_id: f.model_id, color: modelColor(ids, f.model_id), error_m: s.error_m },
+        properties: { model_id: f.model_id, color: modelColor(f.model_id), error_m: s.error_m },
       });
     }
   }

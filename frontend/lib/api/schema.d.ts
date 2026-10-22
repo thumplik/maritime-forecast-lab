@@ -11,7 +11,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Benchmarks
+         * @description Every benchmark run, newest first (headers only; open one to verify and read it).
+         */
+        get: operations["benchmarks_benchmarks_get"];
         put?: never;
         /**
          * Start Benchmark
@@ -214,6 +218,49 @@ export interface components {
                     [key: string]: "first_class" | "experimental";
                 };
             };
+        };
+        /** BenchmarkList */
+        BenchmarkList: {
+            /**
+             * Runs
+             * @description Newest first
+             */
+            runs: components["schemas"]["BenchmarkListItem"][];
+        };
+        /**
+         * BenchmarkListItem
+         * @description A run's header, read from its run.json for listing. Checksums are not verified here;
+         *     `GET /benchmarks/{run_id}` verifies them before returning the record.
+         */
+        BenchmarkListItem: {
+            /** Created At */
+            created_at?: string | null;
+            /** Dataset Id */
+            dataset_id?: string | null;
+            /** Git Sha */
+            git_sha?: string | null;
+            /** Horizons Minutes */
+            horizons_minutes?: number[];
+            /** Model Ids */
+            model_ids?: string[];
+            /** N Cutoffs */
+            n_cutoffs?: number | null;
+            /** Operational */
+            operational?: boolean | null;
+            /** Protocol */
+            protocol?: string | null;
+            /** Run Id */
+            run_id: string;
+            /**
+             * Split
+             * @description Sampler split: test, dev, calibration, ...
+             */
+            split?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "running" | "incomplete" | "queued" | "succeeded" | "failed";
         };
         /**
          * BenchmarkRequest
@@ -1248,6 +1295,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    benchmarks_benchmarks_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkList"];
+                };
+            };
+        };
+    };
     start_benchmark_benchmarks_post: {
         parameters: {
             query?: never;
