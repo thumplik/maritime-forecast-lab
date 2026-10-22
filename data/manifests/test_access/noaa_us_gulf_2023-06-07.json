@@ -130,5 +130,17 @@
     "output": "data/runs/conformal/P-unseen_noaa_us_gulf_2023-06-07_20261021T225730Z/_crashed_20261022T020618Z (coverage written, adoption step crashed; not read)",
     "informed_by": [],
     "rerun_reason": null
+  },
+  {
+    "run_id": "P-known_noaa_us_gulf_2023-06-07_20261021T213109Z",
+    "kind": "conformal_coverage_h3",
+    "protocol": null,
+    "git_sha": "86a9cad48bb40e89124cbc4b94bef87889913b06",
+    "accessed_at": "2026-10-22T02:06:59+00:00",
+    "models": [],
+    "config_sha256": "0e27044cf07fbf53306a33f9dffaac52fec558e3de6dc8fdcfded1c156a7c7c6",
+    "output": "/Volumes/Code/AIS-predictor/data/runs/conformal/P-known_noaa_us_gulf_2023-06-07_20261021T213109Z/20261022T020659Z",
+    "informed_by": [],
+    "rerun_reason": null
   }
 ]
