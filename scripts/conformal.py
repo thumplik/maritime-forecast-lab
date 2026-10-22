@@ -176,8 +176,9 @@ def adoption(test_id: str, cov_h3: pl.DataFrame) -> dict:
     tolerance, and v2's mean underway:ALL area smaller at >= 4 of the 6 horizons. Adoption
     needs this to pass for both protocols (checked by the caller across runs)."""
     base = RUNS_DIR / "conformal" / test_id
-    slice1 = sorted(d for d in base.glob("2026*")
-                    if json.loads((d / "conformal.json").read_text()).get("bins", "stratum")
+    slice1 = sorted(d for d in base.glob("2026*")  # complete analyses only
+                    if (d / "conformal.json").exists()
+                    and json.loads((d / "conformal.json").read_text()).get("bins", "stratum")
                     == "stratum")  # fmt: skip
     if not slice1:
         raise SystemExit("no stratum (slice 1) analysis of this test run to compare against")
