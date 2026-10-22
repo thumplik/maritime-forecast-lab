@@ -52,6 +52,7 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay, link 
   const [evError, setEvError] = useState<string | null>(null);
   const [step, setStep] = useState(0);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [refit, setRefit] = useState(0); // bumping it refits the map to the forecast
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<"forecast" | "truth" | null>(null);
 
@@ -100,8 +101,8 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay, link 
   const s = Math.min(step, Math.max(0, nSteps - 1));
   useEffect(() => {
     if (!current) return onOverlay(null, null, null);
-    onOverlay(forecastToGeo(current, anchor, s, shown), truth ? truthToGeo(truth, current, anchor, s, shown) : null, current.forecast_id);
-  }, [current, truth, anchor, s, shown, onOverlay]);
+    onOverlay(forecastToGeo(current, anchor, s, shown), truth ? truthToGeo(truth, current, anchor, s, shown) : null, `${current.forecast_id}:${refit}`);
+  }, [current, truth, anchor, s, shown, onOverlay, refit]);
 
   useEffect(() => {
     if (!link || autoRan.current || !models.length) return;
@@ -194,6 +195,9 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay, link 
             {cov?.n_gaps === 1 ? "" : "s"} · stratum {cov?.motion_state ?? "no motion state"}:{cov?.vessel_class ?? "unknown"}
           </p>
           {link?.expect && <Reproduction resp={current} expect={link.expect} />}
+          <button className="link small" onClick={() => setRefit((n) => n + 1)} data-testid="zoom-forecast">
+            Zoom to forecast
+          </button>
           <label>
             Target time: +{formatHorizon(horizonMinutes(current.as_of, times[s]!))}
             <span className={`badge ${status(s)}`}>{status(s).replace("_", " ")}</span>

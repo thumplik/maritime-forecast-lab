@@ -207,7 +207,8 @@ export function forecastToGeo(resp: ForecastResponse, anchor: Anchor | null, ste
           properties: { model_id: f.model_id, color, area_km2: band.area, level: band.level, cells: band.n, opacity: bandOpacity(band.level) },
         });
       }
-      const outer = hs.boundary as unknown as Polygon | MultiPolygon;
+      // Fit the map to the outermost band drawn (98% when bands are fitted).
+      const outer = (bands[0]?.g ?? hs.boundary) as unknown as Polygon | MultiPolygon;
       const rings = outer.type === "Polygon" ? outer.coordinates : outer.coordinates.flat();
       for (const ring of rings) all.push(...ring.map(([lon, la]) => pos(la, lon)));
     }
