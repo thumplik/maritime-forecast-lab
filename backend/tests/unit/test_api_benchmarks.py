@@ -99,6 +99,39 @@ def test_list_runs(env):
     assert set(r["model_ids"]) == set(cfg.model_ids) and r["horizons_minutes"] == [15.0, 30.0]
 
 
+def test_samples_gallery(env, monkeypatch):
+    client, store, runs, cfg = env
+    run = run_benchmark(cfg, store, runs, run_id="syn-run")
+    r0 = next(r for r in run.results if r.stratum == "underway:ALL")
+    q = {"stratum": "underway:ALL", "horizon_minutes": r0.horizon_minutes,
+         "model_id": "persistence_v1", "sort": "error", "limit": 200}  # fmt: skip
+    got = client.get("/benchmarks/syn-run/samples", params=q)
+    assert got.status_code == 200, got.text
+    g = got.json()
+    assert g["n_paired"] == r0.n_paired == len(g["samples"])  # every paired sample, no more
+    errs = [s["error_m"] for s in g["samples"]]
+    assert errs == sorted(errs, reverse=True)
+    assert all(s["vessel_id"] and s["as_of"] for s in g["samples"])
+    err(client.get("/benchmarks/syn-run/samples", params=q | {"horizon_minutes": 7}),
+        404, "cell_not_found")  # fmt: skip
+    err(client.get("/benchmarks/syn-run/samples", params=q | {"model_id": "x_v1"}),
+        404, "model_not_in_run")  # fmt: skip
+    assert g["n_failed"] == 0 and all(s["status"] == "ok" for s in g["samples"])
+    # The held-out test period's per-sample records are never served by the API: by name...
+    import maritime_forecast.api.app as app_mod
+
+    with monkeypatch.context() as mp:
+        mp.setattr(app_mod, "HOLDOUT_MANIFEST_VERSION", run.protocol.manifest_version)
+        err(client.get("/benchmarks/syn-run/samples", params=q), 403, "holdout_test_period")
+    # ... and by time: the protocol's manifest is now a hold-out whose test period the run's
+    # labels reach, although the run itself was not on a hold-out manifest.
+    mpath = cfg.manifest_path
+    m = SplitManifest.model_validate_json(mpath.read_text())
+    mpath.write_text(m.model_copy(update={"version": "splits-v2"}).model_dump_json())
+    e = err(client.get("/benchmarks/syn-run/samples", params=q), 403, "holdout_test_period")
+    assert "reach into" in e["message"]
+
+
 def test_tampered_run_is_refused(env):
     client, store, runs, cfg = env
     run_benchmark(cfg, store, runs, run_id="t")

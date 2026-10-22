@@ -168,3 +168,70 @@ export function splitNote(split: string | null | undefined): string | null {
   if (split === "calibration") return "Calibration window: used to fit conformal radii, not a reported result.";
   return `Split "${split}": not a held-out result.`;
 }
+
+export interface SampleLink {
+  dataset: string;
+  vessel: string;
+  as_of: string;
+  models: string[];
+  horizon_h: number;
+  run: string;
+  cutoff: number;
+  /** The run's stored prediction for one model at one horizon: the map checks it reproduces. */
+  /** Predicted position only: no truth or error travels in the link (errors come from evaluation). */
+  expect?: { model_id: string; horizon_minutes: number; lat: number; lon: number };
+}
+
+/** Explorer URL that replays a benchmark sample: same vessel, cutoff, models and horizon. */
+export function sampleHref(l: SampleLink): string {
+  const p = new URLSearchParams({
+    dataset: l.dataset,
+    vessel: l.vessel,
+    as_of: l.as_of,
+    models: l.models.join(","),
+    horizon: String(l.horizon_h),
+    run: l.run,
+    cutoff: String(l.cutoff),
+  });
+  if (l.expect) p.set("expect", [l.expect.model_id, l.expect.horizon_minutes, l.expect.lat, l.expect.lon].join(","));
+  return `/?${p.toString()}`;
+}
+
+export function parseSampleLink(q: URLSearchParams): SampleLink | null {
+  const dataset = q.get("dataset");
+  const vessel = q.get("vessel");
+  const as_of = q.get("as_of");
+  if (!dataset || !vessel || !as_of || Number.isNaN(Date.parse(as_of))) return null;
+  const e = q.get("expect")?.split(",");
+  const n = e?.slice(1).map(Number);
+  return {
+    dataset,
+    vessel,
+    as_of,
+    models: (q.get("models") ?? "").split(",").filter(Boolean),
+    horizon_h: Number(q.get("horizon") ?? 6) || 6,
+    run: q.get("run") ?? "",
+    cutoff: Number(q.get("cutoff") ?? -1),
+    expect: e && n && n.length === 3 && n.every(Number.isFinite) ? { model_id: e[0]!, horizon_minutes: n[0]!, lat: n[1]!, lon: n[2]! } : undefined,
+  };
+}
+
+/** Points of a sample in a small local frame for a thumbnail: x east, y north (screen y down),
+ * scaled to fit `size` with equal metres per pixel. Display only (equirectangular about the
+ * anchor); errors themselves always come from the run record. */
+export function sketch(s: { anchor_lat: number; anchor_lon: number; pred_lat?: number | null; pred_lon?: number | null; truth_lat: number; truth_lon: number; reference_pred_lat?: number | null; reference_pred_lon?: number | null }, size = 72, pad = 8) {
+  const k = Math.cos((s.anchor_lat * Math.PI) / 180);
+  const raw = (lat: number, lon: number): [number, number] => [(lon - s.anchor_lon) * k, lat - s.anchor_lat];
+  const pts: Record<string, [number, number]> = { anchor: raw(s.anchor_lat, s.anchor_lon), truth: raw(s.truth_lat, s.truth_lon) };
+  if (s.pred_lat != null && s.pred_lon != null) pts.pred = raw(s.pred_lat, s.pred_lon);
+  if (s.reference_pred_lat != null && s.reference_pred_lon != null) pts.ref = raw(s.reference_pred_lat, s.reference_pred_lon);
+  const xs = Object.values(pts).map((p) => p[0]);
+  const ys = Object.values(pts).map((p) => p[1]);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  const span = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys), 1e-9);
+  const scale = (size - 2 * pad) / span;
+  const out: Record<string, [number, number]> = {};
+  for (const [name, [x, y]] of Object.entries(pts)) out[name] = [size / 2 + (x - cx) * scale, size / 2 - (y - cy) * scale];
+  return out as { anchor: [number, number]; truth: [number, number]; pred?: [number, number]; ref?: [number, number] };
+}

@@ -399,6 +399,305 @@
         "title": "BenchmarkRun",
         "type": "object"
       },
+      "BenchmarkSample": {
+        "description": "One paired (cutoff, horizon) sample of a run, as the run recorded it.",
+        "properties": {
+          "along_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Along M"
+          },
+          "anchor_lat": {
+            "title": "Anchor Lat",
+            "type": "number"
+          },
+          "anchor_lon": {
+            "title": "Anchor Lon",
+            "type": "number"
+          },
+          "as_of": {
+            "description": "The cutoff report's time",
+            "format": "date-time",
+            "title": "As Of",
+            "type": "string"
+          },
+          "cross_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cross M"
+          },
+          "cutoff_id": {
+            "title": "Cutoff Id",
+            "type": "integer"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "error_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error M"
+          },
+          "land_crossing": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Land Crossing"
+          },
+          "land_point": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Land Point"
+          },
+          "motion_set": {
+            "title": "Motion Set",
+            "type": "string"
+          },
+          "pred_lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pred Lat"
+          },
+          "pred_lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pred Lon"
+          },
+          "reference_error_m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The cell's best baseline on this sample",
+            "title": "Reference Error M"
+          },
+          "reference_pred_lat": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Pred Lat"
+          },
+          "reference_pred_lon": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reference Pred Lon"
+          },
+          "sog_mean_10m": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sog Mean 10M"
+          },
+          "status": {
+            "description": "The model's status; a failure on an evaluable sample is listed, never dropped",
+            "enum": [
+              "ok",
+              "unsupported",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "transiting": {
+            "title": "Transiting",
+            "type": "boolean"
+          },
+          "truth_lat": {
+            "title": "Truth Lat",
+            "type": "number"
+          },
+          "truth_lon": {
+            "title": "Truth Lon",
+            "type": "number"
+          },
+          "vessel_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vessel Class"
+          },
+          "vessel_id": {
+            "title": "Vessel Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "cutoff_id",
+          "vessel_id",
+          "as_of",
+          "vessel_class",
+          "motion_set",
+          "transiting",
+          "sog_mean_10m",
+          "anchor_lat",
+          "anchor_lon",
+          "status",
+          "error_code",
+          "error_m",
+          "along_m",
+          "cross_m",
+          "pred_lat",
+          "pred_lon",
+          "truth_lat",
+          "truth_lon",
+          "reference_error_m",
+          "reference_pred_lat",
+          "reference_pred_lon",
+          "land_point",
+          "land_crossing"
+        ],
+        "title": "BenchmarkSample",
+        "type": "object"
+      },
+      "BenchmarkSamples": {
+        "properties": {
+          "dataset_id": {
+            "title": "Dataset Id",
+            "type": "string"
+          },
+          "horizon_minutes": {
+            "title": "Horizon Minutes",
+            "type": "number"
+          },
+          "model_id": {
+            "title": "Model Id",
+            "type": "string"
+          },
+          "n_failed": {
+            "description": "Evaluable samples this model failed; listed first",
+            "title": "N Failed",
+            "type": "integer"
+          },
+          "n_paired": {
+            "description": "Paired samples in the cell (all of them, not just shown)",
+            "title": "N Paired",
+            "type": "integer"
+          },
+          "reference_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The cell's best baseline (skill reference)",
+            "title": "Reference Id"
+          },
+          "run_id": {
+            "title": "Run Id",
+            "type": "string"
+          },
+          "samples": {
+            "items": {
+              "$ref": "#/components/schemas/BenchmarkSample"
+            },
+            "title": "Samples",
+            "type": "array"
+          },
+          "sort": {
+            "enum": [
+              "error",
+              "loss"
+            ],
+            "title": "Sort",
+            "type": "string"
+          },
+          "stratum": {
+            "title": "Stratum",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "dataset_id",
+          "stratum",
+          "horizon_minutes",
+          "model_id",
+          "reference_id",
+          "sort",
+          "n_paired",
+          "n_failed",
+          "samples"
+        ],
+        "title": "BenchmarkSamples",
+        "type": "object"
+      },
       "BenchmarkStatus": {
         "properties": {
           "message": {
@@ -2916,6 +3215,145 @@
           }
         },
         "summary": "Benchmark",
+        "tags": [
+          "benchmarks"
+        ]
+      }
+    },
+    "/benchmarks/{run_id}/samples": {
+      "get": {
+        "description": "Failure gallery: one cell's paired samples for a model, worst first, by its error or\nby its loss to the cell's best baseline (error minus the baseline's, same sample).\n\nPer-sample records of a held-out test run are refused: every look at them belongs in\nthe test-access ledger, which only the CLI writes. Their aggregates stay readable.",
+        "operationId": "benchmark_samples_benchmarks__run_id__samples_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$",
+              "title": "Run Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "stratum",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "title": "Stratum",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "horizon_minutes",
+            "required": true,
+            "schema": {
+              "title": "Horizon Minutes",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "model_id",
+            "required": true,
+            "schema": {
+              "maxLength": 64,
+              "title": "Model Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "default": "loss",
+              "enum": [
+                "error",
+                "loss"
+              ],
+              "title": "Sort",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BenchmarkSamples"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "dataset_not_found / vessel_not_found / manifest_not_found / run_not_found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "benchmark_busy / run_not_finished / run_tampered"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "too_many_points"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "invalid_parameter / window_too_large / unknown_model / benchmark_refused"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorBody"
+                }
+              }
+            },
+            "description": "run_inconsistent (a run record breaks pairing)"
+          }
+        },
+        "summary": "Benchmark Samples",
         "tags": [
           "benchmarks"
         ]

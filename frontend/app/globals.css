@@ -101,6 +101,14 @@ dl.meta { display: grid; grid-template-columns: 110px 1fr; gap: 4px 12px; margin
 dl.meta dt { color: var(--muted); }
 dl.meta dd { margin: 0; word-break: break-all; }
 dl.meta pre { margin: 4px 0; font-size: 11px; white-space: pre-wrap; }
+.gallery { display: flex; flex-direction: column; gap: 6px; }
+.cards { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 8px; }
+.cards li { display: flex; gap: 8px; border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+.cards svg { flex: none; background: #f9fafb; border-radius: 4px; }
+.cards .open { color: var(--accent); }
+.cards li.failed { border-color: #fecaca; background: #fef2f2; }
+.banner { border: 1px solid var(--line); background: #f9fafb; border-radius: 6px; padding: 6px 8px; display: flex; flex-direction: column; gap: 2px; }
+.ok { color: #047857; }
 @media (max-width: 760px) {
   .layout { grid-template-columns: 1fr; grid-template-rows: auto 60vh; height: auto; }
   .panel { border-right: none; border-bottom: 1px solid var(--line); }

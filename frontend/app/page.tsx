@@ -3,13 +3,16 @@
 // Workbench: pick a dataset, a time window and a vessel; see its real track with coverage gaps
 // drawn distinctly. Setting a cutoff clips the track to what was known then and opens the
 // forecast comparison (Milestone 5, Screen B).
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import ForecastPanel from "@/components/forecast/ForecastPanel";
 import Nav from "@/components/Nav";
 import TrackMap, { COLORS } from "@/components/map/TrackMap";
 import { clipTrack, type ForecastGeo, type TruthGeo } from "@/lib/forecast";
 import { api, ApiError, type DatasetSummary, type Track, type VesselPage } from "@/lib/api/client";
 import { formatDuration, trackToGeo } from "@/lib/track";
+import { parseSampleLink } from "@/lib/benchmark";
 
 const PAGE = 200;
 
@@ -19,12 +22,28 @@ function addDays(day: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+function asOfOf(track: Track, idx: number | null): string | undefined {
+  return idx === null ? undefined : track.points.observed_at[idx];
+}
+
 function message(e: unknown): string {
   if (e instanceof ApiError) return `${e.message} (${e.code})`;
   return (e as Error).message;
 }
 
-export default function Explorer() {
+export default function Page() {
+  return (
+    <Suspense fallback={<main className="layout" />}>
+      <Explorer />
+    </Suspense>
+  );
+}
+
+function Explorer() {
+  const params = useSearchParams();
+  // A link from the failure gallery: replay one benchmark sample (vessel, cutoff, models).
+  const [link] = useState(() => parseSampleLink(new URLSearchParams(params.toString())));
+  const [pending, setPending] = useState(link);
   const [datasets, setDatasets] = useState<DatasetSummary[]>([]);
   const [datasetId, setDatasetId] = useState("");
   const [day, setDay] = useState("");
@@ -62,7 +81,14 @@ export default function Explorer() {
       .then((r) => {
         setDatasets(r.datasets);
         const first = r.datasets[0];
-        if (first) {
+        if (link && r.datasets.some((d) => d.dataset_id === link.dataset)) {
+          // The day before the cutoff through the day after: the 24 h history is on the map.
+          setDatasetId(link.dataset);
+          setDay(addDays(link.as_of.slice(0, 10), -1));
+          setSpan(3);
+          setVesselId(link.vessel);
+          setFilter(link.vessel);
+        } else if (first) {
           setDatasetId(first.dataset_id);
           setDay(first.first_day);
         }
@@ -102,7 +128,18 @@ export default function Explorer() {
     return () => ac.abort();
   }, [datasetId, window, vesselId]);
 
-  useEffect(() => setCutoffIdx(null), [track]);
+  useEffect(() => {
+    if (pending && track?.vessel_id === pending.vessel) {
+      const t = Date.parse(pending.as_of);
+      const i = track.points.observed_at.findIndex((x) => Date.parse(x) === t);
+      setPending(null);
+      setCutoffIdx(i >= 0 ? i : null);
+      if (i < 0) setError(`The linked cutoff ${pending.as_of} is not a report in this track.`);
+      return;
+    }
+    setCutoffIdx(null);
+  }, [track]); // eslint-disable-line react-hooks/exhaustive-deps
+  const linkActive = !!link && !!track && track.vessel_id === link.vessel && !!asOfOf(track, cutoffIdx) && Date.parse(asOfOf(track, cutoffIdx)!) === Date.parse(link.as_of);
   // A cutoff is always a real report time (§6.1); everything after it is removed from the map.
   const asOf = track && cutoffIdx !== null ? track.points.observed_at[cutoffIdx] : undefined;
   const history = useMemo(() => (track && asOf ? clipTrack(track, asOf) : null), [track, asOf]);
@@ -256,7 +293,17 @@ export default function Explorer() {
             )}
           </section>
         )}
-        {history && asOf && <ForecastPanel dataset={dataset} history={history} asOf={asOf} onOverlay={onOverlay} />}
+        {linkActive && link && (
+          <div className="banner small" data-testid="sample-banner">
+            <span>
+              Replaying benchmark sample <span className="mono">#{link.cutoff}</span> of <span className="mono">{link.run}</span>
+            </span>
+            <Link href={`/benchmarks?run=${encodeURIComponent(link.run)}`}>← back to the run</Link>
+          </div>
+        )}
+        {history && asOf && (
+          <ForecastPanel key={`${history.vessel_id}/${linkActive}`} dataset={dataset} history={history} asOf={asOf} onOverlay={onOverlay} link={linkActive ? link : null} />
+        )}
 
         <div className="legend small">
           <span>

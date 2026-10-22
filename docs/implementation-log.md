@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 5 — Workbench UI** (in progress: slices 1–2, forecast comparison and benchmark dashboard, done 2026-10-22). Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 5 — Workbench UI** (in progress: slices 1–3, forecast comparison, benchmark dashboard and failure gallery, done 2026-10-22). Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -1232,3 +1232,50 @@ node <dataviz>/scripts/validate_palette.js "#eb6834,#1baf7a,#eda100,#e87ba4,#625
 - No per-sample view yet.
 
 **Next step:** slice 3, the failure gallery. List the worst paired samples of a run (per stratum and horizon) from `records.parquet` and open one on the map at its cutoff, with the same forecast and truth overlay. The July test samples need a design decision: the evaluation endpoint refuses July truth, but those truths are already scored in the immutable run. Then the Playwright smoke test and `/milestone-check`.
+
+## 2026-10-22 — Milestone 5 slice 3: failure gallery and sample replay
+
+**Milestone:** 5 — workbench UI
+**Done** (slice 2 committed as `94a5e1a`; slice 3 uncommitted):
+- **`GET /benchmarks/{run_id}/samples`:** one paired cell (stratum × horizon) for one model, read from the run's verified `records.parquet` joined to `cutoffs.parquet`.
+  - Samples where the model **failed** on an evaluable sample are listed first, with status and error code (`n_failed`). The rest are ranked by the model's error, or by its loss to the cell's best baseline on the same sample.
+  - `n_paired` equals the cell's `n_paired` (asserted in the unit test; checked on 17 real runs).
+  - Runs from before per-sample positions were stored (the 8 earliest B0 runs) get 409 `records_without_positions`.
+- **Hold-out guard:** 403 `holdout_test_period` when a run is on a hold-out test split, **or** when its cutoffs plus the longest horizon and the truth bracket reach into the test period of its protocol's current hold-out manifest (`touches_test`, as in forecast evaluation).
+  - Every look at test records belongs in the test-access ledger, which only the CLI writes; the API never writes it. Aggregates stay on the dashboard.
+  - On today's runs it refuses exactly the two July runs. Calibration and dev runs are served.
+- **Gallery on the dashboard:** model, horizon and ranking selectors. Each card has a thumbnail (anchor, prediction, baseline, truth; display only), the errors, along/cross, land flags, and "Open on map".
+- **Replay in the explorer:**
+  - `/?dataset=&vessel=&as_of=&models=&horizon=&run=&cutoff=&expect=` loads the track from the day before to the day after, sets the cutoff to the exact report, and runs the forecast.
+  - It then checks the forecast against the stored prediction ("Reproduces the run record", or the Δ). The link carries the predicted position only, never truth or the stored error.
+  - A banner links back to the run.
+
+**Finding: retrieval's path depends on the requested horizon.**
+- The runner predicts once at its longest horizon (24 h) and scores shorter horizons on that path (`runner.predict_all`). Retrieval's medoid is chosen over the whole requested horizon, so a 6 h request can give a different path for its first 6 h.
+- With a 1 h replay, 13 of 24 sampled retrieval forecasts differed from the record. Replaying at 24 h, all 64 checks reproduced exactly: dev run `…_dev_20261021T204207Z` (v2, clean `672a766`) and June run `…152618Z` (v1), underway and transiting, at 1 and 6 h. Constant velocity reproduces at any horizon.
+- **Benchmarks are honest** (pairing holds; no truth involved). They describe "retrieval asked for 24 h, read at h".
+- **The served conformal radii are mislabeled for shorter retrieval requests.** `POST /forecasts` with `horizon_hours` < 24 attaches radii calibrated on 24 h-request paths to a different forecaster. Not fixed here: it needs a choice (see next step).
+
+**Leakage review (leakage-reviewer subagent):** no temporal or retrieval leakage. Fixed:
+1. Model failures were dropped from the gallery (they are now listed first).
+2. The hold-out guard keyed on the version string only (it now also checks times; there is an unmonkeypatched time-based test).
+3. The stored error was shown before evaluation (removed from the link).
+4. Exact float horizon match (now a tolerance).
+5. An empty vessel class was handled differently from the runner (`nullif`).
+
+Also noted: `GET /vessels/{id}/track` serves raw July positions without restriction. The ledger covers model records, not raw tracks. Whether that is intended should be written down in `docs/evaluation-protocol.md`.
+
+**Commands run:**
+```bash
+make gen-api; make lint; make test           # 296 passed
+cd frontend && npm run typecheck && npm test && npm run build   # 26 passed
+```
+
+**Checked in the browser:** gallery on `…152618Z`, transiting, 6 h. The worst case, passenger ship 368225760, replays on the map, matches the record, and after truth is revealed shows 246.7 km (same as stored). Failed samples (`no_references`) show first in `underway:ALL`.
+
+**Next step:**
+1. Decide how to fix the radius mislabelling for retrieval:
+   - (a) `POST /forecasts` predicts at the calibration run's longest horizon and slices; or
+   - (b) the radii carry their request horizon and are refused otherwise; or
+   - (c) make retrieval's medoid horizon-independent (a model change, so a new version and new benchmarks).
+2. Then the Playwright smoke test and `/milestone-check`.

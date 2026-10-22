@@ -48,6 +48,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/benchmarks/{run_id}/samples": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Benchmark Samples
+         * @description Failure gallery: one cell's paired samples for a model, worst first, by its error or
+         *     by its loss to the cell's best baseline (error minus the baseline's, same sample).
+         *
+         *     Per-sample records of a held-out test run are refused: every look at them belongs in
+         *     the test-access ledger, which only the CLI writes. Their aggregates stay readable.
+         */
+        get: operations["benchmark_samples_benchmarks__run_id__samples_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/benchmarks/{run_id}/summary": {
         parameters: {
             query?: never;
@@ -376,6 +400,104 @@ export interface components {
             status: "queued" | "running" | "succeeded" | "failed";
             /** Warnings */
             warnings?: string[];
+        };
+        /**
+         * BenchmarkSample
+         * @description One paired (cutoff, horizon) sample of a run, as the run recorded it.
+         */
+        BenchmarkSample: {
+            /** Along M */
+            along_m: number | null;
+            /** Anchor Lat */
+            anchor_lat: number;
+            /** Anchor Lon */
+            anchor_lon: number;
+            /**
+             * As Of
+             * Format: date-time
+             * @description The cutoff report's time
+             */
+            as_of: string;
+            /** Cross M */
+            cross_m: number | null;
+            /** Cutoff Id */
+            cutoff_id: number;
+            /** Error Code */
+            error_code: string | null;
+            /** Error M */
+            error_m: number | null;
+            /** Land Crossing */
+            land_crossing: boolean | null;
+            /** Land Point */
+            land_point: boolean | null;
+            /** Motion Set */
+            motion_set: string;
+            /** Pred Lat */
+            pred_lat: number | null;
+            /** Pred Lon */
+            pred_lon: number | null;
+            /**
+             * Reference Error M
+             * @description The cell's best baseline on this sample
+             */
+            reference_error_m: number | null;
+            /** Reference Pred Lat */
+            reference_pred_lat: number | null;
+            /** Reference Pred Lon */
+            reference_pred_lon: number | null;
+            /** Sog Mean 10M */
+            sog_mean_10m: number | null;
+            /**
+             * Status
+             * @description The model's status; a failure on an evaluable sample is listed, never dropped
+             * @enum {string}
+             */
+            status: "ok" | "unsupported" | "failed";
+            /** Transiting */
+            transiting: boolean;
+            /** Truth Lat */
+            truth_lat: number;
+            /** Truth Lon */
+            truth_lon: number;
+            /** Vessel Class */
+            vessel_class: string | null;
+            /** Vessel Id */
+            vessel_id: string;
+        };
+        /** BenchmarkSamples */
+        BenchmarkSamples: {
+            /** Dataset Id */
+            dataset_id: string;
+            /** Horizon Minutes */
+            horizon_minutes: number;
+            /** Model Id */
+            model_id: string;
+            /**
+             * N Failed
+             * @description Evaluable samples this model failed; listed first
+             */
+            n_failed: number;
+            /**
+             * N Paired
+             * @description Paired samples in the cell (all of them, not just shown)
+             */
+            n_paired: number;
+            /**
+             * Reference Id
+             * @description The cell's best baseline (skill reference)
+             */
+            reference_id: string | null;
+            /** Run Id */
+            run_id: string;
+            /** Samples */
+            samples: components["schemas"]["BenchmarkSample"][];
+            /**
+             * Sort
+             * @enum {string}
+             */
+            sort: "error" | "loss";
+            /** Stratum */
+            stratum: string;
         };
         /** BenchmarkStatus */
         BenchmarkStatus: {
@@ -1402,6 +1524,79 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BenchmarkStatus"];
+                };
+            };
+            /** @description dataset_not_found / vessel_not_found / manifest_not_found / run_not_found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description benchmark_busy / run_not_finished / run_tampered */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description too_many_points */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description invalid_parameter / window_too_large / unknown_model / benchmark_refused */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+            /** @description run_inconsistent (a run record breaks pairing) */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorBody"];
+                };
+            };
+        };
+    };
+    benchmark_samples_benchmarks__run_id__samples_get: {
+        parameters: {
+            query: {
+                stratum: string;
+                horizon_minutes: number;
+                model_id: string;
+                sort?: "error" | "loss";
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BenchmarkSamples"];
                 };
             };
             /** @description dataset_not_found / vessel_not_found / manifest_not_found / run_not_found */

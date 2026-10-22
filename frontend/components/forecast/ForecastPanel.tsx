@@ -3,7 +3,8 @@
 // Screen B (build plan §9): forecast comparison for one vessel at a cutoff. The map only shows
 // reports at or before the cutoff; withheld truth is fetched from /forecasts/evaluation, and
 // only after a forecast exists for the exact same request.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { SampleLink } from "@/lib/benchmark";
 import { api, ApiError, type DatasetSummary, type ForecastEvaluation, type ForecastRequest, type ForecastResponse, type ModelInfo, type Track } from "@/lib/api/client";
 import {
   anchorOf,
@@ -29,6 +30,8 @@ interface Props {
   history: Track;
   asOf: string;
   onOverlay: (forecast: ForecastGeo | null, truth: TruthGeo | null, fitKey: string | null) => void;
+  /** A benchmark sample being replayed: its models and horizon, run once, checked against the record. */
+  link?: SampleLink | null;
 }
 
 function message(e: unknown): string {
@@ -36,11 +39,12 @@ function message(e: unknown): string {
   return (e as Error).message;
 }
 
-export default function ForecastPanel({ dataset, history, asOf, onOverlay }: Props) {
+export default function ForecastPanel({ dataset, history, asOf, onOverlay, link = null }: Props) {
   const datasetId = history.dataset_id;
   const [models, setModels] = useState<ModelInfo[]>([]);
-  const [selected, setSelected] = useState<string[]>(DEFAULT_MODELS);
-  const [horizon, setHorizon] = useState(6);
+  const [selected, setSelected] = useState<string[]>(() => (link?.models.length ? link.models : DEFAULT_MODELS));
+  const [horizon, setHorizon] = useState(() => (link && HORIZONS.includes(link.horizon_h) ? link.horizon_h : 6));
+  const autoRan = useRef(false);
   const [level, setLevel] = useState<0.8 | 0.9 | 0.95 | null>(0.9);
   const [resp, setResp] = useState<ForecastResponse | null>(null);
   const [respKey, setRespKey] = useState<string | null>(null);
@@ -96,6 +100,12 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay }: Pro
     onOverlay(forecastToGeo(current, anchor, s, shown), truth ? truthToGeo(truth, current, anchor, s, shown) : null, current.forecast_id);
   }, [current, truth, anchor, s, shown, onOverlay]);
 
+  useEffect(() => {
+    if (!link || autoRan.current || !models.length) return;
+    autoRan.current = true;
+    void runForecast();
+  }, [link, models]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function runForecast() {
     setBusy("forecast");
     setError(null);
@@ -103,7 +113,10 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay }: Pro
       const r = await api.forecast(req);
       setResp(r);
       setRespKey(key);
-      setStep(Math.max(0, (r.forecasts[0]?.target_times.length ?? 1) - 1));
+      const tt = r.forecasts[0]?.target_times ?? [];
+      const e = link?.expect;
+      const at = e ? tt.findIndex((t) => horizonMinutes(r.as_of, t) === e.horizon_minutes) : -1;
+      setStep(at >= 0 ? at : Math.max(0, tt.length - 1));
     } catch (e) {
       setError(message(e));
     } finally {
@@ -177,6 +190,7 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay }: Pro
             {cov?.n_reports} reports in the 24 h history · last {cov?.last_report_age_s != null ? `${Math.round(cov.last_report_age_s)} s` : "–"} before cutoff · {cov?.n_gaps} gap
             {cov?.n_gaps === 1 ? "" : "s"} · stratum {cov?.motion_state ?? "no motion state"}:{cov?.vessel_class ?? "unknown"}
           </p>
+          {link?.expect && <Reproduction resp={current} expect={link.expect} />}
           <label>
             Target time: +{formatHorizon(horizonMinutes(current.as_of, times[s]!))}
             <span className={`badge ${status(s)}`}>{status(s).replace("_", " ")}</span>
@@ -306,5 +320,23 @@ export default function ForecastPanel({ dataset, history, asOf, onOverlay }: Pro
         </>
       )}
     </section>
+  );
+}
+
+/** Does the re-run forecast reproduce the run's stored prediction for this sample? */
+function Reproduction({ resp, expect }: { resp: ForecastResponse; expect: NonNullable<SampleLink["expect"]> }) {
+  const f = resp.forecasts.find((x) => x.model_id === expect.model_id);
+  const i = f ? f.target_times.findIndex((t) => horizonMinutes(resp.as_of, t) === expect.horizon_minutes) : -1;
+  const p = f && i >= 0 ? f.points[i] : undefined;
+  if (!p) return <p className="warning small">Cannot check against the run record: {expect.model_id} has no point at +{formatHorizon(expect.horizon_minutes)}.</p>;
+  const dLat = Math.abs(p.latitude_deg - expect.lat);
+  const dLon = Math.abs(p.longitude_deg - expect.lon);
+  const same = dLat < 1e-6 && dLon < 1e-6;
+  return (
+    <p className={`small ${same ? "ok" : "warning"}`} data-testid="reproduction">
+      {same
+        ? `Reproduces the run record: ${expect.model_id} at +${formatHorizon(expect.horizon_minutes)} is the scored prediction.`
+        : `Differs from the run record at +${formatHorizon(expect.horizon_minutes)} (Δlat ${dLat.toFixed(5)}°, Δlon ${dLon.toFixed(5)}°): the model, its parameters or the data changed since the run.`}
+    </p>
   );
 }

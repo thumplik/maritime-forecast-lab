@@ -22,6 +22,8 @@ export type BenchmarkSummary = S["BenchmarkSummary"];
 export type BenchmarkRun = S["BenchmarkRun"];
 export type BenchmarkList = S["BenchmarkList"];
 export type BenchmarkListItem = S["BenchmarkListItem"];
+export type BenchmarkSamples = S["BenchmarkSamples"];
+export type BenchmarkSample = S["BenchmarkSample"];
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -78,5 +80,11 @@ export const api = {
   benchmarks: (signal?: AbortSignal) => get<BenchmarkList>("/benchmarks", {}, signal),
   /** The full immutable run record (checksums verified by the API). */
   benchmark: (runId: string, signal?: AbortSignal) => get<BenchmarkStatus>(`/benchmarks/${encodeURIComponent(runId)}`, {}, signal),
+  /** Failure gallery: one cell's paired samples, worst first (403 on a held-out test run). */
+  samples: (
+    runId: string,
+    q: { stratum: string; horizon_minutes: number; model_id: string; sort?: "error" | "loss"; limit?: number },
+    signal?: AbortSignal,
+  ) => get<BenchmarkSamples>(`/benchmarks/${encodeURIComponent(runId)}/samples`, q, signal),
   evaluate: (req: ForecastRequest, signal?: AbortSignal) => post<ForecastEvaluation>("/forecasts/evaluation", req, signal),
 };

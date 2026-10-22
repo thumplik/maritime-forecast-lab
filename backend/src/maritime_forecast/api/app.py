@@ -17,7 +17,7 @@ from datetime import UTC, date, datetime, timedelta
 from functools import cached_property
 from importlib.metadata import version
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi import Path as PathParam
@@ -31,6 +31,8 @@ from maritime_forecast.api.models import (
     Admission,
     BenchmarkList,
     BenchmarkRequest,
+    BenchmarkSample,
+    BenchmarkSamples,
     BenchmarkStatus,
     BenchmarkSummary,
     DatasetList,
@@ -58,6 +60,7 @@ from maritime_forecast.evaluation import conformal
 from maritime_forecast.evaluation.forecast_eval import evaluate_forecast
 from maritime_forecast.evaluation.holdout import config_sha, is_holdout, touches_test
 from maritime_forecast.evaluation.runner import BenchmarkConfig, benchmark_context, preflight
+from maritime_forecast.evaluation.splits import HOLDOUT_MANIFEST_VERSION
 from maritime_forecast.geo.navigable_mask import MaskMismatchError, load_navigable_mask
 from maritime_forecast.models.base import ForecastHorizon, ModelContext, history_from_store
 from maritime_forecast.models.registry import get_model, model_ids
@@ -76,6 +79,9 @@ from maritime_forecast.storage.run_store import RunStore
 DATASET_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
 VESSEL_ID_PATTERN = r"^[A-Za-z0-9_-]{1,32}$"
 RUN_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$"
+# records.parquet columns the failure gallery needs (runs before 2026-10-21 03:46 lack them).
+GALLERY_COLUMNS = frozenset({"pred_lat", "pred_lon", "truth_lat", "truth_lon",
+                             "feas_land_point", "feas_land_crossing"})  # fmt: skip
 
 
 @dataclass
@@ -676,7 +682,149 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
             )  # fmt: skip
         return summarize(st.run, set(stratum) if stratum else None, headline_only)
 
+    @app.get(
+        "/benchmarks/{run_id}/samples", response_model=BenchmarkSamples, responses=R,
+        tags=["benchmarks"],
+    )  # fmt: skip
+    def benchmark_samples(
+        ctx: CtxDep,
+        run_id: RunIdP,
+        stratum: Annotated[str, Query(max_length=64)],
+        horizon_minutes: float,
+        model_id: Annotated[str, Query(max_length=64)],
+        sort: Literal["error", "loss"] = "loss",
+        limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    ) -> BenchmarkSamples:
+        """Failure gallery: one cell's paired samples for a model, worst first, by its error or
+        by its loss to the cell's best baseline (error minus the baseline's, same sample).
+
+        Per-sample records of a held-out test run are refused: every look at them belongs in
+        the test-access ledger, which only the CLI writes. Their aggregates stay readable."""
+        st = ctx.jobs.status(run_id)  # verifies every checksum
+        run = st.run
+        if run is None:
+            raise ApiError(409, "run_not_finished", f"run {run_id!r} is {st.status}",
+                           {"status": st.status})  # fmt: skip
+        d = ctx.jobs.runs.path(run_id)
+        why = _holdout_records(settings, run, d / "cutoffs.parquet")
+        if why:
+            raise ApiError(
+                403, "holdout_test_period",
+                f"{run_id} {why}; its per-sample records are read only through a recorded "
+                "analysis (docs/evaluation-protocol.md), not by the API",
+            )  # fmt: skip
+        cell = [r for r in run.results
+                if r.stratum == stratum and r.horizon_minutes == horizon_minutes]  # fmt: skip
+        if not cell:
+            raise ApiError(
+                404, "cell_not_found", f"no scored cell {stratum} @ {horizon_minutes} min"
+            )
+        if model_id not in {r.model_id for r in cell}:
+            raise ApiError(404, "model_not_in_run", f"{model_id} is not in {run_id}")
+        ref = cell[0].best_baseline_id
+        if sort == "loss" and (ref is None or ref == model_id):
+            raise ApiError(
+                422, "no_reference",
+                f"{model_id} has no other skill reference in this cell; sort by error instead",
+            )  # fmt: skip
+        motion, _, cls = stratum.partition(":")
+        if cls == "ALL":
+            where, params = "m.motion_set = ?", [motion]
+        elif cls == "TRANSITING":
+            where, params = "m.transiting", []
+        else:
+            where, params = (
+                "m.motion_set = ? AND coalesce(nullif(m.vessel_class, ''), 'unknown') = ?"
+            ), [
+                motion, cls,
+            ]  # fmt: skip
+        order = "m.error_m - b.error_m" if sort == "loss" else "m.error_m"
+        sql = f"""
+            WITH m AS (SELECT * FROM read_parquet(?) WHERE model_id = ?
+                       AND abs(horizon_h - ?) < 1e-9 AND evaluable
+                       AND (paired OR status <> 'ok')),
+                 b AS (SELECT cutoff_id, error_m, pred_lat, pred_lon FROM read_parquet(?)
+                       WHERE model_id = ? AND abs(horizon_h - ?) < 1e-9),
+                 sel AS (SELECT m.*, b.error_m AS reference_error_m,
+                                b.pred_lat AS reference_pred_lat, b.pred_lon AS reference_pred_lon,
+                                {order} AS score
+                         FROM m LEFT JOIN b USING (cutoff_id) WHERE {where})
+            SELECT sel.*, c.latitude_deg AS anchor_lat, c.longitude_deg AS anchor_lon,
+                   (SELECT count(*) FILTER (WHERE paired) FROM sel) AS n_paired,
+                   (SELECT count(*) FILTER (WHERE status <> 'ok') FROM sel) AS n_failed
+            FROM sel JOIN read_parquet(?) c USING (cutoff_id)
+            ORDER BY status <> 'ok' DESC, score DESC NULLS LAST, cutoff_id LIMIT ?
+        """  # fmt: skip
+        records = str(d / "records.parquet")
+        h = horizon_minutes / 60
+        con = connect()
+        try:
+            cols = {c[0] for c in con.execute(
+                "DESCRIBE SELECT * FROM read_parquet(?)", [records]).fetchall()}  # fmt: skip
+            missing = sorted(GALLERY_COLUMNS - cols)
+            if missing:
+                raise ApiError(
+                    409, "records_without_positions",
+                    f"{run_id} predates per-sample positions in its records (missing "
+                    f"{', '.join(missing)}); open a later run of the same models",
+                )  # fmt: skip
+            rows = con.execute(
+                sql, [records, model_id, h, records, ref or model_id, h, *params,
+                      str(d / "cutoffs.parquet"), limit],
+            ).pl()  # fmt: skip
+        finally:
+            con.close()
+        n_paired = int(rows["n_paired"][0]) if rows.height else 0
+        n_failed = int(rows["n_failed"][0]) if rows.height else 0
+        return BenchmarkSamples(
+            run_id=run_id, dataset_id=run.dataset_id, stratum=stratum,
+            horizon_minutes=horizon_minutes, model_id=model_id, reference_id=ref, sort=sort,
+            n_paired=n_paired, n_failed=n_failed,
+            samples=[
+                BenchmarkSample(
+                    **{k: r[k] for k in BenchmarkSample.model_fields
+                       if k not in ("as_of", "land_point", "land_crossing")},
+                    as_of=r["observed_at"], land_point=r["feas_land_point"],
+                    land_crossing=r["feas_land_crossing"],
+                )
+                for r in rows.to_dicts()
+            ],
+        )  # fmt: skip
+
     return app
+
+
+def _holdout_records(settings: ApiSettings, run, cutoffs_path: Path) -> str | None:
+    """Why a run's per-sample records are held-out test records (None if they are not).
+
+    Decided on the times the records cover, not only on names: a run on a held-out test split,
+    or any run whose cutoffs plus horizon and truth bracket reach into the test period of its
+    protocol's current hold-out manifest."""
+    if run.protocol.manifest_version == HOLDOUT_MANIFEST_VERSION and (
+        run.sampler.get("split") == "test"
+    ):
+        return "scored the held-out test split"
+    mpath = (settings.manifest_dir / "splits"
+             / f"{run.protocol.protocol}__{run.dataset_id}.json")  # fmt: skip
+    if not mpath.exists():
+        return None
+    manifest = SplitManifest.model_validate_json(mpath.read_bytes())
+    if not is_holdout(manifest):
+        return None
+    con = connect()
+    try:
+        lo, hi = con.execute(
+            "SELECT min(observed_at), max(observed_at) FROM read_parquet(?)", [str(cutoffs_path)]
+        ).fetchone()
+    finally:
+        con.close()
+    if lo is None:
+        return None
+    bracket = run.sampler.get("max_bracket_gap_minutes", settings.max_bracket_gap_minutes)
+    end = hi + timedelta(minutes=max(run.horizons_minutes) + bracket)
+    if touches_test(manifest, lo, end):
+        return "has records whose labels reach into the held-out test period"
+    return None
 
 
 def summarize(run, strata: set[str] | None = None, headline_only: bool = False):

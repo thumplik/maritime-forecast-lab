@@ -69,3 +69,23 @@ describe("helpers", () => {
     expect(logTicks(0.3, 60)).toEqual([0.5, 1, 2, 5, 10, 20, 50]);
   });
 });
+
+describe("sample links", () => {
+  it("round-trips through the explorer URL", async () => {
+    const { sampleHref, parseSampleLink } = await import("@/lib/benchmark");
+    const l = { dataset: "d", vessel: "367000001", as_of: "2023-06-28T19:47:04Z", models: ["a_v1", "b_v1"], horizon_h: 6, run: "r", cutoff: 7, expect: { model_id: "a_v1", horizon_minutes: 360, lat: 29.5, lon: -92.25 } };
+    const href = sampleHref(l);
+    expect(parseSampleLink(new URLSearchParams(href.slice(2)))).toEqual(l);
+    expect(parseSampleLink(new URLSearchParams("dataset=d"))).toBeNull();
+  });
+  it("sketch keeps the anchor and fits the box", async () => {
+    const { sketch } = await import("@/lib/benchmark");
+    const p = sketch({ anchor_lat: 29, anchor_lon: -94, pred_lat: 29.1, pred_lon: -94, truth_lat: 29, truth_lon: -93.9 });
+    for (const [x, y] of Object.values(p)) {
+      expect(x).toBeGreaterThanOrEqual(8 - 1e-9);
+      expect(y).toBeLessThanOrEqual(64 + 1e-9);
+    }
+    expect(p.pred![1]).toBeLessThan(p.anchor[1]); // north is up
+    expect(p.truth[0]).toBeGreaterThan(p.anchor[0]); // east is right
+  });
+});

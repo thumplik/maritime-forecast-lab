@@ -223,6 +223,49 @@ class SummaryModelCell(BaseModel):
     feasibility: FeasibilityStats | None = None
 
 
+class BenchmarkSample(BaseModel):
+    """One paired (cutoff, horizon) sample of a run, as the run recorded it."""
+
+    cutoff_id: int
+    vessel_id: str
+    as_of: AwareDatetime = Field(description="The cutoff report's time")
+    vessel_class: str | None
+    motion_set: str
+    transiting: bool
+    sog_mean_10m: float | None
+    anchor_lat: float
+    anchor_lon: float
+    status: Literal["ok", "unsupported", "failed"] = Field(
+        description="The model's status; a failure on an evaluable sample is listed, never dropped"
+    )
+    error_code: str | None
+    error_m: float | None
+    along_m: float | None
+    cross_m: float | None
+    pred_lat: float | None
+    pred_lon: float | None
+    truth_lat: float
+    truth_lon: float
+    reference_error_m: float | None = Field(description="The cell's best baseline on this sample")
+    reference_pred_lat: float | None
+    reference_pred_lon: float | None
+    land_point: bool | None
+    land_crossing: bool | None
+
+
+class BenchmarkSamples(BaseModel):
+    run_id: str
+    dataset_id: str
+    stratum: str
+    horizon_minutes: float
+    model_id: str
+    reference_id: str | None = Field(description="The cell's best baseline (skill reference)")
+    sort: Literal["error", "loss"]
+    n_paired: int = Field(description="Paired samples in the cell (all of them, not just shown)")
+    n_failed: int = Field(description="Evaluable samples this model failed; listed first")
+    samples: list[BenchmarkSample]
+
+
 class SummaryCell(BaseModel):
     """One stratum x horizon cell, every model side by side on the same paired samples."""
 

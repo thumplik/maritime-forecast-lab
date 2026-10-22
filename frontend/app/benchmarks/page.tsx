@@ -5,6 +5,7 @@
 // can be reproduced from its run id.
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import FailureGallery from "@/components/benchmark/FailureGallery";
 import LeadTimeChart from "@/components/benchmark/LeadTimeChart";
 import Nav from "@/components/Nav";
 import { api, ApiError, type BenchmarkListItem, type BenchmarkRun } from "@/lib/api/client";
@@ -207,6 +208,9 @@ function Dashboard() {
                 Not scored in this stratum (too few evaluable samples): {dropped.map((d) => `${formatH(d.horizon_minutes)} (${d.n_evaluable} evaluable of ${d.n_cutoffs})`).join(", ")}
               </p>
             )}
+
+            <h3>Failure gallery</h3>
+            {stratum && cells.length > 0 && <FailureGallery key={`${run.run_id}/${stratum}`} run={run} stratum={stratum} cells={cells} />}
 
             <h3>Error versus lead time</h3>
             <LeadTimeChart series={series} horizons={cells.map((c) => c.horizon_minutes)} />
