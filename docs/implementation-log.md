@@ -1081,3 +1081,15 @@ uv run --project backend python scripts/conformal.py --protocol P-known --params
 **Results:** a real July forecast (v2, a transiting tanker) carries 12.7 / 26.8 / 43.5 / 91.1 km radii at 1 / 2 / 3 / 6 h. Behind them are 980 / 960 / 953 / 903 calibration errors from about 280 vessels. Unfitted hours are null.
 
 **Next step:** slice 2 (H3 Mondrian bins, pre-registered above), then `/milestone-check` for Milestone 4.
+
+## 2026-10-21 — H3 slice: clarifications recorded before any H3 result
+
+Two points the pre-registration above left open, fixed before the H3 code exists or any H3 coverage is computed:
+1. **Both protocols:** the adoption rule is applied to P-known and P-unseen separately. H3 binning is adopted only if it passes in both.
+2. **"Mean area smaller for v2 on underway traffic"** means: at 90%, v2's mean disc area on `underway:ALL` is smaller under H3 than under slice 1 at **4 or more of the 6 horizons**.
+
+Everything else is as pre-registered:
+- H3 resolution 5, on the cutoff report's position;
+- bins of motion × cell, needing at least 30 calibration errors, otherwise the slice-1 chain;
+- levels 80/90/95%, verdict ±0.03 on n ≥ 200;
+- coverage criterion: at least as many motion-level cells within tolerance at 90% as slice 1 (P-known 69/72, P-unseen 50/72).
