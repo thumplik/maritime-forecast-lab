@@ -16,6 +16,7 @@ from maritime_forecast.models.constant_velocity import ConstantVelocity, Constan
 from maritime_forecast.models.damped_velocity import DampedVelocity
 from maritime_forecast.models.persistence import Persistence
 from maritime_forecast.models.route_retrieval import V2, RouteRetrieval
+from maritime_forecast.models.timestral_adapter import TimestralPos
 
 Factory = Callable[[ModelContext], TrajectoryForecaster]
 
@@ -27,6 +28,7 @@ _FACTORIES: dict[str, Factory] = {
     "damped_velocity_v1": DampedVelocity.from_context,
     "route_retrieval_v1": RouteRetrieval.from_context,
     "route_retrieval_v2": lambda ctx: RouteRetrieval.from_context(ctx, V2),
+    "timestral_pos_v1": TimestralPos.from_context,
 }
 
 
@@ -51,5 +53,6 @@ def capabilities() -> list[ModelCapabilities]:
 
 
 def product_model_ids() -> list[str]:
-    """Models for product benchmarks: everything except calibration-only reproductions."""
-    return [c.model_id for c in capabilities() if not c.calibration_only]
+    """The default benchmark model set: everything except calibration-only reproductions and
+    models behind an optional dependency (those are benchmarked by naming them)."""
+    return [c.model_id for c in capabilities() if not c.calibration_only and not c.optional]

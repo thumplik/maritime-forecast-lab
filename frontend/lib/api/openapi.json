@@ -214,7 +214,7 @@
             "title": "Max Cutoffs Per Set"
           },
           "model_ids": {
-            "description": "Empty = every product model",
+            "description": "Empty = every product model that is neither calibration-only nor optional",
             "items": {
               "type": "string"
             },
@@ -2311,6 +2311,12 @@
           "model_version": {
             "title": "Model Version",
             "type": "string"
+          },
+          "optional": {
+            "default": false,
+            "description": "Needs an optional dependency; never in the default benchmark model set",
+            "title": "Optional",
+            "type": "boolean"
           },
           "reads_beyond_own_history": {
             "title": "Reads Beyond Own History",

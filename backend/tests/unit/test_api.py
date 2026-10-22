@@ -201,8 +201,9 @@ def test_models_endpoint(client):
     by = {m["model_id"]: m for m in r["models"]}
     assert set(by) == {"persistence_v1", "constant_velocity_v1", "constant_velocity_paper_v1",
                        "constant_turn_rate_v1", "damped_velocity_v1",
-                       "route_retrieval_v1", "route_retrieval_v2"}  # fmt: skip
+                       "route_retrieval_v1", "route_retrieval_v2", "timestral_pos_v1"}  # fmt: skip
     assert by["constant_velocity_paper_v1"]["calibration_only"]
+    assert by["timestral_pos_v1"]["optional"] and not by["persistence_v1"]["optional"]
     assert not by["route_retrieval_v1"]["installed"]  # no P-known manifest for this dataset
     assert not by["damped_velocity_v1"]["installed"]  # no fit for this dataset
     assert by["damped_velocity_v1"]["reads_beyond_own_history"]

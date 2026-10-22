@@ -135,6 +135,8 @@ class ModelInfo(BaseModel):
     model_version: str
     description: str
     installed: bool
+    optional: bool = Field(False, description="Needs an optional dependency; never in the "
+                           "default benchmark model set")  # fmt: skip
     calibration_only: bool
     reads_beyond_own_history: bool
     max_horizon_hours: float
@@ -160,7 +162,9 @@ class BenchmarkRequest(BaseModel):
     dataset_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
     protocol: Literal["P-known", "P-unseen"]
     model_ids: list[str] = Field(
-        default_factory=list, max_length=10, description="Empty = every product model"
+        default_factory=list,
+        max_length=10,
+        description="Empty = every product model that is neither calibration-only nor optional",
     )
     horizons_hours: list[Annotated[float, Field(gt=0, le=72)]] = Field(
         default_factory=lambda: [1, 2, 3, 6, 12, 24], min_length=1, max_length=12

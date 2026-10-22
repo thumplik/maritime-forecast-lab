@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 
 import pytest
+from fixtures.fake_timestral import LinearBackend
 from fixtures.synthetic import ANTIMERIDIAN, CSV_PATH, DIRTY, GAPS, MOVING, STOPPING, T0, TURNING
 
 import maritime_forecast.data.ingest as ingest_mod
@@ -34,8 +35,14 @@ PARAMS = {
     "damped_velocity_v1": {"taus_hours": {"default": 2.0, "cargo": 0.5}},
     "route_retrieval_v1": {"manifest": SYN_MANIFEST, "config": {"pool": "rolling"}},
     "route_retrieval_v2": {"manifest": SYN_MANIFEST, "config": {"pool": "rolling"}},
+    # A stand-in for the optional checkpoint: the adapter's context building is what can leak.
+    "timestral_pos_v1": {"backend": LinearBackend()},
 }
 FEW_REFERENCES = {"route_retrieval_v1", "route_retrieval_v2"}
+# T1 needs 6 observed grid steps (1 h at 10 min). Five of the seven cases have under 1 h of
+# fixture history, so those grids are correctly `insufficient_context`; the 1-min grid
+# forecasts every case. Measured: 54 of 126 comparisons are against an ok forecast.
+SHORT_CONTEXT_OK = {"timestral_pos_v1": 0.4}
 
 CASES = [
     (MOVING, T0 + timedelta(minutes=60)),
@@ -70,7 +77,8 @@ def test_all_registered_models_are_invariant(store, tmp_path):
     n = len(CASES) * len(registry_factories(PARAMS)) * 3  # 3 grids
     assert rep.checks == n * (len(PERTURBATIONS) + 1)
     for model_id in set(registry_factories(PARAMS)) - FEW_REFERENCES:  # must really forecast
-        assert rep.ok_fraction(model_id) >= 0.8, (model_id, rep.ok_fraction(model_id))
+        need = SHORT_CONTEXT_OK.get(model_id, 0.8)
+        assert rep.ok_fraction(model_id) >= need, (model_id, rep.ok_fraction(model_id))
 
 
 @dataclass
@@ -205,3 +213,17 @@ def test_harness_refuses_models_that_cannot_forecast(store, tmp_path):
             grids=[(2, 10)],
             workdir=tmp_path,
         )  # damped has no params here
+
+
+@pytest.mark.timestral
+def test_real_timestral_checkpoint_is_invariant(store, tmp_path):
+    """Needs `uv sync --extra timestral` and `make timestral-weights` (run with -m timestral)."""
+    import maritime_forecast.models.timestral_adapter as ta
+
+    if not (ta.package_available() and ta.weights_present()):
+        pytest.skip("timestral extra or weights not installed")
+    rep = check_invariance({"timestral_pos_v1": registry_factories()["timestral_pos_v1"]},
+                           store, "syn", CASES, history_hours=3, workdir=tmp_path)  # fmt: skip
+    assert rep.ok, rep.violations
+    assert rep.vacuous == []
+    assert rep.ok_fraction("timestral_pos_v1") >= SHORT_CONTEXT_OK["timestral_pos_v1"]

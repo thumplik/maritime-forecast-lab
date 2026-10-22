@@ -307,7 +307,7 @@ export interface components {
             max_cutoffs_per_set?: number | null;
             /**
              * Model Ids
-             * @description Empty = every product model
+             * @description Empty = every product model that is neither calibration-only nor optional
              */
             model_ids?: string[];
             /**
@@ -1146,6 +1146,12 @@ export interface components {
             model_id: string;
             /** Model Version */
             model_version: string;
+            /**
+             * Optional
+             * @description Needs an optional dependency; never in the default benchmark model set
+             * @default false
+             */
+            optional: boolean;
             /** Reads Beyond Own History */
             reads_beyond_own_history: boolean;
             /** Step Minutes */

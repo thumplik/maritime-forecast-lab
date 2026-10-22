@@ -1,6 +1,6 @@
 # Implementation log
 
-**Current milestone: 6 — Timestral** (not started). Milestone 5 complete 2026-10-22 (exceptions accepted, entry below). Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
+**Current milestone: 6 — Timestral** (in progress: slice 1, T1-pos adapter, done 2026-10-22). Milestone 5 complete 2026-10-22 (exceptions accepted, entry below). Milestone 4 complete 2026-10-22. Milestone 3 complete 2026-10-21; retrieval v2 frozen on dev and scored once on the July hold-out (entries below). Milestone 2 completed 2026-10-21 (milestone check below). Milestone 1 completed 2026-10-20. Milestone 0 was completed and reviewed on 2026-10-19.
 
 Append-only. Newest entry last. Use the `/log-progress` skill.
 
@@ -1386,3 +1386,52 @@ The two exceptions in the check above were accepted by the user:
 **Outcome:** Milestone 5 is complete. CI run 39818248971 on `abeb3d7` passed: backend, frontend and `e2e` all green, and the smoke test passed on GitHub (1 passed, 8.9 s).
 
 **Next step:** Milestone 6, first slice as proposed above (pinned, lazy `Timestral-28M` adapter for T1-pos, typed `not_installed`, invariance test, a few dev cutoffs).
+
+## 2026-10-22 — Milestone 6 slice 1: Timestral T1-pos adapter
+
+**Milestone:** 6 — Timestral
+**Done** (uncommitted):
+- **Research:** the package is `mistralai/timestral` on GitHub only (no PyPI release), and its single commit `a534bdb` is the release. The checkpoint is `mistralai/Timestral-28M` at revision `49b2640`.
+  - Code is Apache-2.0.
+  - Weights are "Modified MIT": no rights if the organisation's monthly revenue exceeds $20M, and attribution is required. Recorded in `research/adapters/timestral/README.md`.
+- **Install:** optional extra `timestral` (pinned git commit, torch ≥ 2.4) in `backend/pyproject.toml` (hatch direct references allowed), and `uv.lock` updated. CI and `make setup` never install it.
+  - `make timestral-weights` (`scripts/fetch_timestral.py`) downloads the pinned revision into `data/weights/` (gitignored) and writes a sidecar.
+  - The adapter loads only from that cache (`local_files_only`). The installed package commit is checked at runtime.
+- **`models/timestral_adapter.py` (`timestral_pos_v1`):**
+  - Context: east/north metres in the local AEQD frame at the last report; a regular grid at the request's step ending at `as_of`; NaN where no report or gap-free (≤ 30 min) bracket exists.
+  - Forecast: the median of the quantiles. `clip_nonnegative=False`: the package default pins south-west tracks to the anchor (found in the source). `symmetric_averaging` stays on.
+  - Typed errors `not_installed` and `insufficient_context` (fewer than 6 observed steps).
+  - No uncertainty served (per-axis marginals only).
+  - `reads_beyond_own_history=True`, with the pretraining caveat in `config`.
+- **`ModelCapabilities.optional`:** optional models are excluded from `product_model_ids()`, so default benchmarks are the same on every machine. Exposed in `GET /models`. The API cache key now includes install status.
+- **Tests:**
+  - CI: a labelled linear stand-in backend that depends on the whole context (grid, gaps, stale `as_of`, call arguments, the south-west direction, typed errors, a commit mismatch, the default set), plus the registry-wide invariance harness.
+  - `-m timestral` (real checkpoint): determinism, direction, no state between forecasts, invariance on the fixture.
+- **Docs:** `docs/model-integration-notes.md` section.
+
+**Leakage review (leakage-reviewer subagent):** no temporal leakage. Fixed:
+1. `reads_beyond_own_history` was False (now True, with the caveat in config).
+2. The stand-in could not see most context changes (now it can).
+3. No test for state carried between forecasts on the shared backend.
+4. The package commit was unchecked.
+5. A stale cached `not_installed` could outlive installing the model.
+6. A stale `BenchmarkRequest` description.
+
+**Commands run:**
+```bash
+cd backend && uv sync --extra timestral && cd .. && make timestral-weights
+uv run --project backend pytest -q                 # 305 passed
+uv run --project backend pytest -q -m timestral    # 3 passed (real checkpoint)
+make lint; make gen-api; make web-test             # clean; 26 passed
+uv run --project backend python scripts/run_benchmark.py --protocol P-known --dataset-id noaa_us_gulf_2023-06-07 --split dev \
+  --models persistence_v1 constant_velocity_v1 damped_velocity_v1 route_retrieval_v2 timestral_pos_v1 --max-cutoffs-per-set 50 --no-geojson
+```
+
+**Smoke run** `P-known_noaa_us_gulf_2023-06-07_dev_20261022T171632Z` (diagnostic, not a result: dev window, at most 50 cutoffs per motion set):
+- 100 cutoffs and 5 models in 76 s, including the retrieval pool. Timestral had no failures, and every paired sample (49 underway, 42 stationary) has its forecast.
+- The medians are plausible. No comparison is drawn at this sample size.
+
+**Next step:** slice 2.
+1. A full dev-window benchmark with Timestral named, next to the baselines and retrieval, on the identical evaluable set. Record the runtime per forecast.
+2. Then T1-vel (forecast velocity and integrate geodesically) and history lengths of 24/48/72 h, on dev only.
+3. No July scoring until a Timestral design is frozen on dev.

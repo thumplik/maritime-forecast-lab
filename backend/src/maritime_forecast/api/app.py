@@ -411,6 +411,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
                     model_version=c.model_version,
                     description=c.description,
                     installed=c.installed,
+                    optional=c.optional,
                     calibration_only=c.calibration_only,
                     reads_beyond_own_history=c.reads_beyond_own_history,
                     max_horizon_hours=c.max_horizon_hours,
@@ -510,6 +511,8 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
                 "request": req.model_dump(mode="json", exclude={"show_ground_truth"}),
                 "configs": {m: built[m].config for m in req.model_ids},
                 "versions": {m: built[m].capabilities().model_version for m in req.model_ids},
+                # A cached `not_installed` must not outlive installing the model.
+                "installed": {m: built[m].capabilities().installed for m in req.model_ids},
                 "data_version": data_version,
                 "code": app.state.ctx.git_sha,
                 "radii": radii_sha,

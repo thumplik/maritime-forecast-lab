@@ -22,6 +22,15 @@ dependencies = [
     "h3>=4,<5",
 ]
 
+[project.optional-dependencies]
+# Milestone 6: Timestral zero-shot adapter. Optional and lazy (build plan §2, §5 T1): never
+# installed by CI or `make setup`; `uv sync --extra timestral` adds it. Pinned to the release
+# commit (research/adapters/timestral/README.md); weights are pinned separately by revision.
+timestral = [
+    "timestral @ git+https://github.com/mistralai/timestral.git@a534bdbd244d64f3d9d743f46c7bf6fc330ed4ff",
+    "torch>=2.4",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8",
@@ -35,6 +44,9 @@ dev = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.metadata]
+allow-direct-references = true  # the timestral extra is pinned to a git commit
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/maritime_forecast"]
@@ -56,8 +68,9 @@ pythonpath = ["tests"]
 markers = [
     "golden: requires local NOAA data; run via `make calibrate`, never in CI",
     "network: requires network access; never run in ordinary unit tests",
+    "timestral: needs the optional timestral extra and weights; run with -m timestral",
 ]
-addopts = "-m 'not golden and not network'"
+addopts = "-m 'not golden and not network and not timestral'"
 
 [tool.mypy]
 python_version = "3.11"

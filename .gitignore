@@ -17,6 +17,7 @@ data/manifests/*
 !data/manifests/test_access/*.json
 
 # Models, checkpoints, caches
+data/weights/
 *.ckpt
 *.pt
 *.safetensors

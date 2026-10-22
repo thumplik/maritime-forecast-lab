@@ -162,6 +162,12 @@ class ModelCapabilities(BaseModel):
         "Implies reads_beyond_own_history"
     )
     installed: bool = True
+    optional: bool = Field(
+        False,
+        description="Needs an optional dependency (e.g. the timestral extra). Never in the "
+        "default benchmark model set, so a default run is the same on every machine; "
+        "benchmark it by naming it",
+    )
     calibration_only: bool = Field(
         False,
         description="Exists to reproduce a published protocol (§6.6); excluded from "

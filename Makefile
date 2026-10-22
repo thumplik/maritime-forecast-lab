@@ -12,7 +12,7 @@ SPLIT ?= test
 
 NPM := npm --prefix frontend
 
-.PHONY: help setup dev web-test e2e gen-api test lint format fetch fetch-list canonical audit calibrate splits import fetch-dma api benchmark fit notebook fetch-land mask index
+.PHONY: help setup dev web-test e2e gen-api timestral-weights test lint format fetch fetch-list canonical audit calibrate splits import fetch-dma api benchmark fit notebook fetch-land mask index
 
 help:  ## Show targets
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -78,6 +78,9 @@ mask:  ## Navigable-water mask from TRAIN-split traffic: make mask PROTOCOL=P-kn
 
 index:  ## Retrieval segment index (completed segments + regular tracks) for the June dataset
 	$(PY) scripts/build_segment_index.py
+
+timestral-weights:  ## Download the pinned Timestral-28M weights to data/weights/ (needs `uv sync --extra timestral`)
+	uv run --project backend python scripts/fetch_timestral.py
 
 benchmark:  ## Paired benchmark: make benchmark PROTOCOL=P-known [DS=noaa_us_gulf_2023-06-07 SPLIT=dev]
 	$(PY) scripts/run_benchmark.py --protocol $(PROTOCOL) --dataset-id $(DS) --split $(SPLIT)

@@ -86,3 +86,28 @@ Limitation of both CV modes: no turns, channel geometry or land.
 - **Options in the code, off in v2:** `speed_match` (follow references at the target's pace; mixed on dev) and a partial hold (`depart_share` < 1).
 
 _Conformal, Timestral and TrAISformer sections are added in Milestones 4–7._
+
+
+## Timestral zero-shot, positions (`timestral_pos_v1`, §5 T1-pos)
+- **Source and pins:** [research/adapters/timestral/README.md](../research/adapters/timestral/README.md). The package is at commit `a534bdb`; the Timestral-28M weights are at revision `49b2640`. Both are optional (`uv sync --extra timestral`, `make timestral-weights`). Without them the model reports `installed=false`, and every request gets the typed error `not_installed`.
+- **Representation:** the vessel's own east/north positions, in metres, in the local AEQD frame centred on the last report. That is a two-variate series on a regular grid at the request's step, ending at `as_of` and spanning the request's history.
+  - A grid time takes a value only if it falls on a report, or between two of the target's reports at most 30 min apart (linear in the frame). Otherwise it is NaN, which Timestral treats as missing. Gaps are never bridged.
+  - A stale `as_of` leaves its own grid point empty.
+- **Point forecast:** the median of the per-axis quantiles, mapped back with the frame's exact inverse.
+  - `clip_nonnegative=False`; the package default would pin south-west tracks to the anchor.
+  - `symmetric_averaging=True`.
+  - It warns when the path reaches more than 300 km from the frame centre.
+- **No uncertainty served:** Timestral's quantiles are per-axis marginals and are never combined into a 2-D region (AGENTS.md). Calibrated radii would come from conformal (U1), once the model has been benchmarked on a calibration window.
+- **Requirements:** at least 2 reports and 6 observed grid steps (1 h at 10 min). Otherwise the typed error `insufficient_context`. Steps 1–60 min; horizons up to 72 h, always one decode block (at most 1,024 steps).
+- **`reads_beyond_own_history=True`:** the weights are fitted parameters from an external corpus that is not disclosed. The model card says "mostly synthetic", so public AIS, including NOAA 2023, cannot be ruled out.
+  - The caveat is in the model's `config["pretraining"]`, so it travels with every run record.
+  - P-unseen is vessel-disjoint only with respect to *our* splits.
+  - The risk is low but not zero: the input is relative east/north metres around the last report, and 28M parameters are a generic model.
+- **Package pin enforced:** a `timestral` install from a different commit counts as not installed, and the error names the commit found.
+- **`optional=True`:** it is never in the default benchmark model set (`product_model_ids()`), so a default run is the same on every machine. Benchmark it by naming it.
+- **Tests:**
+  - CI uses a labelled linear stand-in backend (`tests/fixtures/fake_timestral.py`) to check the grid, gap handling, call arguments, direction (south-west) and the invariance harness.
+  - The stand-in adds a negligible term that depends on every context value, so the invariance harness can see any change to the context.
+  - Tests marked `timestral` (`uv run pytest -m timestral`) run the real checkpoint: determinism, direction, no state carried between forecasts on the shared backend, and invariance on the fixture.
+- **Runtime:** about 1.7 s for the first call on CPU (including the load). Per-forecast timing is in the benchmark record.
+- **Expectation (§5 T1):** it has no route knowledge, so it should behave roughly like a smoothed kinematic extrapolator. That is to be tested, not assumed.
