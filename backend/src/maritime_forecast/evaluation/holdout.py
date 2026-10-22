@@ -88,6 +88,22 @@ def record_test_access(manifest: SplitManifest, run_id: str, git: str, models: l
     p.write_text(json.dumps(entries, indent=2) + "\n")
 
 
+def record_analysis(dataset_id: str, test_run_id: str, kind: str, config: dict, git: str,
+                    output: str) -> None:  # fmt: skip
+    """Record a later analysis of a held-out run's stored records (e.g. conformal coverage):
+    no model is scored again, but the look is on record with its config and code version."""
+    entries = read_ledger(dataset_id)
+    entries.append({
+        "run_id": test_run_id, "kind": kind, "protocol": None, "git_sha": git,
+        "accessed_at": datetime.now(UTC).isoformat(timespec="seconds"), "models": [],
+        "config_sha256": config_sha(config), "output": output,
+        "informed_by": [], "rerun_reason": None,
+    })  # fmt: skip
+    p = ledger_path(dataset_id)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(entries, indent=2) + "\n")
+
+
 def touches_test(manifest: SplitManifest, start: datetime, end: datetime) -> bool:
     """Whether [start, end] reaches into a held-out test period (API evaluation guard)."""
     if not is_holdout(manifest):

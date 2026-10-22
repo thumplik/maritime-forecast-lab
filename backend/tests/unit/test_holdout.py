@@ -61,3 +61,15 @@ def test_p_region_dev_window_stays_on_the_train_side():
     end = dev + timedelta(hours=6)
     assert m.window_split("x", dev - timedelta(hours=6), end, [far], [far]) == "dev"
     assert m.window_split("x", dev - timedelta(hours=6), end, [far], [inside]) is None
+
+
+def test_analysis_entries_are_recorded_and_do_not_block_runs():
+    ho.record_test_access(V2, "run1", CLEAN, MODELS, [], None)
+    ho.record_analysis(JUNE_JULY_DATASET, "run1", "conformal_coverage", {"min_n": 30}, CLEAN, "out")
+    entries = ho.read_ledger(JUNE_JULY_DATASET)
+    assert [e.get("kind") for e in entries] == [None, "conformal_coverage"]
+    assert entries[1]["models"] == [] and entries[1]["config_sha256"] == ho.config_sha(
+        {"min_n": 30}
+    )
+    changed = [{**MODELS[0], "config": {"k": 5}}]
+    ho.check_test_access(V2, "test", True, CLEAN, changed, None)  # analysis adds no model
