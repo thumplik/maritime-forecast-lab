@@ -1647,3 +1647,21 @@ uv run --project backend python scripts/hexsets_dev.py --run P-known_noaa_us_gul
 - **Coverage, pooled underway:** both methods 0.84–0.87 at 1–12 h. This is the July drift; H1 does not fix it.
 
 README results and roadmap updated (AGENTS.md rule 13).
+
+## 2026-10-22 — Milestone 7: hex sets in the workbench; a UI leak fixed
+
+**Done:**
+- **On the map:** `POST /forecasts` serves the adopted H1 sets for retrieval v2 at the fitted horizons (cells, area, stratum, calibration n, GeoJSON outline, `adoption`). The forecast panel and map draw them, filled in the model's colour, at the selected target time.
+- **Checked in the browser:** the July transiting cargo ship 636092697 at 2023-07-10 12:00Z.
+  - The 6 h set is 195 res-6 cells, 7,045 km², hugging the Galveston approach and the Houston Ship Channel.
+  - The 90% disc around the same point is about 24,000 km² (87.5 km radius).
+  - The 2 h set is a MultiPolygon (two branches).
+- **Leak fixed (UI only; forecasts were always causal).** The explorer's track summary, added in Milestone 5, showed the last report and the report, segment and gap counts of the whole loaded window, including reports after the cutoff. Seen on a July cutoff: the last report shown was Jul 11 23:59, a day and a half after `as_of`.
+  - With a cutoff set, the summary now describes only the history up to `as_of`.
+  - The Playwright smoke test asserts it (31 reports; last report at 00:30).
+- **Stray banner:** the "replaying benchmark sample" banner no longer appears for links without a run id.
+
+**Known limits:**
+- Sets still include land cells; navigable-mask removal is the next Milestone 7 task.
+- Pooled underway coverage drifts to 0.84–0.87 in July, for both sets and discs.
+- No P-unseen hex sets.

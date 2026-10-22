@@ -149,7 +149,9 @@ function Explorer() {
   const geo = useMemo(() => (history ? trackToGeo(history) : track ? trackToGeo(track) : null), [track, history]);
   const onView = useCallback((b: [number, number, number, number]) => setView(b), []);
   const shown = (page?.vessels ?? []).filter((v) => v.vessel_id.includes(filter.trim()));
-  const longestGap = track?.gaps.reduce((m, g) => Math.max(m, g.duration_s), 0) ?? 0;
+  // With a cutoff set, everything shown about the track is what was known at as_of.
+  const known = history ?? track;
+  const longestGap = known?.gaps.reduce((m, g) => Math.max(m, g.duration_s), 0) ?? 0;
 
   return (
     <main className="layout">
@@ -252,18 +254,20 @@ function Explorer() {
 
         {error && <p className="error">{error}</p>}
         {loading && <p className="muted">Loading track…</p>}
-        {track && (
+        {track && known && (
           <section className="track" data-testid="track-summary">
             <h2 className="mono">{track.vessel_id}</h2>
             <p>
-              {track.vessel_class ?? "unknown"} · {track.n_points.toLocaleString()} reports · {track.segments.length} segment
-              {track.segments.length === 1 ? "" : "s"} · {track.gaps.length} gap{track.gaps.length === 1 ? "" : "s"}
-              {track.gaps.length > 0 && ` (longest ${formatDuration(longestGap)})`}
+              {track.vessel_class ?? "unknown"} · {known.n_points.toLocaleString()} reports · {known.segments.length} segment
+              {known.segments.length === 1 ? "" : "s"} · {known.gaps.length} gap{known.gaps.length === 1 ? "" : "s"}
+              {known.gaps.length > 0 && ` (longest ${formatDuration(longestGap)})`}
+              {history && " up to the cutoff"}
             </p>
-            {track.n_points > 0 && (
+            {known.n_points > 0 && (
               <p className="small" data-testid="last-report">
-                Last report in window: <span className="mono">{track.points.observed_at[track.n_points - 1]}</span> ·{" "}
-                {track.points.sog_knots[track.n_points - 1] ?? "–"} kn · COG {track.points.cog_deg[track.n_points - 1] ?? "–"}°
+                {history ? "Last report at or before the cutoff" : "Last report in window"}:{" "}
+                <span className="mono">{known.points.observed_at[known.n_points - 1]}</span> · {known.points.sog_knots[known.n_points - 1] ?? "–"} kn ·
+                COG {known.points.cog_deg[known.n_points - 1] ?? "–"}°
               </p>
             )}
             {track.warnings.map((w) => (
@@ -299,7 +303,7 @@ function Explorer() {
             )}
           </section>
         )}
-        {linkActive && link && (
+        {linkActive && link && link.run && (
           <div className="banner small" data-testid="sample-banner">
             <span>
               Replaying benchmark sample <span className="mono">#{link.cutoff}</span> of <span className="mono">{link.run}</span>

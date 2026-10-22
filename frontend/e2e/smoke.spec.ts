@@ -17,7 +17,10 @@ test("forecast a fixture vessel from a cutoff and overlay the withheld truth", a
   // Set the cutoff: report 31 of 121 is 00:30:00Z. Reports after it leave the map.
   await page.getByTestId("cutoff-toggle").check();
   await page.getByTestId("cutoff-slider").fill("30");
-  await expect(page.getByText("2023-06-01T00:30:00Z")).toBeVisible();
+  await expect(page.getByText("2023-06-01T00:30:00Z").first()).toBeVisible();
+  // Nothing after the cutoff is shown: the summary describes the history up to as_of only.
+  await expect(page.getByTestId("track-summary")).toContainText("31 reports");
+  await expect(page.getByTestId("last-report")).toContainText("at or before the cutoff: 2023-06-01T00:30:00Z");
 
   // Run the baselines only, at 1 h.
   const panel = page.getByTestId("forecast-panel");
