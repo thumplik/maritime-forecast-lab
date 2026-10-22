@@ -37,8 +37,9 @@ def main() -> None:
     ap.add_argument(
         "--split",
         default="test",
-        choices=["test", "dev"],
-        help="dev: model development on the dev window (June+July manifests only)",
+        choices=["test", "dev", "calibration"],
+        help="dev: model development on the dev window; calibration: errors for conformal radii "
+        "(June+July manifests only)",
     )
     ap.add_argument(
         "--confirm-test",
