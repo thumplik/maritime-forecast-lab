@@ -621,3 +621,22 @@ Cells within tolerance: 7/12 at each level (all 6 transiting cells, plus pooled 
 - **For all underway traffic pooled, every band under-covers at 1–12 h by about the same 4–6 points** (0.84–0.86 at 90%, 0.89–0.92 at 95%, 0.95–0.97 at 98%). This is the July drift already seen for the 90% sets and the discs. It needs a coverage fix, not wider bands.
 - **The 95% and 98% bands are largely round:** past the 90% band the density is mostly the broad safety component, not the retrieved routes. They are calibrated, but carry little route information. A traffic-density prior in place of the round component is the way to give the outer bands lane shape (§5 H2).
 - **Area grows steeply toward 98%:** for transiting ships at 6 h, 7,800 → 23,900 → 49,400 km².
+
+
+## 2026-10-22 — H1 sensitivity to K (retrieved tracks per forecast), dev window (development record)
+
+The question was whether K = 50 is too few, or overfits. The same dev design (spread rule, 90%, calibrated on the first half, scored on the second) was run at K = 100, 200 and 400. Outputs: `data/runs/hexsets/<dev run>/20261022T231430Z`, `…T232053Z`, `…T233122Z`; the K = 50 run is `…T200752Z`.
+
+| Underway pooled, H1 coverage / km² | K = 50 | K = 100 | K = 200 | K = 400 |
+|---|---|---|---|---|
+| 1 h | 0.880 / 46 | 0.879 / 45 | 0.881 / 47 | 0.878 / 47 |
+| 3 h | 0.886 / 405 | 0.891 / 411 | 0.874 / 308 | 0.876 / 322 |
+| 6 h | 0.880 / 1,433 | 0.881 / 1,394 | 0.883 / 1,450 | 0.881 / 1,446 |
+| 12 h | 0.862 / 3,986 | 0.857 / 3,672 | 0.868 / 4,112 | 0.872 / 4,302 |
+| Transiting 12 h | 0.794 / 18,836 | 0.817 / 20,274 | 0.821 / 20,957 | 0.821 / 21,175 |
+
+**What this says:**
+- K barely matters between 50 and 400: coverage moves within ±2 points and area within about ±10%, in both strata and at every horizon.
+- Similarity weights (exp(−D/2)) give the extra, less similar tracks almost no mass, so the density hardly changes.
+- There is no overfitting signature. The only fitted quantities are the spread factor c per horizon (on dev) and the conformal thresholds (on a separate window), and July coverage for transiting ships was nominal.
+- More tracks do not give the outer 95/98% bands lane shape. That needs a traffic-density prior in place of the round broad component.
