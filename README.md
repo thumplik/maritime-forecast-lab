@@ -156,6 +156,17 @@ Details: [docs/benchmarks.md](docs/benchmarks.md).
 - **Pooled underway traffic is under-covered by both methods** (84–87% at 1–12 h, outside the ±3-point tolerance). This is the July drift already seen for the radii above. The hex sets improve area, not coverage.
 - **The disc side was not blind:** the radii's July coverage was already known (ledger). The hex sets' design was blind to July.
 
+**Where the ship is most likely to be: nested 90 / 95 / 98% bands** (checked once on July, pre-registered; tolerance ±3 / ±2 / ±1 points):
+
+| Transiting ships, 6 h | 90% band | 95% band | 98% band |
+|---|---|---|---|
+| July coverage | 89.8% | 95.5% | 98.0% |
+| Mean area | 7,793 km² | 23,936 km² | 49,401 km² |
+
+- **For transiting ships the bands are calibrated at every horizon from 1 to 24 h.**
+- **For all underway traffic pooled, every band under-covers by 4–6 points at 1–12 h** (the July drift).
+- **The 90% band follows the shipping lanes;** the 95% and 98% bands are mostly round, because past 90% the retrieved routes run out.
+
 Details: [docs/benchmarks.md](docs/benchmarks.md).
 
 The success condition for every model is the same: **beat the best of persistence, constant velocity and damped velocity, per stratum, on paired held-out samples under P-known and P-unseen.** Retrieval meets it for ships in transit at every horizon under both protocols, and for all underway traffic up to 3–6 h. It does not meet it for long-horizon harbour traffic. For moored vessels, v2 only ties persistence.

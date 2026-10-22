@@ -1688,3 +1688,23 @@ README results and roadmap updated (AGENTS.md rule 13).
 - Pre-registered tolerance per level, tested in counts with n ≥ 200: ±0.03 at 90%, ±0.02 at 95%, ±0.01 at 98% (a ±0.03 band means little at 98%).
 - The 50/80 thresholds that `--add-levels` had written were discarded uncommitted. No band coverage has been computed on any test data.
 - Everything else in the registration above is unchanged.
+
+## 2026-10-22 — Milestone 7: 90/95/98% bands served, drawn and checked once on July
+
+**Done:**
+- Bands revised to 90/95/98% at the user's request, before any check: commit `7bdbf45`, with per-level tolerances.
+- Band thresholds added on the calibration window, with the 90% thresholds reproduced exactly and the verdict kept (`bda5f1c`).
+- The map draws graded bands (90% darkest). A "Zoom to forecast" button fits the outermost band (`18c484d`).
+- A dry run of the band check on dev, then the one July check.
+
+**Result (`docs/benchmarks.md`):**
+- **Transiting:** all three bands are within tolerance at every horizon (90%: 0.889–0.902; 95%: 0.945–0.960; 98%: 0.973–0.983).
+- **Pooled underway:** every band under-covers at 1–12 h by 4–6 points; within tolerance at 24 h.
+- **Shape:** the 95/98% bands are mostly round (the broad component dominates past 90%).
+
+**Seen in the browser:** the July cargo ship at 6 h shows a 90% band hugging the Houston Ship Channel and the Galveston approach (7,045 km²), and round 95% / 98% rings (22,834 / 48,630 km²).
+
+**Next step (proposed):**
+1. **Coverage drift:** recalibrate on a rolling window that ends before each forecast. This needs its own protocol (pre-registered, its own July look).
+2. **Lane-shaped outer bands:** replace the round broad component with a train-period traffic-density prior (§5 H2).
+3. **Land cells:** remove them with the navigable mask.

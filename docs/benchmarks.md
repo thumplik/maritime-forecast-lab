@@ -590,3 +590,34 @@ Dev run `P-known_noaa_us_gulf_2023-06-07_dev_20261022T175118Z` (24 h history), u
 - **At equal coverage, H1's hex sets are 2–4 times smaller than the conformal disc** around the same retrieval forecast, in both strata and at every horizon. The two methods' coverages differ by at most 0.6 points in any cell.
 - **Transiting ships are calibrated at every horizon (0.889–0.902).**
 - **Pooled underway traffic is under-covered by both methods at 1–12 h (0.84–0.87).** This is the July drift seen for U1, the frozen retrieval pool ageing through July. H1 improves area, not coverage. A coverage fix (a rolling calibration window, or recalibration per week) is separate work, with its own protocol.
+
+
+## 2026-10-22 — Nested 90/95/98% hex bands on the July hold-out, P-known (held-out; pre-registered band check)
+
+- **Served parameters:** `data/model_params/hexsets/P-known__noaa_us_gulf_2023-06-07.json` at commit `bda5f1c`: the 90% thresholds are unchanged, and the 95/98% thresholds come from the same calibration window.
+- **Analysis:** `data/runs/hexsets/P-known_noaa_us_gulf_2023-06-07_20261021T213109Z/levels_20261022T225158Z/`.
+- **Ledger:** `hexsets_h1_levels_started` / `hexsets_h1_levels`. `informed_by` lists every earlier analysis of this run, including the H1 look, so the 90% coverage was already known.
+- **Pre-registered tolerance:** ±0.03 at 90%, ±0.02 at 95%, ±0.01 at 98% (n ≥ 200). Bands revised from 50/80 to 95/98 at the user's request before any band was checked.
+
+| Stratum | h | 90%: coverage / km² | 95%: coverage / km² | 98%: coverage / km² |
+|---|---|---|---|---|
+| Transiting | 1 h | 0.889 / 241 | 0.957 / 948 | 0.981 / 2,176 |
+| Transiting | 2 h | 0.899 / 928 | 0.955 / 3,494 | 0.983 / 8,272 |
+| Transiting | 3 h | 0.902 / 1,886 | 0.960 / 7,388 | 0.983 / 16,906 |
+| Transiting | 6 h | 0.898 / 7,793 | 0.955 / 23,936 | 0.980 / 49,401 |
+| Transiting | 12 h | 0.899 / 28,694 | 0.952 / 80,543 | 0.983 / 178,681 |
+| Transiting | 24 h | 0.894 / 95,960 | 0.945 / 241,314 | 0.973 / 412,920 |
+| Underway, all | 1 h | 0.837 ✗ / 67 | 0.898 ✗ / 287 | 0.961 ✗ / 1,017 |
+| Underway, all | 2 h | 0.840 ✗ / 233 | 0.896 ✗ / 928 | 0.956 ✗ / 3,172 |
+| Underway, all | 3 h | 0.840 ✗ / 569 | 0.892 ✗ / 1,544 | 0.949 ✗ / 5,407 |
+| Underway, all | 6 h | 0.851 ✗ / 1,782 | 0.903 ✗ / 5,948 | 0.958 ✗ / 19,041 |
+| Underway, all | 12 h | 0.864 ✗ / 6,268 | 0.917 ✗ / 19,510 | 0.969 ✗ / 61,454 |
+| Underway, all | 24 h | 0.873 / 18,485 | 0.933 / 55,683 | 0.974 / 146,974 |
+
+Cells within tolerance: 7/12 at each level (all 6 transiting cells, plus pooled 24 h). CIs are in the report.
+
+### What this says
+- **For transiting ships, the bands mean what they say at every level and horizon.** 90 / 95 / 98% of July positions fell in the 90 / 95 / 98% bands, within the stated tolerance.
+- **For all underway traffic pooled, every band under-covers at 1–12 h by about the same 4–6 points** (0.84–0.86 at 90%, 0.89–0.92 at 95%, 0.95–0.97 at 98%). This is the July drift already seen for the 90% sets and the discs. It needs a coverage fix, not wider bands.
+- **The 95% and 98% bands are largely round:** past the 90% band the density is mostly the broad safety component, not the retrieved routes. They are calibrated, but carry little route information. A traffic-density prior in place of the round component is the way to give the outer bands lane shape (§5 H2).
+- **Area grows steeply toward 98%:** for transiting ships at 6 h, 7,800 → 23,900 → 49,400 km².
