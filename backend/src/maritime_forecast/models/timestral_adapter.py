@@ -130,6 +130,8 @@ def context_xy(history: AISHistory, frame: LocalFrame, step_minutes: int,
 
 @dataclass
 class TimestralPos(BaseForecaster):
+    """T1-pos; TimestralVel below overrides only the series and how positions come back."""
+
     model_id: str = "timestral_pos_v1"
     backend: object | None = None  # injected stand-in (tests); else the pinned checkpoint
     config: dict = field(
@@ -197,29 +199,92 @@ class TimestralPos(BaseForecaster):
         last = history.last()
         frame = LocalFrame(last["latitude_deg"], last["longitude_deg"])
         ctx = context_xy(history, frame, horizon.step_minutes, cfg["gap_minutes"])
-        observed = int(np.isfinite(ctx[0]).sum())
+        series = self._series(ctx, horizon.step_minutes)
+        observed = int(np.isfinite(series[0]).sum())
         if observed < cfg["min_observed_steps"]:
             return self.unsupported(
                 horizon, "insufficient_context",
-                f"{observed} observed {horizon.step_minutes}-min steps in the history window; "
-                f"needs {cfg['min_observed_steps']}",
+                f"{observed} observed {horizon.step_minutes}-min steps of {self._unit} in the "
+                f"history window; needs {cfg['min_observed_steps']}",
             )  # fmt: skip
+        refusal = self._refuse(ctx, horizon)
+        if refusal is not None:
+            return refusal
         n = len(horizon.target_times)
         fc = self._backend().forecast(
-            ctx[None, :, :], prediction_length=n,
+            series[None, :, :], prediction_length=n,
             symmetric_averaging=cfg["symmetric_averaging"],
             clip_nonnegative=cfg["clip_nonnegative"],
         )  # fmt: skip
-        med = np.asarray(fc.median, dtype=float)[0]  # (2, n)
-        lat, lon = frame.to_latlon(med[0], med[1])
+        xy = self._positions(np.asarray(fc.median, dtype=float)[0], ctx, horizon.step_minutes)
+        lat, lon = frame.to_latlon(xy[0], xy[1])
         warnings = []
         age = history.as_of - last["observed_at"]
         if age > timedelta(minutes=STALE_WARNING_MINUTES):
             warnings.append(f"last report is {age.total_seconds() / 60:.0f} min older than as_of")
-        reach = float(np.nanmax(np.hypot(med[0], med[1]))) if n else 0.0
+        reach = float(np.nanmax(np.hypot(xy[0], xy[1]))) if n else 0.0
         if reach > FRAME_WARNING_M:
             warnings.append(
                 f"forecast reaches {reach / 1000:.0f} km from the frame centre "
                 f"(> {FRAME_WARNING_M / 1000:.0f} km: local-frame geometry degrades)"
             )
         return lat.tolist(), lon.tolist(), warnings
+
+    # T1-pos: the series is the position itself.
+    _unit = "position"
+
+    def _series(self, ctx: np.ndarray, step_minutes: int) -> np.ndarray:
+        return ctx
+
+    def _refuse(self, ctx: np.ndarray, horizon: ForecastHorizon):
+        return None
+
+    def _positions(self, median: np.ndarray, ctx: np.ndarray, step_minutes: int) -> np.ndarray:
+        return median
+
+
+def velocity_series(ctx: np.ndarray, step_minutes: int) -> np.ndarray:
+    """(2, T-1) east/north velocity, m/s, between consecutive context grid points; NaN where
+    either point is missing (so a gap never yields a velocity)."""
+    return np.diff(ctx, axis=1) / (step_minutes * 60.0)
+
+
+@dataclass
+class TimestralVel(TimestralPos):
+    """T1-vel (§5 T1): forecast the east/north velocity, then integrate it from the position at
+    as_of in the local frame (distances and bearings from the frame centre are exact; the path
+    is a sum of straight steps in the plane, mapped back with the exact inverse)."""
+
+    model_id: str = "timestral_vel_v1"
+
+    def __post_init__(self) -> None:
+        self.config = {
+            **self.config,
+            "representation": "T1-vel",
+            "series": "east/north velocity (m/s) between consecutive grid points",
+            "integration": "cumulative sum from the position at as_of, in the local frame",
+        }
+
+    def capabilities(self) -> ModelCapabilities:
+        return super().capabilities().model_copy(update={
+            "description": "Timestral-28M zero-shot on the vessel's own east/north velocity "
+            "(T1-vel), integrated from the position at as_of; median of the per-axis "
+            "quantiles. Knows no coastlines or lanes.",
+        })  # fmt: skip
+
+    _unit = "velocity"
+
+    def _series(self, ctx: np.ndarray, step_minutes: int) -> np.ndarray:
+        return velocity_series(ctx, step_minutes)
+
+    def _refuse(self, ctx: np.ndarray, horizon: ForecastHorizon):
+        if not np.isfinite(ctx[:, -1]).all():
+            return self.unsupported(
+                horizon, "stale_anchor",
+                "no report at or bracketing as_of: there is no position to integrate the "
+                "forecast velocity from",
+            )  # fmt: skip
+        return None
+
+    def _positions(self, median: np.ndarray, ctx: np.ndarray, step_minutes: int) -> np.ndarray:
+        return ctx[:, -1:] + np.cumsum(median * step_minutes * 60.0, axis=1)

@@ -111,3 +111,10 @@ _Conformal, Timestral and TrAISformer sections are added in Milestones 4–7._
   - Tests marked `timestral` (`uv run pytest -m timestral`) run the real checkpoint: determinism, direction, no state carried between forecasts on the shared backend, and invariance on the fixture.
 - **Runtime:** about 1.7 s for the first call on CPU (including the load). Per-forecast timing is in the benchmark record.
 - **Expectation (§5 T1):** it has no route knowledge, so it should behave roughly like a smoothed kinematic extrapolator. That is to be tested, not assumed.
+
+
+## Timestral zero-shot, velocity (`timestral_vel_v1`, §5 T1-vel)
+Same adapter, pins, context grid, flags and caveats as T1-pos. Two things differ:
+- **Series:** east/north velocity (m/s) between consecutive context grid points. It is missing wherever either point is missing, so a gap never yields a velocity. The series is one step shorter than the position grid.
+- **Positions:** the median velocity forecast is summed step by step from the position at `as_of` in the local AEQD frame, then mapped back with the exact inverse. Distances and bearings from the centre are exact; the path is a sum of straight steps in the plane.
+  - With no report at or bracketing `as_of`, there is nothing to integrate from, so it returns the typed error `stale_anchor` rather than guessing the missing interval. Benchmark cutoffs sit on a report, so this only happens through the API.

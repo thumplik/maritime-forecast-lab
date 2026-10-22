@@ -37,12 +37,14 @@ PARAMS = {
     "route_retrieval_v2": {"manifest": SYN_MANIFEST, "config": {"pool": "rolling"}},
     # A stand-in for the optional checkpoint: the adapter's context building is what can leak.
     "timestral_pos_v1": {"backend": LinearBackend()},
+    "timestral_vel_v1": {"backend": LinearBackend()},
 }
 FEW_REFERENCES = {"route_retrieval_v1", "route_retrieval_v2"}
 # T1 needs 6 observed grid steps (1 h at 10 min). Five of the seven cases have under 1 h of
 # fixture history, so those grids are correctly `insufficient_context`; the 1-min grid
-# forecasts every case. Measured: 54 of 126 comparisons are against an ok forecast.
-SHORT_CONTEXT_OK = {"timestral_pos_v1": 0.4}
+# forecasts every case. Measured for T1-pos: 54 of 126 comparisons are against an ok forecast.
+# T1-vel also needs a position at as_of (stale_anchor otherwise), so it forecasts fewer.
+SHORT_CONTEXT_OK = {"timestral_pos_v1": 0.4, "timestral_vel_v1": 0.3}
 
 CASES = [
     (MOVING, T0 + timedelta(minutes=60)),
@@ -222,8 +224,10 @@ def test_real_timestral_checkpoint_is_invariant(store, tmp_path):
 
     if not (ta.package_available() and ta.weights_present()):
         pytest.skip("timestral extra or weights not installed")
-    rep = check_invariance({"timestral_pos_v1": registry_factories()["timestral_pos_v1"]},
+    ids = ("timestral_pos_v1", "timestral_vel_v1")
+    rep = check_invariance({m: registry_factories()[m] for m in ids},
                            store, "syn", CASES, history_hours=3, workdir=tmp_path)  # fmt: skip
     assert rep.ok, rep.violations
     assert rep.vacuous == []
-    assert rep.ok_fraction("timestral_pos_v1") >= SHORT_CONTEXT_OK["timestral_pos_v1"]
+    for m in ids:
+        assert rep.ok_fraction(m) >= SHORT_CONTEXT_OK[m], (m, rep.ok_fraction(m))

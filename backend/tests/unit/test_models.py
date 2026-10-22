@@ -65,6 +65,7 @@ def test_registry():
         "route_retrieval_v1",
         "route_retrieval_v2",
         "timestral_pos_v1",
+        "timestral_vel_v1",
     ]
     assert get_model("persistence_v1").model_id == "persistence_v1"
     from maritime_forecast.models.registry import product_model_ids
@@ -79,6 +80,7 @@ def test_registry():
         "route_retrieval_v1",
         "route_retrieval_v2",
         "timestral_pos_v1",
+        "timestral_vel_v1",
     }  # fitted params; index; pretrained weights (external corpus)
     with pytest.raises(UnknownModel):
         get_model("oracle")

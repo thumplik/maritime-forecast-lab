@@ -94,6 +94,7 @@ def test_typed_errors_when_not_installed_or_context_too_short(monkeypatch):
 
 def test_optional_models_are_not_in_the_default_benchmark_set():
     assert "timestral_pos_v1" not in product_model_ids()
+    assert "timestral_vel_v1" not in product_model_ids()
     assert "persistence_v1" in product_model_ids()
 
 
@@ -131,3 +132,40 @@ def test_real_checkpoint_keeps_no_state_between_forecasts():
     first = model.predict(b, hz)
     model.predict(a, hz)
     assert model.predict(b, hz).points == first.points
+
+
+def test_velocity_forecast_integrates_from_the_position_at_as_of():
+    fake = LinearBackend()
+    model = get_model("timestral_vel_v1", ModelContext(params={"backend": fake}))
+    h = _history(range(0, 121, 5))  # 12 kn heading 225°
+    hz = ForecastHorizon(T0, 1, 10)
+    f = model.predict(h, hz)
+    assert f.status == "ok", f.error
+    assert fake.calls[0]["shape"] == (1, 2, 18)  # one fewer than the position grid
+    assert fake.calls[0]["clip_nonnegative"] is False
+    vel = ta.velocity_series(np.array([[0.0, 600.0, np.nan, 1800.0]] * 2), 10)
+    assert vel[0, 0] == pytest.approx(1.0) and np.isnan(vel[0, 1:]).all()  # gaps give none
+    last = h.last()
+    lat, lon = direct(last["latitude_deg"], last["longitude_deg"], 225.0, 12 * 1852)
+    assert f.points[-1].latitude_deg == pytest.approx(float(lat), abs=2e-3)
+    assert f.points[-1].longitude_deg == pytest.approx(float(lon), abs=2e-3)
+
+
+def test_velocity_refuses_without_a_position_at_as_of():
+    model = get_model("timestral_vel_v1", ModelContext(params={"backend": LinearBackend()}))
+    stale = _history(range(0, 121, 5), as_of=T0 + timedelta(minutes=25))
+    f = model.predict(stale, ForecastHorizon(stale.as_of, 1, 10))
+    assert f.status == "unsupported" and f.error.code == "stale_anchor"
+
+
+@pytest.mark.timestral
+def test_real_checkpoint_velocity_heads_south_west():
+    if not (ta.package_available() and ta.weights_present()):
+        pytest.skip("timestral extra or weights not installed")
+    f = get_model("timestral_vel_v1").predict(
+        _history(range(0, 181, 1)), ForecastHorizon(T0, 1, 10)
+    )
+    assert f.status == "ok", f.error
+    last = _history(range(0, 181, 1)).last()
+    assert f.points[-1].latitude_deg < last["latitude_deg"] - 0.05
+    assert f.points[-1].longitude_deg < last["longitude_deg"] - 0.05
