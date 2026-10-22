@@ -112,6 +112,20 @@ Ships in transit, July hold-out, median error in km (best baseline in brackets):
 - **The mask:** the navigable-water mask is OSM land minus water cells that training-period traffic actually used, because OpenStreetMap's land polygons treat the ship channel itself as land.
   - Its own error is measured on the true positions and reported in every cell (dashed line).
 
+### Calibrated uncertainty radii (Milestone 4, first slice)
+
+**What the radii are:**
+- Each forecast can carry a split-conformal radius: "the ship will be within *r* km of this point with 90% probability". It is fitted per model, horizon and stratum on a calibration window (Jun 23–30) that the models never trained on.
+- No per-axis marginal intervals are ever combined into a corridor.
+
+**Coverage on the July hold-out, P-known:**
+- 69 of 72 motion-level cells cover within ±3 points of 90%. Retrieval's 90% radius for a ship in transit is 12.7 km at 1 h (89.6% coverage), against 12.4 km for damped velocity.
+- At equal coverage, retrieval's radius discs are smaller than damped velocity's up to 12 h (529 vs 724 km² at 1 h).
+- **Retrieval's coverage slips through July** (90.1% → 86.8% at 1 h by the third week), because its reference voyages get older.
+- **P-unseen is not calibrated for underway traffic** (79–89% at a nominal 90%). Its calibration bucket is only 5% of the vessels.
+
+Details: [docs/benchmarks.md](docs/benchmarks.md).
+
 The success condition for every model is the same: **beat the best of persistence, constant velocity and damped velocity, per stratum, on paired held-out samples under P-known and P-unseen.** Retrieval meets it for ships in transit at every horizon under both protocols, and for all underway traffic up to 3–6 h. It does not meet it for long-horizon harbour traffic. For moored vessels, v2 only ties persistence.
 
 ## Roadmap
@@ -122,7 +136,7 @@ The success condition for every model is the same: **beat the best of persistenc
 | 1 | Contracts, data pipeline, read API, track explorer, CI | ✓ |
 | 2 | Baselines & the evaluator: paired benchmark, calibration, invariance, feasibility, benchmark API | ✓ |
 | 3 | Historical-route retrieval: kNN over train-period segments, aligned and continued along real routes ([failure review](docs/failure-review.md)); v2 holds moored ships; scored on the July hold-out | ✓ |
-| 4 | **Conformal uncertainty:** calibrated displacement radii per stratum | ← next |
+| 4 | **Conformal uncertainty:** calibrated displacement radii per stratum | ← *now* (radii + July coverage done; API and H3 bins next) |
 | 5 | Workbench UI: forecast comparison, truth overlay, benchmark dashboard | |
 | 6 | Timestral zero-shot adapter (position, velocity, velocity + retrieved route) | |
 | 7 | Research models: TrAISformer via the calibration paper's reimplementation | |

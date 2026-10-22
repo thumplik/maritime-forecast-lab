@@ -994,3 +994,54 @@ uv run --project backend python scripts/make_readme_figures.py
 - split-conformal displacement radii for persistence, damped velocity and v2, per horizon × stratum, fitted on the calibration split (Jun 23–30);
 - empirical coverage measured on the records of the two July runs above (no new July scoring), per stratum and per July week;
 - the API returns radii with their nominal level and calibration-set id.
+
+## 2026-10-21 — Milestone 4 slice 1: split-conformal radii, coverage on July
+
+**Milestone:** 4 — conformal uncertainty
+**Done:**
+- `evaluation/conformal.py`, `scripts/conformal.py`, and `run_benchmark --split calibration`.
+- Calibration-split benchmark runs for both protocols, followed by the radii and the July coverage analysis. Commits `950fa39`, `822563c`, `9baab70` and `7ce72c3`.
+- `provenance.git_sha` now marks untracked code and parameters as dirty. The previous check ignored them, so the first conformal outputs, made from untracked code, claimed clean `950fa39`. Those outputs are moved to `_superseded_*` and the analysis was re-run from clean `822563c`, with identical numbers.
+  - The July benchmark runs are unaffected: the tree was fully clean at `2757bd3` when they started.
+- `holdout.record_analysis`: each coverage analysis of a held-out run is appended to the ledger.
+
+**Leakage review (leakage-reviewer subagent):** no leakage. Radii are fitted only on calibration errors, and the coverage reading is legitimate. Fixed:
+1. Dirty-aware SHA (above). The conformal script now requires a clean tree.
+2. Calibration sizes (n, vessels) are reported, with a P-unseen header saying its radii come from a 5% vessel bucket.
+3. Model failures and records with no radius are reported beside coverage.
+4. The headline count uses non-overlapping cells. "CI∋level" is added as a descriptive column.
+5. Analyses are never overwritten and are recorded in the ledger.
+6. Model versions are compared as well as configs.
+7. More tests.
+8. The back-filled class caveat is stated.
+
+Not adopted, because they would be chosen after seeing July coverage:
+- a per-stratum minimum-vessels rule;
+- a vessel condition on the verdict.
+
+Both are reported descriptively instead.
+
+**Commands run:**
+```bash
+uv run --project backend python scripts/run_benchmark.py --protocol P-known  --dataset-id noaa_us_gulf_2023-06-07 --split calibration --no-geojson   # 1,468 s
+uv run --project backend python scripts/run_benchmark.py --protocol P-unseen --dataset-id noaa_us_gulf_2023-06-07 --split calibration --no-geojson   # 215 s
+uv run --project backend python scripts/conformal.py --protocol P-known && uv run --project backend python scripts/conformal.py --protocol P-unseen
+make test   # 291 passed
+```
+
+**Results** (`docs/benchmarks.md`):
+- **P-known:** 69 of 72 motion-level cells within ±3% at 90%. The misses are v1 on stationary vessels at 1–3 h.
+  - v2 transiting coverage is 0.884–0.896, with smaller areas than damped velocity up to 12 h.
+  - v2 underway coverage drifts from 0.90 to 0.87 over July as the frozen pool ages.
+- **P-unseen:** 50 of 72. Underway under-covers (0.79–0.89) because the calibration bucket is 5% of vessels.
+
+**Pre-registration for slice 2 (H3 Mondrian binning), recorded before it is built or any H3 result is seen:**
+- **Bins:** motion state × H3 cell (resolution 5) of the cutoff report's position.
+- **Own radius:** a bin gets one with at least 30 calibration errors. Otherwise it uses the slice-1 chain (motion:class, then motion:ALL, then ALL).
+- **Same as slice 1:** levels (80/90/95%) and verdict (±0.03 on n ≥ 200).
+- **Adopted only if** July coverage at 90% stays within tolerance on at least as many motion-level cells as slice 1, and the mean area at 90% is smaller for v2 on underway traffic.
+- **No retuning:** no other resolution or threshold is tried on July.
+
+**Next step:**
+1. API returns radii with nominal level and calibration-set id. A radius is returned only at target times that coincide with a fitted horizon; other times get none.
+2. Slice 2 (H3), then `/milestone-check` for Milestone 4.

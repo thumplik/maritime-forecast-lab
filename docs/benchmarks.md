@@ -335,3 +335,39 @@ Dataset `noaa_us_gulf_2023-06-07`, manifests `splits-v2`, **split = test (Jul 2�
   - Best baseline: CV 4.28 / 24.54, then damped 38.15 / 35.95 / 36.06.
 - **Feasibility, underway pooled, P-known, 1 → 24 h:** a point on land for v2 8.2% → 29.6%, damped 24.2% → 26.9%, CV 58.4% → 83.7%. The mask's own error is 0.5% → 1.6%.
 - **P-unseen:** its July test vessels are the same vessels as in June (same hash buckets), so it is fresh in time, not in vessels.
+
+## 2026-10-21 — Conformal displacement radii (Milestone 4 slice 1), coverage on the July hold-out
+
+**Method** (`evaluation/conformal.py`, `scripts/conformal.py`):
+- **Radii:** split-conformal, per model × horizon × level × stratum (motion:class, falling back to motion:ALL and then ALL below 30 calibration errors).
+- **Fitted on the calibration split** (Jun 23–30) of `noaa_us_gulf_2023-06-07`. It is disjoint from the retrieval index period (train) and from the test period.
+- **Coverage** is read from the stored records of the two July hold-out runs. Nothing is re-scored, and each analysis is recorded in the test-access ledger.
+- **Fixed before any test coverage was seen:** the fallback rule, the levels (80/90/95%) and the verdict (calibrated = |coverage − level| ≤ 0.03 on cells with n ≥ 200).
+- **Caveat:** strata use NOAA back-filled vessel class.
+
+| | P-known | P-unseen |
+|---|---|---|
+| Calibration run | `P-known_noaa_us_gulf_2023-06-07_calibration_20261022T005126Z` (22,639 cutoffs) | `P-unseen_noaa_us_gulf_2023-06-07_calibration_20261022T011557Z` (1,084 cutoffs) |
+| files.json SHA-256 | `41f550a48e957e50bff3017d110a0bcf4e09a34d2fda69833c6c1dad8874f25f` | `322af87a5c19ef7c70fa68a5980a96134f3504bf7e893ba61cb8ae2d0bc468c0` |
+| Radii (calibration_set_id = the calibration run) | `data/model_params/conformal/P-known__noaa_us_gulf_2023-06-07.json` (code `822563c`) | `…/P-unseen__noaa_us_gulf_2023-06-07.json` |
+| Coverage analysis | `data/runs/conformal/P-known_…_20261021T213109Z/20261022T012930Z/` | `…/P-unseen_…_20261021T225730Z/20261022T012934Z/` |
+| Motion-level cells (underway:ALL, stationary:ALL) within ±3% at 90%, all models | **69 / 72** | **50 / 72** |
+
+**P-known, 90% radii, July coverage** [vessel 95% CI], median radius, mean disc area:
+
+| | v2, 1 h | v2, 6 h | v2, 24 h | damped, 1 h | damped, 24 h |
+|---|---|---|---|---|---|
+| Transiting | 0.896 [0.884, 0.908], 12.7 km, 529 km² | 0.886, 91 km | 0.884, 241 km, 182,520 km² | 0.901, 12.4 km, 724 km² | 0.881, 145 km, 155,028 km² |
+| Underway pooled | 0.881 [0.875, 0.888], 7.6 km | 0.875 | 0.900 | 0.911 | 0.908 |
+| Stationary | 0.890 (= persistence) | 0.892 | 0.894 | 0.884 | 0.893 |
+
+- **The 3 P-known misses:** `route_retrieval_v1` on stationary vessels at 1–3 h (0.858–0.861). Its false departures make the errors heavy-tailed and non-exchangeable.
+- **Drift through July:** v2's underway 90% coverage drifts down. At 1 h it is 0.901 → 0.888 → 0.868 → 0.875 over July weeks 0–3; at 6 h, 0.896 → 0.859 at week 2. Retrieval's frozen pool gets older, as predicted (`evaluation-protocol.md`). The kinematic baselines are steady near 0.91.
+- **Area:** v2's radii are smaller than damped velocity's for transiting ships up to 12 h, at equal coverage (529 vs 724 km² at 1 h; 98,923 vs 130,365 km² at 12 h). They are larger at 24 h.
+
+**P-unseen: not calibrated for underway traffic.**
+- The calibration bucket is 5% of vessels (78 underway, 87 stationary vessels).
+- Underway 90% coverage is 0.79–0.89. For example, v2 underway pooled is 0.832–0.847 at 1–6 h, and persistence in transit is 0.79–0.83.
+- Stationary over-covers at 12–24 h (0.93–0.94).
+- 21–41% of radii fall back to pooled strata.
+- The radii are deliberately **not** refitted on the P-known calibration run, which contains P-unseen test vessels.

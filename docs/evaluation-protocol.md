@@ -180,6 +180,28 @@ Tracks are interpolated only between reports of one segment, whose internal gaps
   - The invariance harness (post-cutoff perturbations) passes on synthetic and real cutoffs.
   - The benchmark runner refuses rolling or truncated pools (`diagnostic_only`).
 
+## Conformal radii (§5 U1, Milestone 4)
+
+`evaluation/conformal.py` and `scripts/conformal.py`.
+
+**Radii:**
+- The radius for (model, horizon, level, stratum) is the ⌈(n+1)·level⌉-th smallest displacement error of that model on a **calibration-split** benchmark run (Jun 23–30 in the June+July manifests). It is undefined if n is too small.
+- Strata are motion state × vessel class (back-filled). A stratum with fewer than 30 errors uses motion:ALL, then ALL. The stratum actually used, and the fallback share, are reported.
+
+**Coverage:**
+- Measured on a **held-out run's stored records**. No model is re-scored. Both runs must share the split manifest, model versions and configs, and the outputs come from a clean tree.
+- Each analysis is appended to the test-access ledger. Analysis outputs are written under a new timestamped directory and never overwritten.
+- Coverage is over forecasts the model made. Records with truth but no forecast are reported beside it (`failed`).
+- CIs resample vessels. Area is the mean disc area of the applied radius.
+
+**Verdict** (fixed before any test coverage was seen):
+- Calibrated means |coverage − level| ≤ 0.03, judged on cells with n ≥ 200.
+- "CI∋level" is reported as a descriptive extra.
+
+**Caveats:**
+- The guarantee assumes exchangeability. One vessel's cutoffs are correlated, and calibration and test differ (retrieval's frozen pool is 6–14 days old at calibration and 15–44 days old in July). So July coverage per stratum and per week is the evidence.
+- Radii exist only at the fitted horizons (1, 2, 3, 6, 12, 24 h).
+
 ## Calibration (§6.6)
 
 `make calibrate` → paper-compatible constant velocity on P-paper vs the published table, ±10% tolerance. Assumptions made in reconstructing P-paper are listed in [coverage-audit.md](coverage-audit.md#calibration).
