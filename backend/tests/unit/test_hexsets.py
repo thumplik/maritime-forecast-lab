@@ -89,3 +89,18 @@ def test_level_set_is_exact_across_thresholds(tau_scale):
     la, lo = hx.cell_centres(brute)
     x, y = FRAME.to_xy(la, lo)
     assert got == {c for c, d in zip(brute, m.density(x, y), strict=True) if d >= tau}
+
+
+@pytest.mark.parametrize("res,radius_m", [(7, 100_000.0), (6, 300_000.0), (6, 400_000.0)])
+def test_disk_contains_every_centre_within_large_radii(res, radius_m):
+    """Reference: a much larger k-ring, filtered by centre distance (not _disk itself)."""
+    import h3
+
+    lat, lon = 29.3, -94.7
+    edge = h3.average_hexagon_edge_length(res, "m")
+    ref = list(h3.grid_disk(hx.cell_of(lat, lon, res), int(3 * radius_m / edge)))
+    la, lo = hx.cell_centres(ref)
+    x, y = LocalFrame(lat, lon).to_xy(la, lo)
+    want = {c for c, d in zip(ref, np.hypot(x, y), strict=True) if d <= radius_m}
+    assert want <= set(hx._disk(lat, lon, radius_m, res))
+    assert set(hx.disc_cells(lat, lon, radius_m, res)) == want

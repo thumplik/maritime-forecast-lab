@@ -53,13 +53,23 @@ def cell_centres(cells: list[str]) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _disk(lat: float, lon: float, radius_m: float, res: int) -> list[str]:
-    """Cells of an H3 disk around a point large enough to contain every cell centre within
-    `radius_m` of it (a superset; callers filter by distance or density)."""
+    """Cells of an H3 disk around a point containing every cell whose centre lies within
+    `radius_m` of it (a superset; callers filter by distance or density). The ring count is
+    grown until every centre on the outer ring is farther than the radius: a k-ring's nearest
+    boundary is only ~1.5 k edge lengths away and edges vary with latitude and position."""
     import h3
 
+    centre = cell_of(lat, lon, res)
     edge = h3.average_hexagon_edge_length(res, "m")
-    k = int(math.ceil(radius_m / (math.sqrt(3) * edge))) + 1
-    return list(h3.grid_disk(cell_of(lat, lon, res), k))
+    k = int(math.ceil(radius_m / (1.5 * edge))) + 1
+    frame = LocalFrame(lat, lon)
+    while True:
+        ring = list(h3.grid_ring(centre, k))
+        la, lo = cell_centres(ring)
+        x, y = frame.to_xy(la, lo)
+        if np.hypot(x, y).min() > radius_m:
+            return list(h3.grid_disk(centre, k))
+        k += 1
 
 
 # -- disc baseline -------------------------------------------------------------------------
