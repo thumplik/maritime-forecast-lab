@@ -1483,7 +1483,7 @@ No July scoring until one design is frozen on dev.
 
 **Commands run:**
 ```bash
-uv run --project backend pytest -q && uv run --project backend pytest -q -m timestral
+make test && (cd backend && uv run pytest -q -m timestral)   # 307 passed; 4 passed
 uv run --project backend python scripts/run_benchmark.py --protocol P-known --dataset-id noaa_us_gulf_2023-06-07 --split dev --history-hours 24 \
   --no-geojson --models persistence_v1 constant_velocity_v1 damped_velocity_v1 route_retrieval_v2 timestral_pos_v1 timestral_vel_v1
 ```
