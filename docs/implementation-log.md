@@ -1594,3 +1594,29 @@ uv run --project backend python scripts/hexsets_dev.py --run P-known_noaa_us_gul
 1. Stabilise the bandwidth: choose it on pooled underway traffic, or scale it with the candidate spread. Re-check transiting on dev.
 2. Pre-register the July comparison against the disc: calibration window Jun 23–30, a fixed level correction, and the adoption rule from §6.7.
 3. In parallel, serve sets from `POST /forecasts` and draw them on the map.
+
+## 2026-10-22 — Milestone 7: H1 design frozen; July comparison PRE-REGISTERED (before any July look)
+
+**Stabilised bandwidth (dev):**
+- The rule is h = max(500 m, c × weighted candidate spread). One c per horizon is chosen on the pooled underway selection third and reused for transiting.
+- Run `data/runs/hexsets/<dev run>/20261022T200752Z`, at 90%.
+  - Pooled H1/disc area: 0.18–0.25.
+  - Transiting: now stable at 0.31–0.40 at every horizon. Before, it ranged from 0.15 to 0.56 and was 1.12 at 93%.
+  - H1 coverage: pooled 0.86–0.89, transiting 0.79–0.88. The disc: 0.87–0.92 and 0.84–0.91.
+  - c sits at the grid's lowest value (0.1) at 4 of 5 horizons, so many bandwidths are at the 500 m floor. Recorded as a limit; not tuned further.
+
+**Frozen design:** `data/model_params/hexsets/h1_design.json`
+- K = 50, ε = 0.05, the spread rule, c = {1 h: 0.1, 2 h: 0.1, 3 h: 0.35, 6 h: 0.1, 12 h: 0.1, 24 h: 0.1}. The 24 h value carries the 12 h one: 24 h cannot be calibrated on dev.
+- Resolution: res 7 up to 3 h, res 6 beyond.
+- Broad scale: max(disc radius / 2, 1 km).
+- Central point: retrieval v2's scored prediction.
+
+**Pre-registered July comparison (P-known; written before `scripts/hexsets_holdout.py` reads any test record):**
+1. **Fit:** on the calibration-split run `P-known_noaa_us_gulf_2023-06-07_calibration_20261022T005126Z` (Jun 23–30), on all paired underway v2 rows. Per stratum (underway:ALL, underway:TRANSITING) × horizon (1/2/3/6/12/24 h), fit the disc radius and the H1 density threshold at **90% nominal. No level correction.**
+2. **Test:** the July run `P-known_noaa_us_gulf_2023-06-07_20261021T213109Z`, scored once. The analysis is written to the test-access ledger before reading (`hexsets_h1_started`).
+3. **Within tolerance:** a cell counts if |coverage − 0.90| ≤ 0.03 with n ≥ 200 (the U1 tolerance).
+4. **Adopted (H1 replaces the disc as the served set)** only if both hold:
+   - (a) H1 is within tolerance on at least as many cells as the disc;
+   - (b) H1's mean area is smaller than the disc's at ≥ 4 of the 6 underway:ALL horizons.
+5. **Reported either way:** per-cell coverage and area with vessel-bootstrap CIs, the paired area ratio, and retrieval re-run failures. Nothing else is tried on July: no other c, level, K or resolution.
+6. **P-unseen** is not part of this comparison (its calibration bucket is 5% of vessels; U1 already showed it under-powered).

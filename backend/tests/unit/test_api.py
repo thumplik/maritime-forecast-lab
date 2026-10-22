@@ -517,3 +517,14 @@ def test_prefix_cuts_points_and_candidate_paths():
     # a reference that runs out after the last kept target time covers all of them -> null
     assert [t.reference_ends_at for t in g.trajectories] == [ts[1], None, None]
     assert _prefix(f, 6, 1.0) is f
+
+
+def test_hex_sets_are_refused_with_a_reason_when_none_are_fitted(client):
+    r = client.post("/forecasts", json=_req(model_ids=["route_retrieval_v2", "persistence_v1"]))
+    assert r.status_code == 200, r.text
+    by = {f["model_id"]: f for f in r.json()["forecasts"]}
+    assert by["persistence_v1"]["hex_sets"] == []  # only retrieval carries sets
+    v2 = by["route_retrieval_v2"]
+    if v2["status"] == "ok":  # (this synthetic store has no manifest, so v2 is unsupported)
+        assert any(w.startswith("no hex sets:") for w in v2["warnings"])
+    assert v2["hex_sets"] == []

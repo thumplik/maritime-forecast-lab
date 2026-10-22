@@ -35,6 +35,9 @@ class ForecastRequest(BaseModel):
         "benchmark run, which predicts once at its longest horizon). Default: the calibration "
         "run's when the request matches its step and history, else horizon_hours",
     )  # fmt: skip
+    hex_sets: bool = Field(
+        True, description="Attach calibrated hex prediction sets to route_retrieval_v2 forecasts"
+    )
     conformal_level: Literal[0.8, 0.9, 0.95] | None = Field(
         0.9, description="Attach split-conformal radii at this nominal level (null: none)"
     )
@@ -140,6 +143,25 @@ class ModelError(BaseModel):
     message: str
 
 
+class HexSet(BaseModel):
+    """A calibrated hex prediction set at one target time (build plan v0.4 §5 H): the H3 cells
+    holding the true position with the nominal probability. Split-conformal on the calibration
+    window: a MARGINAL coverage claim over the calibration population (underway vessels in the
+    cutoff region, per stratum and horizon), not a per-forecast probability."""
+
+    kind: Literal["h1_hex_set"] = "h1_hex_set"
+    nominal_level: float
+    calibration_set_id: str
+    resolution: int = Field(description="H3 resolution of every cell")
+    cells: list[str]
+    area_km2: float
+    stratum: str = Field(description="Calibration stratum (vessel class is NOAA back-filled)")
+    calibration_n: int
+    calibration_vessels: int
+    n_candidates: int = Field(description="Retrieved continuations behind the density")
+    boundary: dict | None = Field(None, description="GeoJSON MultiPolygon outline of the cells")
+
+
 class ModelForecast(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -161,6 +183,10 @@ class ModelForecast(BaseModel):
         None, description="The candidate trajectory `points` were taken from, if any"
     )
     uncertainty: ConformalRegion | None = None
+    hex_sets: list[HexSet | None] = Field(
+        default_factory=list,
+        description="Per target time: the calibrated hex set, or null where none was fitted",
+    )
     runtime_ms: float | None = None
     warnings: list[str] = Field(default_factory=list)
 

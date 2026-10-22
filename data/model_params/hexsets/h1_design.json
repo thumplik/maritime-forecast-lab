@@ -1,0 +1,15 @@
+{
+ "kind": "h1_design",
+ "frozen_at": "2026-10-22",
+ "description": "H1 retrieval-ensemble hex sets (build plan v0.4 §5 H). Frozen on the dev window before any July look.",
+ "evidence": "data/runs/hexsets/P-known_noaa_us_gulf_2023-06-07_dev_20261022T175118Z/20261022T200752Z (rule spread, level 0.9)",
+ "k": 50,
+ "eps": 0.05,
+ "bandwidth_rule": "h = max(500 m, c * weighted candidate spread)",
+ "min_bandwidth_m": 500.0,
+ "c_by_horizon": {"1": 0.1, "2": 0.1, "3": 0.35, "6": 0.1, "12": 0.1, "24": 0.1},
+ "c_note": "chosen per horizon on pooled underway traffic (dev selection third); 24 h could not be calibrated on dev and carries the 12 h value",
+ "resolution_rule": "H3 res 7 up to 3 h, res 6 beyond",
+ "broad_scale": "max(disc radius / 2, 1 km), disc radius fitted on the same calibration rows",
+ "central_point": "route_retrieval_v2's scored prediction"
+}

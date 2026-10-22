@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import timedelta
 
 import numpy as np
 
@@ -210,3 +211,44 @@ def h1_mixture(frame: LocalFrame, lat: np.ndarray, lon: np.ndarray, w: np.ndarra
     xy = np.column_stack([x, y]) if use.any() else np.zeros((0, 2))
     ww = np.asarray(w, float)[use]
     return Mixture(xy, ww, h1_bandwidth(xy, ww, c), (0.0, 0.0), broad_m, eps)
+
+
+# -- serving (POST /forecasts) ----------------------------------------------------------------
+def is_transiting(reports, min_mean_sog_kn: float = 2.0, min_sog_kn: float = 0.5) -> bool:
+    """The sampler's transiting rule (data.cutoffs.transiting_expr) on a causal history:
+    cargo/tanker/passenger, trailing-30-min mean SOG >= 2 kn and no report below 0.5 kn."""
+    import polars as pl
+
+    from maritime_forecast.data.cutoffs import TRANSITING_CLASSES
+
+    if not reports.height:
+        return False
+    last = reports.row(-1, named=True)
+    if last.get("vessel_class") not in TRANSITING_CLASSES:
+        return False
+    sog = reports.filter(
+        pl.col("observed_at") >= last["observed_at"] - timedelta(minutes=30)
+    )["sog_knots"].drop_nulls()  # fmt: skip
+    if not sog.len():
+        return False
+    return float(sog.mean()) >= min_mean_sog_kn and float(sog.min()) >= min_sog_kn
+
+
+def h1_set(cell: dict, central_lat: float, central_lon: float, lat: np.ndarray, lon: np.ndarray,
+           w: np.ndarray) -> dict:  # fmt: skip
+    """The calibrated H1 set at one target time from its fitted cell (stratum x horizon)."""
+    import h3
+
+    frame = LocalFrame(central_lat, central_lon)
+    mix = h1_mixture(frame, lat, lon, w, cell["c"], cell["broad_m"])
+    cells = level_set_cells(mix, frame, cell["tau"], cell["res"])
+    return {
+        "resolution": cell["res"],
+        "cells": cells,
+        "area_km2": len(cells) * cell_area_km2(cell["res"]),
+        "stratum": cell["stratum"],
+        "calibration_n": cell["n"],
+        "calibration_vessels": cell["n_vessels"],
+        "n_candidates": len(mix.xy),
+        "boundary": h3.cells_to_geo(cells) if cells else None,
+    }

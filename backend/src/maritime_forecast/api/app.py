@@ -19,6 +19,7 @@ from importlib.metadata import version
 from pathlib import Path
 from typing import Annotated, Literal
 
+import numpy as np
 from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi import Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
@@ -56,7 +57,7 @@ from maritime_forecast.data.segment import (
     gap_segments,
     segments_and_gaps,
 )
-from maritime_forecast.evaluation import conformal
+from maritime_forecast.evaluation import conformal, hexsets
 from maritime_forecast.evaluation.forecast_eval import evaluate_forecast
 from maritime_forecast.evaluation.holdout import config_sha, is_holdout, touches_test
 from maritime_forecast.evaluation.runner import BenchmarkConfig, benchmark_context, preflight
@@ -64,6 +65,8 @@ from maritime_forecast.evaluation.splits import HOLDOUT_MANIFEST_VERSION
 from maritime_forecast.geo.navigable_mask import MaskMismatchError, load_navigable_mask
 from maritime_forecast.models.base import ForecastHorizon, ModelContext, history_from_store
 from maritime_forecast.models.registry import get_model, model_ids
+from maritime_forecast.models.route_retrieval import V2 as V2_VARIANT
+from maritime_forecast.models.route_retrieval import RouteRetrieval
 from maritime_forecast.provenance import git_sha
 from maritime_forecast.schemas.dataset import DatasetManifest
 from maritime_forecast.schemas.forecast import (
@@ -72,6 +75,7 @@ from maritime_forecast.schemas.forecast import (
     ForecastEvaluation,
     ForecastRequest,
     ForecastResponse,
+    HexSet,
     ModelForecast,
 )
 from maritime_forecast.schemas.manifest import SplitManifest
@@ -99,6 +103,8 @@ class ApiSettings:
     deployment_protocol: str = "P-known"
     # Split-conformal radii per (protocol, dataset), fitted on the calibration split.
     conformal_dir: Path = DATA_DIR / "model_params" / "conformal"
+    # Calibrated H1 hex-set parameters (Milestone 7), fitted on the calibration split.
+    hexsets_dir: Path = DATA_DIR / "model_params" / "hexsets"
     forecast_cache_size: int = 256
     # Truth for POST /forecasts/evaluation: the benchmark's bracketing rule (§6.1 step 4).
     max_bracket_gap_minutes: float = 30.0
@@ -436,6 +442,85 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         raw = p.read_bytes()
         return json.loads(raw), hashlib.sha256(raw).hexdigest()
 
+    def _hex_file(dataset_id: str) -> tuple[dict | None, str | None]:
+        """The served H1 hex-set parameters and their sha256, read once per request."""
+        p = settings.hexsets_dir / f"{settings.deployment_protocol}__{dataset_id}.json"
+        if not p.exists():
+            return None, None
+        raw = p.read_bytes()
+        return json.loads(raw), hashlib.sha256(raw).hexdigest()
+
+    def _with_hexsets(req, mctx, history, horizon, forecasts, hp):
+        """Attach calibrated H1 hex sets (Milestone 7) to the route_retrieval_v2 forecast, at
+        the target times whose lead is a fitted horizon; or say why not."""
+        idx = next((i for i, f in enumerate(forecasts)
+                    if f.model_id == "route_retrieval_v2" and f.status == "ok"), None)  # fmt: skip
+        if not req.hex_sets or idx is None:
+            return forecasts
+        f = forecasts[idx]
+
+        def refuse(why):
+            out = list(forecasts)
+            out[idx] = f.model_copy(update={"warnings": [*f.warnings, f"no hex sets: {why}"]})
+            return out
+
+        if hp is None:
+            return refuse(f"none fitted for {settings.deployment_protocol} on {req.dataset_id}")
+        if hp["manifest_sha256"] != mctx.manifest_sha256:
+            return refuse("hex sets were fitted for a different split manifest")
+        v2 = get_model("route_retrieval_v2", mctx)
+        fitted_cfg = config_sha({**v2.config, "k": hp["design"]["k"]})
+        if (hp["retrieval"]["model_version"] != f.model_version
+                or hp["retrieval"]["config_sha256"] != fitted_cfg):  # fmt: skip
+            return refuse("hex sets were fitted for a different route_retrieval_v2")
+        creq = hp["request"]
+        predicted = f.predicted_horizon_hours or req.horizon_hours
+        if ((req.step_minutes, req.history_hours, predicted)
+                != (creq["step_minutes"], creq["history_hours"], creq["horizon_h"])):  # fmt: skip
+            return refuse("the request differs from the calibration run's (step, history, "
+                          "predicted horizon)")  # fmt: skip
+        if history.as_of < datetime.fromisoformat(hp["label_reach_end"]):
+            return refuse("as_of is before the calibration labels' reach")
+        why = conformal.calibration_like(history.reports, history.as_of, req.history_hours,
+                                         default_region("cutoff_region"))  # fmt: skip
+        if why:
+            return refuse(f"the forecast does not resemble the calibration samples ({why})")
+        if conformal.motion_state(history.reports) != "underway":
+            return refuse("hex sets are calibrated for underway vessels only")
+        stratum = ("underway:TRANSITING" if hexsets.is_transiting(history.reports)
+                   else "underway:ALL")  # fmt: skip
+        cells = {c["horizon_h"]: c for c in hp["cells"] if c["stratum"] == stratum}
+        if not cells:
+            return refuse(f"no fitted cells for {stratum}")
+        k_model = RouteRetrieval.from_context(
+            ModelContext(mctx.store, mctx.dataset_id, mctx.protocol, mctx.manifest_sha256,
+                         params={"config": {"k": hp["design"]["k"]}}), V2_VARIANT)  # fmt: skip
+        cf = k_model.predict(history, ForecastHorizon(history.as_of, creq["horizon_h"],
+                                                      req.step_minutes))  # fmt: skip
+        if cf.status != "ok" or not cf.trajectories:
+            return refuse("retrieval found no candidates for the density")
+        sets = []
+        for i, t in enumerate(horizon.target_times):
+            lead = (t - history.as_of).total_seconds() / 3600
+            cell = next((c for h, c in cells.items() if abs(h - lead) < 1e-6), None)
+            if cell is None:
+                sets.append(None)
+                continue
+            j = cf.target_times.index(t)
+            keep = [tr for tr in cf.trajectories
+                    if tr.reference_ends_at is None or t <= tr.reference_ends_at]  # fmt: skip
+            got = hexsets.h1_set(
+                cell, f.points[i].latitude_deg, f.points[i].longitude_deg,
+                np.array([tr.points[j].latitude_deg for tr in keep]),
+                np.array([tr.points[j].longitude_deg for tr in keep]),
+                np.array([tr.similarity or 0.0 for tr in keep]),
+            )  # fmt: skip
+            sets.append(HexSet(nominal_level=cell["level"],
+                               calibration_set_id=hp["calibration_set_id"], **got))  # fmt: skip
+        out = list(forecasts)
+        out[idx] = f.model_copy(update={"hex_sets": sets})
+        return out
+
     def _with_radii(req, mctx, history, horizon, forecasts, params):
         """Attach split-conformal radii (Milestone 4) to every ok forecast, or say why not."""
         if req.conformal_level is None:
@@ -506,6 +591,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         built = {m: get_model(m, ctx) for m in req.model_ids}
         data_version = _data_version(settings, store, req.dataset_id)
         params, radii_sha = _radii_file(req.dataset_id)
+        hex_params, hex_sha = _hex_file(req.dataset_id)
         key_basis = json.dumps(
             {
                 "request": req.model_dump(mode="json", exclude={"show_ground_truth"}),
@@ -516,6 +602,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
                 "data_version": data_version,
                 "code": app.state.ctx.git_sha,
                 "radii": radii_sha,
+                "hex_sets": hex_sha,
                 "manifest": ctx.manifest_sha256,
             },
             sort_keys=True,
@@ -550,22 +637,29 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
                 "motion_state": conformal.motion_state(history.reports),
                 "vessel_class": conformal.last_vessel_class(history.reports) if times else None,
             },
-            forecasts=_with_radii(
+            forecasts=_with_hexsets(
                 req,
                 ctx,
                 history,
                 horizon,
-                [
-                    _prefix(
-                        built[m].predict(
-                            history, ForecastHorizon(as_of, predict_h[m], req.step_minutes)
-                        ),
-                        n_steps,
-                        predict_h[m],
-                    )
-                    for m in req.model_ids
-                ],
-                params,
+                _with_radii(
+                    req,
+                    ctx,
+                    history,
+                    horizon,
+                    [
+                        _prefix(
+                            built[m].predict(
+                                history, ForecastHorizon(as_of, predict_h[m], req.step_minutes)
+                            ),
+                            n_steps,
+                            predict_h[m],
+                        )
+                        for m in req.model_ids
+                    ],
+                    params,
+                ),
+                hex_params,
             ),
         )
         cache[forecast_id] = resp  # request-independent: no per-request warnings inside

@@ -894,6 +894,12 @@ export interface components {
             /** Dataset Id */
             dataset_id: string;
             /**
+             * Hex Sets
+             * @description Attach calibrated hex prediction sets to route_retrieval_v2 forecasts
+             * @default true
+             */
+            hex_sets: boolean;
+            /**
              * History Hours
              * @default 24
              */
@@ -995,6 +1001,55 @@ export interface components {
             /** Version */
             version: string;
         };
+        /**
+         * HexSet
+         * @description A calibrated hex prediction set at one target time (build plan v0.4 §5 H): the H3 cells
+         *     holding the true position with the nominal probability. Split-conformal on the calibration
+         *     window: a MARGINAL coverage claim over the calibration population (underway vessels in the
+         *     cutoff region, per stratum and horizon), not a per-forecast probability.
+         */
+        HexSet: {
+            /** Area Km2 */
+            area_km2: number;
+            /**
+             * Boundary
+             * @description GeoJSON MultiPolygon outline of the cells
+             */
+            boundary?: {
+                [key: string]: unknown;
+            } | null;
+            /** Calibration N */
+            calibration_n: number;
+            /** Calibration Set Id */
+            calibration_set_id: string;
+            /** Calibration Vessels */
+            calibration_vessels: number;
+            /** Cells */
+            cells: string[];
+            /**
+             * Kind
+             * @default h1_hex_set
+             * @constant
+             */
+            kind: "h1_hex_set";
+            /**
+             * N Candidates
+             * @description Retrieved continuations behind the density
+             */
+            n_candidates: number;
+            /** Nominal Level */
+            nominal_level: number;
+            /**
+             * Resolution
+             * @description H3 resolution of every cell
+             */
+            resolution: number;
+            /**
+             * Stratum
+             * @description Calibration stratum (vessel class is NOAA back-filled)
+             */
+            stratum: string;
+        };
         /** HorizonScore */
         HorizonScore: {
             /** Along Track M */
@@ -1091,6 +1146,11 @@ export interface components {
                 [key: string]: unknown;
             };
             error?: components["schemas"]["ModelError"] | null;
+            /**
+             * Hex Sets
+             * @description Per target time: the calibrated hex set, or null where none was fitted
+             */
+            hex_sets?: (components["schemas"]["HexSet"] | null)[];
             /** Model Id */
             model_id: string;
             /**

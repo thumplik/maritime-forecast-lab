@@ -117,3 +117,34 @@ def test_h1_bandwidth_scales_with_candidate_spread():
     m = hx.h1_mixture(FRAME, la, lo, np.array([1.0, 0.0, 1.0]), 0.5, 20000.0)
     assert len(m.xy) == 2 and m.h >= hx.H1_MIN_BANDWIDTH_M  # zero weight is not a candidate
     assert len(hx.h1_mixture(FRAME, la[:0], lo[:0], w[:0], 0.5, 20000.0).xy) == 0
+
+
+def _reports(sogs, cls="cargo"):
+    from datetime import UTC, datetime, timedelta
+
+    import polars as pl
+
+    t0 = datetime(2023, 6, 1, 12, tzinfo=UTC)
+    n = len(sogs)
+    return pl.DataFrame({"observed_at": [t0 - timedelta(minutes=5 * (n - 1 - i)) for i in range(n)],
+                         "sog_knots": sogs, "vessel_class": [cls] * n})  # fmt: skip
+
+
+def test_is_transiting_follows_the_sampler_rule():
+    assert hx.is_transiting(_reports([10.0] * 8))
+    assert not hx.is_transiting(_reports([10.0] * 8, cls="tug_tow"))  # not a transiting class
+    assert not hx.is_transiting(_reports([10.0] * 6 + [0.3, 10.0]))  # a stop in the last 30 min
+    assert hx.is_transiting(_reports([0.0] + [10.0] * 7))  # the stop is older than 30 min
+    assert not hx.is_transiting(_reports([1.5] * 8))  # too slow
+
+
+def test_h1_set_returns_cells_area_and_outline():
+    cell = {"c": 0.5, "broad_m": 20000.0, "tau": 1e-9, "res": 6, "stratum": "underway:ALL",
+            "n": 300, "n_vessels": 120}  # fmt: skip
+    la, lo = FRAME.to_latlon(np.array([0.0, 5000.0]), np.array([0.0, 0.0]))
+    got = hx.h1_set(cell, LAT0, LON0, la, lo, np.array([1.0, 1.0]))
+    assert got["cells"] and got["area_km2"] == pytest.approx(
+        len(got["cells"]) * hx.cell_area_km2(6)
+    )
+    assert got["boundary"]["type"] in ("Polygon", "MultiPolygon") and got["n_candidates"] == 2
+    assert hx.cell_of(LAT0, LON0, 6) in got["cells"]

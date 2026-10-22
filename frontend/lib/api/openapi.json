@@ -1681,6 +1681,12 @@
             "title": "Dataset Id",
             "type": "string"
           },
+          "hex_sets": {
+            "default": true,
+            "description": "Attach calibrated hex prediction sets to route_retrieval_v2 forecasts",
+            "title": "Hex Sets",
+            "type": "boolean"
+          },
           "history_hours": {
             "default": 24,
             "exclusiveMinimum": 0.0,
@@ -1885,6 +1891,85 @@
           "datasets"
         ],
         "title": "Health",
+        "type": "object"
+      },
+      "HexSet": {
+        "description": "A calibrated hex prediction set at one target time (build plan v0.4 \u00a75 H): the H3 cells\nholding the true position with the nominal probability. Split-conformal on the calibration\nwindow: a MARGINAL coverage claim over the calibration population (underway vessels in the\ncutoff region, per stratum and horizon), not a per-forecast probability.",
+        "properties": {
+          "area_km2": {
+            "title": "Area Km2",
+            "type": "number"
+          },
+          "boundary": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "GeoJSON MultiPolygon outline of the cells",
+            "title": "Boundary"
+          },
+          "calibration_n": {
+            "title": "Calibration N",
+            "type": "integer"
+          },
+          "calibration_set_id": {
+            "title": "Calibration Set Id",
+            "type": "string"
+          },
+          "calibration_vessels": {
+            "title": "Calibration Vessels",
+            "type": "integer"
+          },
+          "cells": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "kind": {
+            "const": "h1_hex_set",
+            "default": "h1_hex_set",
+            "title": "Kind",
+            "type": "string"
+          },
+          "n_candidates": {
+            "description": "Retrieved continuations behind the density",
+            "title": "N Candidates",
+            "type": "integer"
+          },
+          "nominal_level": {
+            "title": "Nominal Level",
+            "type": "number"
+          },
+          "resolution": {
+            "description": "H3 resolution of every cell",
+            "title": "Resolution",
+            "type": "integer"
+          },
+          "stratum": {
+            "description": "Calibration stratum (vessel class is NOAA back-filled)",
+            "title": "Stratum",
+            "type": "string"
+          }
+        },
+        "required": [
+          "nominal_level",
+          "calibration_set_id",
+          "resolution",
+          "cells",
+          "area_km2",
+          "stratum",
+          "calibration_n",
+          "calibration_vessels",
+          "n_candidates"
+        ],
+        "title": "HexSet",
         "type": "object"
       },
       "HorizonScore": {
@@ -2183,6 +2268,21 @@
                 "type": "null"
               }
             ]
+          },
+          "hex_sets": {
+            "description": "Per target time: the calibrated hex set, or null where none was fitted",
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/HexSet"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Hex Sets",
+            "type": "array"
           },
           "model_id": {
             "title": "Model Id",
