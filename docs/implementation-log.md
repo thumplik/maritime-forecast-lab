@@ -1279,3 +1279,45 @@ cd frontend && npm run typecheck && npm test && npm run build   # 26 passed
    - (b) the radii carry their request horizon and are refused otherwise; or
    - (c) make retrieval's medoid horizon-independent (a model change, so a new version and new benchmarks).
 2. Then the Playwright smoke test and `/milestone-check`.
+
+## 2026-10-22 — Served forecasts match the calibrated ones (option a)
+
+**Milestone:** 5 — workbench UI (this fixes Milestone 4's served radii)
+**Done** (slice 3 `5d3799c`; fix `4f7e559`; radii files refit `2487598`, `87e66d2`):
+- **The radii file records its calibration request.** `request = {horizon_h, step_minutes, history_hours}` (24 h / 10 min / 24 h), taken from the calibration run's sampler. `scripts/conformal.py` now exits if the calibration and test runs differ in this request, because coverage on test would describe a different forecaster.
+  - Both served files were refit with `--params-only` from clean commits. No test records were read and no ledger entry was written.
+  - The radii are identical to before. The only changes are `request`, `bins`, `git_sha` and `created_at`.
+- **`POST /forecasts` predicts as the calibration run did.** A model that has radii is asked for the calibrated horizon when the request matches the calibration step and history and is shorter. The response is the prefix of that forecast.
+  - `ModelForecast.predicted_horizon_hours` says when this happened, and a warning notes that model warnings may refer to later times.
+  - Other models, and requests with a different step or history, are predicted as asked. A step that doesn't divide 24 h no longer raises a 500.
+- **Radii attach only to forecasts made that way.** They are refused, with the reason, when the radii file has no `request`, when step or history differ, or when the model predicted another horizon (for example a 48 h request).
+- **`ForecastRequest.predict_horizon_hours`** sets the horizon explicitly, for replaying a benchmark run that predicted at a different longest horizon. It is validated: no shorter than the request, whole steps.
+  - The gallery link now carries the run's longest horizon, history and step, and opens at the sample's horizon.
+- The radii file is read once per request, so its sha in the cache key and the params used always agree.
+
+**Leakage review (leakage-reviewer subagent):** no temporal or protocol leakage. Slicing reads nothing after the cutoff, and evaluation still scores only the requested target times. Fixed:
+1. No check that calibration and test requests match (now in `conformal.py`).
+2. A 500 on non-dividing steps.
+3. Replays of runs with a shorter longest horizon would no longer reproduce (now `predict_horizon_hours`).
+4. The extension was applied to models without radii or with a shorter `max_horizon_hours`.
+5. Warnings past the cut.
+6. Three separate reads of the radii file.
+
+Still open from the review: the radii file isn't tied to the canonical `data_version`, so re-ingesting the data would keep serving the radii.
+
+**Commands run:**
+```bash
+make test; make lint; make gen-api           # 298 passed
+cd frontend && npm test && npm run typecheck && npm run build   # 26 passed
+uv run --project backend python scripts/conformal.py --protocol P-known --params-only   # then P-unseen
+```
+
+**Checked on real data:**
+- **July cargo ship 636092697, 10 Jul 12:00Z:**
+  - A 6 h request is the exact first 6 h of the 24 h forecast for retrieval v2 and CV.
+  - The radii are back and unchanged: 11.9 / 87.5 km (v2) and 13.1 / 111.6 km (CV) at 1 / 6 h.
+  - A 48 h history request is refused radii, with the reason.
+- **Dev run `…_dev_20261021T204207Z`:** 8 of 8 samples replayed at 6 h with `predict_horizon_hours=24` reproduce the stored v2 prediction.
+- **Browser:** the gallery replay of the worst June transiting sample reproduces ("predicted at 24 h as benchmarked, shown to 6 h").
+
+**Next step:** Playwright smoke test (select vessel → set cutoff → run baseline → overlay truth → view error), then `/milestone-check` for Milestone 5.
