@@ -100,7 +100,8 @@ def _strata(records: pl.DataFrame, h3: bool) -> tuple[pl.DataFrame, list[str]]:
     )
     chain = ["s_class", "s_motion", "s_all"]
     if h3:
-        r = r.with_columns(s_h3=pl.col("motion_set") + ":h3:" + pl.col("h3_cell").fill_null("none"))
+        # A record without a cell gets no H3 stratum (null) and falls through to the chain.
+        r = r.with_columns(s_h3=pl.col("motion_set") + ":h3:" + pl.col("h3_cell"))
         chain = ["s_h3", *chain]
     return r, chain
 

@@ -371,3 +371,26 @@ Dataset `noaa_us_gulf_2023-06-07`, manifests `splits-v2`, **split = test (Jul 2�
 - Stationary over-covers at 12–24 h (0.93–0.94).
 - 21–41% of radii fall back to pooled strata.
 - The radii are deliberately **not** refitted on the P-known calibration run, which contains P-unseen test vessels.
+
+## 2026-10-22 — Conformal H3 Mondrian bins (Milestone 4 slice 2): pre-registered, **not adopted**
+
+**Design** (pre-registered in the implementation log before the code existed; clarifications committed in `62f3089` before any H3 result):
+- **Bins:** motion state × H3 cell (resolution 5) of the cutoff report's position, ahead of the slice-1 chain.
+- **Own radius:** at least 30 calibration errors per bin.
+- **Adoption, in each protocol:**
+  - at 90%, at least as many motion:ALL cells within ±3 points as slice 1;
+  - and v2's mean underway:ALL area smaller at 4 or more of the 6 horizons.
+- **Both protocols** must pass.
+
+| | P-known | P-unseen |
+|---|---|---|
+| Radii | `data/model_params/conformal/P-known__noaa_us_gulf_2023-06-07__h3r5.json` | `…/P-unseen__noaa_us_gulf_2023-06-07__h3r5.json` |
+| Analysis | `data/runs/conformal/P-known_…_20261021T213109Z/20261022T020659Z/` | `…/P-unseen_…_20261021T225730Z/20261022T020706Z/` |
+| Cells within tolerance at 90%: slice 1 → H3 | 69/72 → **61/72 (fails)** | 50/72 → 55/72 (passes) |
+| v2 underway mean area at 90%, smaller at | 6/6 horizons (e.g. 418 → 375 km² at 1 h; 74,897 → 68,682 km² at 24 h) | 6/6 horizons |
+| Rule | fails | passes |
+
+**Verdict: not adopted.** The API keeps serving the slice-1 radii.
+- Every P-known cell that flipped is retrieval (v1/v2). They sat at 0.872–0.877 under slice 1, just inside tolerance, because retrieval's frozen pool ages through July. H3's tighter radii take them to 0.867–0.869.
+- The kinematic baselines are unaffected.
+- **Crashed first attempt:** it wrote coverage files and then crashed before its ledger entry. Those outputs were set aside unread (`_crashed_*`) and recorded in the ledger (`86a9cad`), then the analysis was re-run.

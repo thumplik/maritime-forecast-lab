@@ -1093,3 +1093,39 @@ Everything else is as pre-registered:
 - bins of motion × cell, needing at least 30 calibration errors, otherwise the slice-1 chain;
 - levels 80/90/95%, verdict ±0.03 on n ≥ 200;
 - coverage criterion: at least as many motion-level cells within tolerance at 90% as slice 1 (P-known 69/72, P-unseen 50/72).
+
+## 2026-10-22 — Milestone 4 slice 2: H3 Mondrian bins, pre-registered rule applied → not adopted
+
+**Milestone:** 4 — conformal uncertainty
+**Done** (commits `bf6239b`, then a fix, `86a9cad`, `8d70849`, `7cd89fa`):
+- `conformal.add_h3` and an optional motion × H3 stratum ahead of the slice-1 chain.
+- `scripts/conformal.py --bins h3`, which computes the pre-registered adoption rule against the latest slice-1 analysis of the same test run.
+- Dependency `h3` 4.5 (Apache-2.0). Unit test for bins and fallback.
+- **Crash, recorded:** the first H3 run per protocol wrote `coverage.parquet` and `report.md`, then crashed in the adoption step: it globbed its own half-written directory. That was before its ledger entry.
+  - The two outputs were moved to `_crashed_*` without being read, and recorded in the ledger.
+  - The glob was fixed to complete analyses only, and the analysis re-run.
+  - The earlier commit `a2677b2` / `9348b60` messages say "radii and coverage analysis ledger entry", but those commits contain only the H3 radii files (the crash came first). The chain did not stop because `| tail` hid the exit code; `pipefail` is used from now on.
+
+**Results** (`docs/benchmarks.md`):
+- **P-known:** 69/72 → 61/72 cells within tolerance (fails), although the areas are smaller at 6/6 horizons.
+- **P-unseen:** 50/72 → 55/72 (passes), with smaller areas at 6/6 horizons.
+- **Not adopted**, since the rule requires both protocols. The P-known cells that broke are retrieval's, already at the tolerance edge from pool staleness.
+- No other resolution or threshold was tried, as pre-registered.
+
+**Leakage review (leakage-reviewer subagent):** no leakage and no test-informed choice. The design matches the pre-registration, the rule was computed as registered, and "not adopted" is correct. The crashed outputs turned out byte-identical to the re-run. Fixed:
+1. `scripts/conformal.py` writes a `*_started` ledger entry before reading test records, so a crash can no longer leave a look unrecorded.
+2. Ledger corrections:
+   - the P-unseen crashed entry's SHA is `a2677b2…`, not `bf6239b`;
+   - both crashed entries get full SHAs and their real access times, with a note;
+   - the re-run entries get a `rerun_reason`.
+3. The README area claim is corrected to 6–13% (P-known) and 4–8% (P-unseen).
+4. A record without an H3 cell now falls through to the chain instead of pooling into a fake bin (no record was affected).
+5. The ledger config hash includes the bins setting.
+
+**Commands run:**
+```bash
+uv add 'h3>=4,<5'
+uv run --project backend python scripts/conformal.py --protocol P-known --bins h3   # and P-unseen (after the crash fix)
+```
+
+**Next step:** `/milestone-check` for Milestone 4.

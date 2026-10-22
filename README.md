@@ -126,6 +126,8 @@ Ships in transit, July hold-out, median error in km (best baseline in brackets):
 - **Retrieval's coverage slips through July** (90.1% → 86.8% at 1 h by the third week), because its reference voyages get older.
 - **P-unseen is not calibrated for underway traffic** (79–89% at a nominal 90%). Its calibration bucket is only 5% of the vessels.
 
+- **H3 bins tried and rejected:** a pre-registered variant gave each H3 hexagon (about 250 km²) its own radius. It shrank v2's mean disc area at every horizon (by 6–13% under P-known, 4–8% under P-unseen), but broke calibration for retrieval under P-known (61/72 cells against 69/72), so it was not adopted.
+
 Details: [docs/benchmarks.md](docs/benchmarks.md).
 
 The success condition for every model is the same: **beat the best of persistence, constant velocity and damped velocity, per stratum, on paired held-out samples under P-known and P-unseen.** Retrieval meets it for ships in transit at every horizon under both protocols, and for all underway traffic up to 3–6 h. It does not meet it for long-horizon harbour traffic. For moored vessels, v2 only ties persistence.
@@ -138,7 +140,7 @@ The success condition for every model is the same: **beat the best of persistenc
 | 1 | Contracts, data pipeline, read API, track explorer, CI | ✓ |
 | 2 | Baselines & the evaluator: paired benchmark, calibration, invariance, feasibility, benchmark API | ✓ |
 | 3 | Historical-route retrieval: kNN over train-period segments, aligned and continued along real routes ([failure review](docs/failure-review.md)); v2 holds moored ships; scored on the July hold-out | ✓ |
-| 4 | **Conformal uncertainty:** calibrated displacement radii per stratum | ← *now* (radii, July coverage and API done; H3 bins next) |
+| 4 | **Conformal uncertainty:** calibrated displacement radii per stratum | ← *now* (radii, July coverage, API done; H3 bins tried, not adopted) |
 | 5 | Workbench UI: forecast comparison, truth overlay, benchmark dashboard | |
 | 6 | Timestral zero-shot adapter (position, velocity, velocity + retrieved route) | |
 | 7 | Research models: TrAISformer via the calibration paper's reimplementation | |

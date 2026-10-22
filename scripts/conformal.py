@@ -120,6 +120,10 @@ def main() -> None:
     if args.params_only:
         print(f"{args.protocol}: radii -> {out_params} (params only; no test records read)")
         return
+    kind = "conformal_coverage_h3" if h3 else "conformal_coverage"
+    hashed = {**cfg.as_dict(), "bins": f"h3r{cf.H3_RES}" if h3 else "stratum"}
+    # On record BEFORE the test records are read, so a crash can never leave a look unrecorded.
+    record_analysis(args.dataset_id, test_id, f"{kind}_started", hashed, sha, "(started)")
     test_records = runs.table(test_id, "records")
     if h3:
         test_records = cf.add_h3(test_records, runs.table(test_id, "cutoffs"))
@@ -157,8 +161,7 @@ def main() -> None:
         "adoption": adoption(test_id, cov) if h3 else None,
         "git_sha": sha, "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }, indent=2) + "\n")  # fmt: skip
-    record_analysis(args.dataset_id, test_id, "conformal_coverage_h3" if h3 else
-                    "conformal_coverage", cfg.as_dict(), sha, str(out))  # fmt: skip
+    record_analysis(args.dataset_id, test_id, kind, hashed, sha, str(out))
     if h3:
         print(json.dumps(adoption(test_id, cov), indent=1))
     # Headline count over non-overlapping cells: motion:ALL groups at the primary level.
