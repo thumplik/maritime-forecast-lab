@@ -323,5 +323,38 @@
       "P-known_noaa_us_gulf_2023-06-07_20261021T213109Z"
     ],
     "rerun_reason": "first July look at cutoff region mobile_pascagoula (these versions were scored on July only at Houston)"
+  },
+  {
+    "run_id": "P-known_noaa_us_gulf_2023-06-07_tampa_bay_20261023T021700Z",
+    "protocol": "P-known",
+    "git_sha": "30e09c0d4b5b9e8519f38013b3d35e6930bc9644",
+    "accessed_at": "2026-10-23T02:17:01+00:00",
+    "models": [
+      {
+        "model_id": "persistence_v1",
+        "model_version": "1.0.0",
+        "config_sha256": "9a7008509fb0dd903ca8df331f02c85008b5db34715349f51de206425a0b7692"
+      },
+      {
+        "model_id": "constant_velocity_v1",
+        "model_version": "1.0.0",
+        "config_sha256": "9a7008509fb0dd903ca8df331f02c85008b5db34715349f51de206425a0b7692"
+      },
+      {
+        "model_id": "damped_velocity_v1",
+        "model_version": "1.0.0",
+        "config_sha256": "cca2c7011aafd48174d56a15e1c61cb2148d2ef626bf39158c0ae69d081c4c48"
+      },
+      {
+        "model_id": "route_retrieval_v2",
+        "model_version": "2.0.0",
+        "config_sha256": "2843e37b2113e86e1f97aa6ee5bf4a6bb442854b66e125c9f11963f53df8f039"
+      }
+    ],
+    "informed_by": [
+      "P-known_noaa_us_gulf_2023-06-07_dev_tampa_bay_20261022T233813Z",
+      "P-known_noaa_us_gulf_2023-06-07_20261021T213109Z"
+    ],
+    "rerun_reason": "first July look at cutoff region tampa_bay (these versions were scored on July only at Houston)"
   }
 ]
