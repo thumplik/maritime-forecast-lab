@@ -2002,6 +2002,12 @@
             "title": "Nominal Level",
             "type": "number"
           },
+          "region": {
+            "default": "houston_galveston",
+            "description": "Port whose calibration window the set was calibrated on",
+            "title": "Region",
+            "type": "string"
+          },
           "resolution": {
             "description": "H3 resolution of every cell",
             "title": "Resolution",

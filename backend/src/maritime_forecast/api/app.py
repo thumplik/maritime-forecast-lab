@@ -51,7 +51,7 @@ from maritime_forecast.api.models import (
     VesselPage,
     VesselSummary,
 )
-from maritime_forecast.config import DATA_DIR, MANIFEST_DIR, RUNS_DIR, BBox, default_region
+from maritime_forecast.config import DATA_DIR, MANIFEST_DIR, RUNS_DIR, BBox, default_region, region
 from maritime_forecast.data.segment import (
     DEFAULT_SEGMENT_CONFIG,
     gap_segments,
@@ -442,15 +442,18 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         raw = p.read_bytes()
         return json.loads(raw), hashlib.sha256(raw).hexdigest()
 
-    def _hex_file(dataset_id: str) -> tuple[dict | None, str | None]:
-        """The served H1 hex-set parameters and their sha256, read once per request."""
-        p = settings.hexsets_dir / f"{settings.deployment_protocol}__{dataset_id}.json"
-        if not p.exists():
-            return None, None
-        raw = p.read_bytes()
-        return json.loads(raw), hashlib.sha256(raw).hexdigest()
+    def _hex_files(dataset_id: str) -> tuple[list[dict], str | None]:
+        """Every port's served H1 hex-set parameters (one file per calibration region), read
+        once per request, and one sha256 over all of them for the cache key."""
+        pattern = f"{settings.deployment_protocol}__{dataset_id}*.json"
+        files = sorted(settings.hexsets_dir.glob(pattern))
+        if not files:
+            return [], None
+        raws = [f.read_bytes() for f in files]
+        digest = hashlib.sha256(b"".join(hashlib.sha256(r).digest() for r in raws)).hexdigest()
+        return [json.loads(r) for r in raws], digest
 
-    def _with_hexsets(req, mctx, history, horizon, forecasts, hp):
+    def _with_hexsets(req, mctx, history, horizon, forecasts, hps):
         """Attach calibrated H1 hex sets (Milestone 7) to the route_retrieval_v2 forecast, at
         the target times whose lead is a fitted horizon; or say why not."""
         idx = next((i for i, f in enumerate(forecasts)
@@ -464,8 +467,15 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
             out[idx] = f.model_copy(update={"warnings": [*f.warnings, f"no hex sets: {why}"]})
             return out
 
-        if hp is None:
+        if not hps:
             return refuse(f"none fitted for {settings.deployment_protocol} on {req.dataset_id}")
+        last = history.last()
+        if last is None:
+            return refuse("no report in the history")
+        hp = hexsets.params_for_position(hps, last["latitude_deg"], last["longitude_deg"])
+        if hp is None:
+            return refuse("no port calibration covers the last report's position")
+        port = hp.get("cutoff_region", hexsets.DEFAULT_CUTOFF_REGION)
         if hp["manifest_sha256"] != mctx.manifest_sha256:
             return refuse("hex sets were fitted for a different split manifest")
         v2 = get_model("route_retrieval_v2", mctx)
@@ -482,7 +492,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         if history.as_of < datetime.fromisoformat(hp["label_reach_end"]):
             return refuse("as_of is before the calibration labels' reach")
         why = conformal.calibration_like(history.reports, history.as_of, req.history_hours,
-                                         default_region("cutoff_region"))  # fmt: skip
+                                         region(port))  # fmt: skip
         if why:
             return refuse(f"the forecast does not resemble the calibration samples ({why})")
         if conformal.motion_state(history.reports) != "underway":
@@ -521,7 +531,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
             )  # fmt: skip
             sets.append(
                 HexSet(nominal_level=cell["level"], calibration_set_id=hp["calibration_set_id"],
-                       adoption=adoption, **got)
+                       adoption=adoption, region=port, **got)
             )  # fmt: skip
         out = list(forecasts)
         out[idx] = f.model_copy(update={"hex_sets": sets})
@@ -597,7 +607,7 @@ def create_app(settings: ApiSettings | None = None) -> FastAPI:
         built = {m: get_model(m, ctx) for m in req.model_ids}
         data_version = _data_version(settings, store, req.dataset_id)
         params, radii_sha = _radii_file(req.dataset_id)
-        hex_params, hex_sha = _hex_file(req.dataset_id)
+        hex_params, hex_sha = _hex_files(req.dataset_id)
         key_basis = json.dumps(
             {
                 "request": req.model_dump(mode="json", exclude={"show_ground_truth"}),

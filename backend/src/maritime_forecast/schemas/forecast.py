@@ -166,6 +166,9 @@ class HexSet(BaseModel):
     cells: list[str]
     area_km2: float
     stratum: str = Field(description="Calibration stratum (vessel class is NOAA back-filled)")
+    region: str = Field(
+        "houston_galveston", description="Port whose calibration window the set was calibrated on"
+    )
     calibration_n: int
     calibration_vessels: int
     n_candidates: int = Field(description="Retrieved continuations behind the density")

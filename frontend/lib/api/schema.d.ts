@@ -1069,6 +1069,12 @@ export interface components {
             /** Nominal Level */
             nominal_level: number;
             /**
+             * Region
+             * @description Port whose calibration window the set was calibrated on
+             * @default houston_galveston
+             */
+            region: string;
+            /**
              * Resolution
              * @description H3 resolution of every cell
              */

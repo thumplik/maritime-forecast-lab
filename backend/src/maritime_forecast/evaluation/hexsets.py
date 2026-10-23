@@ -274,3 +274,18 @@ def h1_set(cell: dict, central_lat: float, central_lon: float, lat: np.ndarray, 
         "boundary": h3.cells_to_geo(cells) if cells else None,
         "layers": layers,
     }
+
+
+DEFAULT_CUTOFF_REGION = "houston_galveston"
+
+
+def params_for_position(params_list: list[dict], lat: float, lon: float) -> dict | None:
+    """The served hex-set parameters whose calibration region (config/regions.yaml) contains
+    (lat, lon), or None. Each port is calibrated on its own cutoffs (Milestone 7); a file
+    without `cutoff_region` is the original Houston-Galveston one."""
+    from maritime_forecast.config import region
+
+    for hp in params_list:
+        if region(hp.get("cutoff_region", DEFAULT_CUTOFF_REGION)).contains(lat, lon):
+            return hp
+    return None

@@ -73,7 +73,7 @@ describe("forecastToGeo", () => {
     r.forecasts[0]!.hex_sets = [null, null, {
       kind: "h1_hex_set", nominal_level: 0.9, calibration_set_id: "cal", resolution: 6, cells: ["a", "b"], area_km2: 72,
       stratum: "underway:ALL", calibration_n: 300, calibration_vessels: 90, n_candidates: 12,
-      boundary: { type: "Polygon", coordinates: [ring] }, adoption: "pending",
+      boundary: { type: "Polygon", coordinates: [ring] }, adoption: "pending", region: "houston_galveston",
     }];
     expect(forecastToGeo(r, anchor, 0).hexes.features).toHaveLength(0);
     const h = forecastToGeo(r, anchor, 2).hexes.features;

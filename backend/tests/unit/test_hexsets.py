@@ -163,3 +163,11 @@ def test_h1_set_layers_are_nested_and_the_main_set_unchanged():
     assert [x["level"] for x in layered["layers"]] == [0.9, 0.95, 0.98]
     # the main set is the 90% band (innermost); the 95% and 98% bands contain it
     assert sizes == sorted(sizes) and sizes[0] == len(plain["cells"]) > 0 and sizes[-1] > sizes[0]
+
+
+def test_params_are_chosen_by_the_region_of_the_position():
+    houston, nola = {"name": "h"}, {"name": "n", "cutoff_region": "new_orleans_mississippi"}
+    both = [houston, nola]
+    assert hx.params_for_position(both, 29.3, -94.8)["name"] == "h"  # Galveston Bay
+    assert hx.params_for_position(both, 29.9, -90.1)["name"] == "n"  # New Orleans
+    assert hx.params_for_position(both, 27.9, -82.5) is None  # Tampa: not calibrated here

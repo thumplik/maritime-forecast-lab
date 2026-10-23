@@ -51,16 +51,29 @@ EPS_TOL = 1e-9  # coverage exactly at 0.87 or 0.93 counts as within (decided bef
 N_BOOT = 500
 
 
-def latest(protocol: str, dataset_id: str, split: str) -> str:
+def run_region(run_id: str) -> str:
+    """The cutoff region a run sampled (header only; checksums are verified on load)."""
+    head = json.loads((RunStore().path(run_id) / "run.json").read_text())
+    return head["sampler"].get("cutoff_region", hx.DEFAULT_CUTOFF_REGION)
+
+
+def params_path(protocol: str, dataset_id: str, cutoff_region: str) -> Path:
+    """One served file per port; the original Houston file keeps its name."""
+    tag = "" if cutoff_region == hx.DEFAULT_CUTOFF_REGION else f"__{cutoff_region}"
+    return PARAMS_DIR / f"{protocol}__{dataset_id}{tag}.json"
+
+
+def latest(protocol: str, dataset_id: str, split: str, cutoff_region: str) -> str:
     runs = RunStore()  # headers only here; the chosen run is loaded (checksums verified) later
     ids = [r for r in runs.runs() if r.startswith(f"{protocol}_{dataset_id}_")]
     ids = [
         r
         for r in ids
         if json.loads((runs.path(r) / "run.json").read_text())["sampler"].get("split") == split
+        and run_region(r) == cutoff_region
     ]
     if not ids:
-        raise SystemExit(f"no {split} run for {protocol} on {dataset_id}")
+        raise SystemExit(f"no {split} run for {protocol} on {dataset_id} in {cutoff_region}")
     return sorted(ids)[-1]
 
 
@@ -224,6 +237,11 @@ def main() -> None:
     )
     ap.add_argument("--rerun-reason", help="required to look at the test run a second time")
     ap.add_argument(
+        "--cutoff-region",
+        default=hx.DEFAULT_CUTOFF_REGION,
+        help="port (config/regions.yaml): its own calibration run, params, test run",
+    )
+    ap.add_argument(
         "--add-levels",
         action="store_true",
         help="refit on the calibration run, check the 90%% thresholds are unchanged, "
@@ -246,7 +264,11 @@ def main() -> None:
         if hx.resolution_for(hz) != (7 if hz <= 3 else 6):
             raise SystemExit("resolution rule differs from the frozen design")
     runs = RunStore()
-    cal_id = args.calibration_run or latest(args.protocol, args.dataset_id, "calibration")
+    cal_id = args.calibration_run or latest(
+        args.protocol, args.dataset_id, "calibration", args.cutoff_region
+    )
+    if run_region(cal_id) != args.cutoff_region:
+        raise SystemExit(f"{cal_id} sampled {run_region(cal_id)}, not {args.cutoff_region}")
     cal_run = runs.load(cal_id)
     if cal_run.sampler.get("split") != "calibration":
         raise SystemExit(f"{cal_id} is not a calibration-split run")
@@ -255,6 +277,7 @@ def main() -> None:
     s = cal_run.sampler
     params = {
         "kind": "h1_hex_sets",
+        "cutoff_region": args.cutoff_region,
         "protocol": args.protocol,
         "dataset_id": args.dataset_id,
         "calibration_set_id": cal_id,
@@ -285,7 +308,7 @@ def main() -> None:
         "git_sha": sha,
         "created_at": datetime.now(UTC).isoformat(timespec="seconds"),
     }
-    out_params = PARAMS_DIR / f"{args.protocol}__{args.dataset_id}.json"
+    out_params = params_path(args.protocol, args.dataset_id, args.cutoff_region)
     if args.add_levels or args.levels_check:
         served = json.loads(out_params.read_text())
         if (served["design_sha256"], served["calibration_set_id"]) != (
@@ -346,7 +369,14 @@ def evaluate(args, params: dict, sha: str, dry: bool):
             raise SystemExit("--dry-run never touches a test-split run")
     else:
         entries = read_ledger(args.dataset_id)
-        scored = [e for e in entries if e["protocol"] == args.protocol and e.get("kind") is None]
+        region_ = params.get("cutoff_region", hx.DEFAULT_CUTOFF_REGION)
+        scored = [
+            e
+            for e in entries
+            if e["protocol"] == args.protocol
+            and e.get("kind") is None
+            and run_region(e["run_id"]) == region_
+        ]
         test_id = args.test_run or (scored[-1]["run_id"] if scored else None)
         if test_id is None or test_id not in {e["run_id"] for e in scored}:
             raise SystemExit("the test run must be a recorded held-out run (test-access ledger)")
@@ -369,6 +399,8 @@ def evaluate(args, params: dict, sha: str, dry: bool):
         test = runs.load(test_id)
     if test.protocol.manifest_sha256 != params["manifest_sha256"]:
         raise SystemExit("calibration and test runs use different split manifests")
+    if not dry and run_region(test_id) != params.get("cutoff_region", hx.DEFAULT_CUTOFF_REGION):
+        raise SystemExit(f"{test_id} sampled another region than the params")
     req = (
         max(test.sampler["horizons_h"]),
         test.sampler["step_minutes"],
