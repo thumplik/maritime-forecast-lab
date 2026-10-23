@@ -356,5 +356,29 @@
       "P-known_noaa_us_gulf_2023-06-07_20261021T213109Z"
     ],
     "rerun_reason": "first July look at cutoff region tampa_bay (these versions were scored on July only at Houston)"
+  },
+  {
+    "run_id": "P-known_noaa_us_gulf_2023-06-07_new_orleans_mississippi_20261023T010648Z",
+    "kind": "hexsets_h1_started",
+    "protocol": null,
+    "git_sha": "859e15e6271fdbffccff5028762f6c333154bde1",
+    "accessed_at": "2026-10-23T02:30:37+00:00",
+    "models": [],
+    "config_sha256": "564db32f4bb5f0c636c5da7a1f4584750e6639e3eb63e4f87e79a8b05b6fec2e",
+    "output": "(started)",
+    "informed_by": [],
+    "rerun_reason": null
+  },
+  {
+    "run_id": "P-known_noaa_us_gulf_2023-06-07_new_orleans_mississippi_20261023T010648Z",
+    "kind": "hexsets_h1",
+    "protocol": null,
+    "git_sha": "859e15e6271fdbffccff5028762f6c333154bde1",
+    "accessed_at": "2026-10-23T03:14:34+00:00",
+    "models": [],
+    "config_sha256": "564db32f4bb5f0c636c5da7a1f4584750e6639e3eb63e4f87e79a8b05b6fec2e",
+    "output": "/Volumes/Code/AIS-predictor/data/runs/hexsets/P-known_noaa_us_gulf_2023-06-07_new_orleans_mississippi_20261023T010648Z/20261023T031434Z",
+    "informed_by": [],
+    "rerun_reason": null
   }
 ]
