@@ -678,3 +678,49 @@ The question was whether the approach only works at Houston. Cutoffs were starte
 - **Where it cannot work:** waters with no history. The P-region test above found no references at all.
 - **Calibration transfers only partly.** It held at New Orleans, a large port with similar traffic. Corpus Christi over-covers, and Mobile under-covers at short horizons. Each port, or region, needs its own calibration window.
 - **Data is the limit.** The smaller ports need more than five dev days to calibrate per cell (about ≥ 200 samples). The calibration split (Jun 23–30) per port, or more months of AIS, would give that.
+
+
+## 2026-10-23 — Hex sets calibrated per port, July hold-out, P-known (held-out; pre-registered; 2 of 4 ports adopted)
+
+Pre-registration: implementation log, 2026-10-23 (commit `6c1ef68`), written before any port's July data was read. Nothing was tuned per port. The H1 design (`h1_design.json`, sha `e0d6a707…`), the bands and the tolerances are Houston's. Only the conformal thresholds and disc radii were fitted per port, on that port's calibration window (Jun 23–30). Each port had one look, ledgered, from a clean committed tree. All four ports are reported.
+
+| Port | Calibration run | July test run | H1 analysis | Bands analysis |
+|---|---|---|---|---|
+| New Orleans / lower Mississippi | `…_calibration_new_orleans_mississippi_20261023T004231Z` | `P-known_noaa_us_gulf_2023-06-07_new_orleans_mississippi_20261023T010648Z` | `20261023T031434Z` | `levels_20261023T040645Z` |
+| Corpus Christi | `…_calibration_corpus_christi_20261023T005649Z` | `…_corpus_christi_20261023T020247Z` | `20261023T041346Z` | `levels_20261023T042126Z` |
+| Mobile–Pascagoula | `…_calibration_mobile_pascagoula_20261023T010022Z` | `…_mobile_pascagoula_20261023T021049Z` | `20261023T042757Z` | `levels_20261023T043601Z` |
+| Tampa Bay | `…_calibration_tampa_bay_20261023T010301Z` | `…_tampa_bay_20261023T021700Z` | `20261023T044021Z` | `levels_20261023T044612Z` |
+
+Analyses live in `data/runs/hexsets/<test run>/<analysis>/` (report.md with every cell's CI). Retrieval re-run failures were 0 at every port.
+
+**Pre-registered verdicts (90%, ±0.03 on n ≥ 200; adopted iff H1 is within tolerance on at least as many of the 12 cells as the disc, and smaller at ≥ 4 of 6 pooled horizons):**
+
+| Port | Underway cutoffs | H1 cells within | Disc cells within | Pooled horizons smaller | Verdict | H1/disc area (pooled, 1–24 h) |
+|---|---|---|---|---|---|---|
+| New Orleans | 42,743 | 11 | 12 | 6 / 6 | **not adopted** | 0.26–0.60 |
+| Corpus Christi | 7,337 | 5 | 6 | 6 / 6 | **not adopted** | 0.13–0.34 |
+| Mobile–Pascagoula | 6,094 | 9 | 6 | 6 / 6 | **adopted** | 0.42–0.80 |
+| Tampa Bay | 3,181 | 8 | 4 | 6 / 6 | **adopted** | 0.27–0.74 |
+
+**90% coverage, H1 (disc in brackets):**
+
+| Port | Stratum | 1 h | 2 h | 3 h | 6 h | 12 h | 24 h |
+|---|---|---|---|---|---|---|---|
+| New Orleans | Underway, all | 0.897 (0.901) | 0.895 (0.897) | 0.896 (0.901) | 0.898 (0.902) | 0.900 (0.898) | 0.905 (0.905) |
+| New Orleans | Transiting | 0.879 (0.892) | 0.858 ✗ (0.877) | 0.877 (0.891) | 0.906 (0.895) | 0.915 (0.910) | 0.917 (0.927) |
+| Corpus Christi | Underway, all | 0.736 ✗ (0.790 ✗) | 0.752 ✗ (0.797 ✗) | 0.760 ✗ (0.825 ✗) | 0.789 ✗ (0.851 ✗) | 0.830 ✗ (0.863 ✗) | 0.830 ✗ (0.860 ✗) |
+| Corpus Christi | Transiting | 0.927 (0.929) | 0.890 (0.882) | 0.886 (0.889) | 0.937 ✗ (0.871) | 0.899 (0.901) | 0.924 (0.928) |
+| Mobile | Underway, all | 0.908 (0.887) | 0.911 (0.905) | 0.909 (0.905) | 0.905 (0.895) | 0.877 (0.892) | 0.898 (0.884) |
+| Mobile | Transiting | 0.915 (0.960 ✗) | 0.956 ✗ (0.943 ✗) | 0.946 ✗ (0.948 ✗) | 0.924 (0.934 ✗) | 0.935 ✗ (0.952 ✗) | 0.929 (0.937 ✗) |
+| Tampa | Underway, all | 0.876 (0.885) | 0.912 (0.902) | 0.906 (0.910) | 0.913 (0.937 ✗) | 0.928 (0.943 ✗) | 0.933 ✗ (0.931 ✗) |
+| Tampa | Transiting | 0.859 ✗ (0.932 ✗) | 0.873 (0.938 ✗) | 0.893 (0.945 ✗) | 0.884 (0.943 ✗) | 0.935 ✗ (0.909) | 0.979 ✗ (0.966 ✗) |
+
+Transiting n: New Orleans 3,272–4,177; Corpus Christi 460–586; Mobile 504–622; Tampa 275–383.
+
+**Bands (cells within tolerance out of 12, at 90 / 95 / 98%):** New Orleans 11 / 11 / 12; Corpus Christi 5 / 4 / 4; Mobile 9 / 6 / 8; Tampa 8 / 5 / 6.
+
+### What this says
+- **New Orleans is calibrated almost everywhere and is still not adopted.** H1 sets are 3–4× smaller than the disc at 1–6 h, with pooled coverage 0.895–0.905 at every horizon and every band within tolerance there. One transiting cell (2 h, 0.858) is 1.2 points outside, and the disc was within tolerance on all 12 cells. The pre-registered rule requires H1 to match the disc's count, so the verdict stands: served, labelled experimental.
+- **Corpus Christi under-covers badly at July for both methods** (H1 0.74–0.83, disc 0.79–0.86 pooled). Transiting ships are fine. The June calibration window did not represent July pooled traffic there, and H1's tighter sets lose more coverage than the disc. In the dev window, Houston's thresholds over-covered at Corpus Christi; the port's own late-June window over-corrected. The cause (traffic mix, or too few calibration samples per cell) is not diagnosed.
+- **Mobile and Tampa are adopted, but mostly by being tighter, not by being exact.** Their transiting sets over-cover (0.92–0.98), and so does the disc, by more. The rule rewards coverage close to 90%, and H1 is closer at more cells while its sets are smaller at every horizon (H1/disc area 0.06–0.97). Tampa's transiting cells are small (n = 275–383).
+- **The area advantage over the disc holds at every port and every horizon** (13–80% of the disc's area pooled; 6–97% transiting). Coverage is the open problem, not area: calibrating on one late-June week does not carry reliably into July away from the two large ports. A rolling calibration window, or more months of data per port, is the next fix.

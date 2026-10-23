@@ -169,6 +169,20 @@ Details: [docs/benchmarks.md](docs/benchmarks.md).
 
 Details: [docs/benchmarks.md](docs/benchmarks.md).
 
+**Beyond Houston: four other Gulf ports, each calibrated on its own late-June window and scored once on July** (pre-registered; same design, nothing tuned per port):
+
+| Port | Hex-set coverage, all underway, 1–24 h | Transiting | Hex-set area against the disc | Verdict |
+|---|---|---|---|---|
+| New Orleans | 89.5–90.5% | 85.8–91.7% | 26–60% | not adopted (11 of 12 cells within tolerance; the disc had 12) |
+| Corpus Christi | **73.6–83.0%** (disc 79–86%) | 88.6–93.7% | 13–34% | not adopted: both methods under-cover |
+| Mobile–Pascagoula | 87.7–91.1% | 91.5–95.6% | 42–80% | adopted |
+| Tampa Bay | 87.6–93.3% | 85.9–97.9% (n ≈ 300) | 27–74% | adopted |
+
+- **The hex sets are smaller than the disc at every port and every horizon.**
+- **Coverage only transfers at the large ports.** New Orleans is calibrated almost everywhere. Corpus Christi misses by up to 16 points for pooled traffic. The smaller ports over-cover their transiting ships.
+- Not-adopted ports still get hex sets in the workbench, labelled experimental.
+- Retrieval needs local history: in waters with none (P-region), it has nothing to retrieve.
+
 The success condition for every model is the same: **beat the best of persistence, constant velocity and damped velocity, per stratum, on paired held-out samples under P-known and P-unseen.** Retrieval meets it for ships in transit at every horizon under both protocols, and for all underway traffic up to 3–6 h. It does not meet it for long-horizon harbour traffic. For moored vessels, v2 only ties persistence.
 
 ## Roadmap
@@ -182,7 +196,7 @@ The success condition for every model is the same: **beat the best of persistenc
 | 4 | Conformal uncertainty: calibrated displacement radii per stratum, served by the API (H3 bins tried, not adopted) | ✓ |
 | 5 | Workbench UI: forecast comparison, truth overlay, benchmark dashboard, failure gallery with sample replay, Playwright smoke test | ✓ |
 | 6 | Timestral zero-shot adapter (position, velocity, context length): closed as a negative result on the dev window; it never beat retrieval or, on transiting ships, the best kinematic baseline ([notes](docs/model-integration-notes.md)) | ✗ closed |
-| 7 | **Hex prediction sets:** a calibrated set of H3 cells per horizon ("which hexes will the ship be in?"), built on historical retrieval. Scored on July and adopted (2–4× smaller than discs at equal coverage); served by the API and drawn on the map | ← in progress |
+| 7 | **Hex prediction sets:** a calibrated set of H3 cells per horizon ("which hexes will the ship be in?"), built on historical retrieval. Scored on July and adopted at Houston (2–4× smaller than discs at equal coverage); calibrated per port and adopted at 2 of 4 other Gulf ports; served by the API and drawn on the map | ← in progress |
 | 8 | Research models: TrAISformer via the calibration paper's reimplementation, scored as a distribution | |
 | 9 | Multi-day credibility with longer-range AIS; optional live ingest | |
 

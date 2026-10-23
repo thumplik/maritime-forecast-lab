@@ -1745,3 +1745,32 @@ README results and roadmap updated (AGENTS.md rule 13).
 4. **Band check** (`--levels-check`): one look. 90/95/98% coverage with tolerances ±0.03/±0.02/±0.01 on n ≥ 200.
 
 **Small-sample caveat, decided now:** cells with n < 200 cannot count as within tolerance under the rule. Their coverage is reported with CIs and labelled underpowered. No port is dropped after its results are seen; all four are reported.
+
+## 2026-10-23 — Milestone 7: per-port July checks run (results)
+
+**Done:** all four steps above for every port, in order, each look committed before the next.
+- Benchmarks (calibration, then July): `76b99a2`…`859e15e`.
+- H1 and band looks: `3f5de66`…`385d111`.
+- No refusals, no repeated looks, retrieval re-run failures 0.
+
+**Commands:**
+- `run_benchmark.py --protocol P-known --dataset-id noaa_us_gulf_2023-06-07 --split calibration|test [--confirm-test --test-rerun-reason … --informed-by …] --cutoff-region <port> --no-geojson --models persistence_v1 constant_velocity_v1 damped_velocity_v1 route_retrieval_v2`
+- `hexsets_holdout.py --protocol P-known --cutoff-region <port>`, then `… --levels-check`
+
+**Results** (`docs/benchmarks.md`, 2026-10-23 per-port entry):
+
+| Port | H1 cells within / disc | Verdict | Bands within (90 / 95 / 98%) |
+|---|---|---|---|
+| New Orleans | 11 / 12 | not adopted | 11 / 11 / 12 |
+| Corpus Christi | 5 / 6 | not adopted | 5 / 4 / 4 |
+| Mobile | 9 / 6 | adopted | 9 / 6 / 8 |
+| Tampa | 8 / 4 | adopted | 8 / 5 / 6 |
+
+- H1 was smaller than the disc at 6/6 pooled horizons at every port.
+- Corpus Christi pooled under-covers for both methods: H1 0.74–0.83, disc 0.79–0.86.
+- New Orleans missed adoption by one transiting cell (2 h, 0.858).
+- The verdicts are written into each port's served params. The API labels not-adopted ports' sets as experimental.
+
+**Next:**
+- A coverage fix that carries across ports and through July: a rolling calibration window that ends before each forecast, with its own pre-registered protocol.
+- Land-cell removal, and H2 (a traffic-density prior for the outer bands).
