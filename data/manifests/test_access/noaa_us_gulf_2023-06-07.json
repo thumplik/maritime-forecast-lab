@@ -464,5 +464,29 @@
       "hexsets_h1@2026-10-23T04:13:46+00:00"
     ],
     "rerun_reason": null
+  },
+  {
+    "run_id": "P-known_noaa_us_gulf_2023-06-07_mobile_pascagoula_20261023T021049Z",
+    "kind": "hexsets_h1_started",
+    "protocol": null,
+    "git_sha": "c6dced1be9e746083a5af49365e683d22564d62f",
+    "accessed_at": "2026-10-23T04:22:43+00:00",
+    "models": [],
+    "config_sha256": "da721cbc2a04e295b0c5d00b93c514687ff43fd481f9b230fe1b5af55ddf29e0",
+    "output": "(started)",
+    "informed_by": [],
+    "rerun_reason": null
+  },
+  {
+    "run_id": "P-known_noaa_us_gulf_2023-06-07_mobile_pascagoula_20261023T021049Z",
+    "kind": "hexsets_h1",
+    "protocol": null,
+    "git_sha": "c6dced1be9e746083a5af49365e683d22564d62f",
+    "accessed_at": "2026-10-23T04:27:57+00:00",
+    "models": [],
+    "config_sha256": "da721cbc2a04e295b0c5d00b93c514687ff43fd481f9b230fe1b5af55ddf29e0",
+    "output": "/Volumes/Code/AIS-predictor/data/runs/hexsets/P-known_noaa_us_gulf_2023-06-07_mobile_pascagoula_20261023T021049Z/20261023T042757Z",
+    "informed_by": [],
+    "rerun_reason": null
   }
 ]
