@@ -224,5 +224,38 @@
       "hexsets_h1@2026-10-22T21:15:06+00:00"
     ],
     "rerun_reason": null
+  },
+  {
+    "run_id": "P-known_noaa_us_gulf_2023-06-07_new_orleans_mississippi_20261023T010648Z",
+    "protocol": "P-known",
+    "git_sha": "6c1ef68571b035ae3bec83e1069aea7eadbfc201",
+    "accessed_at": "2026-10-23T01:06:48+00:00",
+    "models": [
+      {
+        "model_id": "persistence_v1",
+        "model_version": "1.0.0",
+        "config_sha256": "9a7008509fb0dd903ca8df331f02c85008b5db34715349f51de206425a0b7692"
+      },
+      {
+        "model_id": "constant_velocity_v1",
+        "model_version": "1.0.0",
+        "config_sha256": "9a7008509fb0dd903ca8df331f02c85008b5db34715349f51de206425a0b7692"
+      },
+      {
+        "model_id": "damped_velocity_v1",
+        "model_version": "1.0.0",
+        "config_sha256": "cca2c7011aafd48174d56a15e1c61cb2148d2ef626bf39158c0ae69d081c4c48"
+      },
+      {
+        "model_id": "route_retrieval_v2",
+        "model_version": "2.0.0",
+        "config_sha256": "2843e37b2113e86e1f97aa6ee5bf4a6bb442854b66e125c9f11963f53df8f039"
+      }
+    ],
+    "informed_by": [
+      "P-known_noaa_us_gulf_2023-06-07_dev_new_orleans_mississippi_20261022T233151Z",
+      "P-known_noaa_us_gulf_2023-06-07_20261021T213109Z"
+    ],
+    "rerun_reason": "first July look at cutoff region new_orleans_mississippi (these versions were scored on July only at Houston)"
   }
 ]
