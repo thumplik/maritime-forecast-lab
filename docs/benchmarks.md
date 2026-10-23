@@ -640,3 +640,41 @@ The question was whether K = 50 is too few, or overfits. The same dev design (sp
 - Similarity weights (exp(−D/2)) give the extra, less similar tracks almost no mass, so the density hardly changes.
 - There is no overfitting signature. The only fitted quantities are the spread factor c per horizon (on dev) and the conformal thresholds (on a separate window), and July coverage for transiting ships was nominal.
 - More tracks do not give the outer 95/98% bands lane shape. That needs a traffic-density prior in place of the round broad component.
+
+
+## 2026-10-23 — Beyond Houston: four other Gulf ports, dev window (development record)
+
+The question was whether the approach only works at Houston. Cutoffs were started at four other Gulf ports (new regions in `config/regions.yaml`). The retrieval pool and truth region are Gulf-wide as before. P-known, dev window (Jun 18–22), commit `b4040d8`. Not held out, not for the README.
+
+| Port | Run id | Cutoffs |
+|---|---|---|
+| New Orleans / lower Mississippi | `P-known_noaa_us_gulf_2023-06-07_dev_new_orleans_mississippi_20261022T233151Z` | 8,431 |
+| Corpus Christi | `…_dev_corpus_christi_20261022T233550Z` | 1,262 |
+| Mobile–Pascagoula | `…_dev_mobile_pascagoula_20261022T233705Z` | 1,302 |
+| Tampa Bay | `…_dev_tampa_bay_20261022T233813Z` | 1,139 |
+
+**Point forecasts (retrieval v2, skill against the best baseline):**
+- At every port, retrieval beats the baselines at 1–3 h: +32% to +55% pooled and +53% to +79% transiting at 1 h.
+- Pooled underway goes negative from 6–24 h, as at Houston.
+- New Orleans transiting stays at +65% at 6 h.
+- The three smaller ports have only 20–51 transiting samples per horizon.
+
+**Hex sets with Houston's calibrated parameters applied unchanged** (`scripts/hexsets_holdout.py --dry-run <port run>`; fitted on the Houston calibration window):
+
+| Port | H1 coverage (pooled, 1–24 h) | H1 area against the disc | Note |
+|---|---|---|---|
+| New Orleans | 0.893–0.902 (12/12 cells within tolerance) | 0.24–0.52 | transfers cleanly |
+| Corpus Christi | 0.928–0.958 | 0.26–0.40 | over-covers: too cautious |
+| Mobile–Pascagoula | 0.838–0.869 at 1–6 h; 0.90 at 12–24 h | 0.26–0.39 | under-covers at short horizons |
+| Tampa Bay | 0.78–0.92 (n = 99–159; CIs about ±0.07) | 0.28–0.52 | too few samples to judge; the disc misses there too |
+
+**Hex sets calibrated locally** (each port's own first half; `scripts/hexsets_dev.py`):
+- New Orleans: 0.865–0.898 pooled, at 19–46% of the disc's area.
+- Corpus Christi and Mobile: 0.78–0.95, on 180–210 samples per cell.
+- Tampa: every cell skipped (too few samples).
+
+### What this says
+- **Not Houston-specific.** The method needs local traffic history, not Houston tuning: point skill and the 2–4× area advantage over discs hold at all four ports.
+- **Where it cannot work:** waters with no history. The P-region test above found no references at all.
+- **Calibration transfers only partly.** It held at New Orleans, a large port with similar traffic. Corpus Christi over-covers, and Mobile under-covers at short horizons. Each port, or region, needs its own calibration window.
+- **Data is the limit.** The smaller ports need more than five dev days to calibrate per cell (about ≥ 200 samples). The calibration split (Jun 23–30) per port, or more months of AIS, would give that.

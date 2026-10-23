@@ -1708,3 +1708,20 @@ README results and roadmap updated (AGENTS.md rule 13).
 1. **Coverage drift:** recalibrate on a rolling window that ends before each forecast. This needs its own protocol (pre-registered, its own July look).
 2. **Lane-shaped outer bands:** replace the round broad component with a train-period traffic-density prior (§5 H2).
 3. **Land cells:** remove them with the navigable mask.
+
+## 2026-10-23 — Milestone 7: is K = 50 enough, and does it work beyond Houston? (dev only)
+
+**K:** H1 is insensitive to K between 50 and 400 on dev (coverage within ±2 points, area within about ±10%). The similarity weights make the extra tracks negligible. There is no overfitting signature: the only fitted quantities are 6 spread factors (dev) and the conformal thresholds (a separate window).
+
+**Other ports** (`docs/benchmarks.md`, 2026-10-23):
+- New regions: new_orleans_mississippi, corpus_christi, mobile_pascagoula, tampa_bay.
+- `run_benchmark.py --cutoff-region`; the region goes into non-default run ids (`a80bd65`).
+- Retrieval keeps its short-horizon skill at every port.
+- Houston-calibrated hex sets transfer cleanly to New Orleans, over-cover at Corpus Christi and under-cover at Mobile at 1–6 h. Tampa is too small to judge.
+- Area is 2–4× smaller than discs everywhere.
+
+**Next step (proposed):** per-region calibration.
+1. Calibration-split runs (Jun 23–30) per port.
+2. Per-region hex parameters, with the serving path choosing them by the cutoff's region.
+3. A pre-registered July check per port (each port's July data is untouched).
+4. More AIS months would help the smaller ports.
