@@ -1725,3 +1725,23 @@ README results and roadmap updated (AGENTS.md rule 13).
 2. Per-region hex parameters, with the serving path choosing them by the cutoff's region.
 3. A pre-registered July check per port (each port's July data is untouched).
 4. More AIS months would help the smaller ports.
+
+## 2026-10-23 — Milestone 7: per-port calibration; per-port July checks PRE-REGISTERED (before any port's July data is read)
+
+**Code (committed before this entry):**
+- `scripts/hexsets_holdout.py --cutoff-region <port>`: each port has its own calibration run, served parameter file (`P-known__noaa_us_gulf_2023-06-07__<port>.json`) and test run. Region mismatches are refused.
+- The API picks the parameter file whose region contains the last report (`hexsets.params_for_position`), applies that port's calibration-likeness check, and labels each set with its region.
+
+**Ports:** new_orleans_mississippi, corpus_christi, mobile_pascagoula, tampa_bay (`config/regions.yaml`).
+
+**Frozen; nothing is tuned per port:** the H1 design (`h1_design.json`: K, ε, the c per horizon, resolution), the bands (90/95/98%) and the tolerances. Only the conformal thresholds and disc radii are fitted per port, on that port's calibration window.
+
+**Per port, in order:**
+1. **Calibration-split benchmark** (Jun 23–30): `run_benchmark.py --split calibration --cutoff-region <port>`, with persistence, CV, damped velocity and retrieval v2.
+2. **July test-split benchmark** (the first look at this port's July cutoffs): `--split test --confirm-test --cutoff-region <port>`.
+   - These model versions were already scored on July at Houston, so each run carries `--test-rerun-reason "first July look at cutoff region <port>"`.
+   - `--informed-by`: the port's dev run, plus the Houston July runs and analyses.
+3. **Hex-set comparison against the disc** (`hexsets_holdout.py --cutoff-region <port>`): one look, with the rule as pre-registered for Houston. 90% nominal; ±0.03 on n ≥ 200; adopted iff (a) H1 is within tolerance on at least as many of the 12 cells as the disc, and (b) H1 is smaller at ≥ 4 of 6 pooled horizons.
+4. **Band check** (`--levels-check`): one look. 90/95/98% coverage with tolerances ±0.03/±0.02/±0.01 on n ≥ 200.
+
+**Small-sample caveat, decided now:** cells with n < 200 cannot count as within tolerance under the rule. Their coverage is reported with CIs and labelled underpowered. No port is dropped after its results are seen; all four are reported.
