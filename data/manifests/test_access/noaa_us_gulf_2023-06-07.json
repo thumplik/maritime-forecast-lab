@@ -434,5 +434,35 @@
     "output": "/Volumes/Code/AIS-predictor/data/runs/hexsets/P-known_noaa_us_gulf_2023-06-07_corpus_christi_20261023T020247Z/20261023T041346Z",
     "informed_by": [],
     "rerun_reason": null
+  },
+  {
+    "run_id": "P-known_noaa_us_gulf_2023-06-07_corpus_christi_20261023T020247Z",
+    "kind": "hexsets_h1_levels_started",
+    "protocol": null,
+    "git_sha": "ba231a928cc2651d5565283d44aa4c1b56cc4d39",
+    "accessed_at": "2026-10-23T04:15:11+00:00",
+    "models": [],
+    "config_sha256": "ad992909b8c6332ab1f10132d4ea0db2ee25c7744ebe627a44bfaec3fc380be5",
+    "output": "(started)",
+    "informed_by": [
+      "hexsets_h1_started@2026-10-23T04:08:15+00:00",
+      "hexsets_h1@2026-10-23T04:13:46+00:00"
+    ],
+    "rerun_reason": null
+  },
+  {
+    "run_id": "P-known_noaa_us_gulf_2023-06-07_corpus_christi_20261023T020247Z",
+    "kind": "hexsets_h1_levels",
+    "protocol": null,
+    "git_sha": "ba231a928cc2651d5565283d44aa4c1b56cc4d39",
+    "accessed_at": "2026-10-23T04:21:26+00:00",
+    "models": [],
+    "config_sha256": "ad992909b8c6332ab1f10132d4ea0db2ee25c7744ebe627a44bfaec3fc380be5",
+    "output": "/Volumes/Code/AIS-predictor/data/runs/hexsets/P-known_noaa_us_gulf_2023-06-07_corpus_christi_20261023T020247Z/levels_20261023T042126Z",
+    "informed_by": [
+      "hexsets_h1_started@2026-10-23T04:08:15+00:00",
+      "hexsets_h1@2026-10-23T04:13:46+00:00"
+    ],
+    "rerun_reason": null
   }
 ]
