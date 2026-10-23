@@ -410,5 +410,29 @@
       "hexsets_h1@2026-10-23T03:14:34+00:00"
     ],
     "rerun_reason": null
+  },
+  {
+    "run_id": "P-known_noaa_us_gulf_2023-06-07_corpus_christi_20261023T020247Z",
+    "kind": "hexsets_h1_started",
+    "protocol": null,
+    "git_sha": "ff7445b8d6054dd458cf8b3d4a41b242984c61ae",
+    "accessed_at": "2026-10-23T04:08:15+00:00",
+    "models": [],
+    "config_sha256": "2db5a55b60f4704d1a3c829ed21763485cd4b7a4c8afcaa123d6adbb52bbd402",
+    "output": "(started)",
+    "informed_by": [],
+    "rerun_reason": null
+  },
+  {
+    "run_id": "P-known_noaa_us_gulf_2023-06-07_corpus_christi_20261023T020247Z",
+    "kind": "hexsets_h1",
+    "protocol": null,
+    "git_sha": "ff7445b8d6054dd458cf8b3d4a41b242984c61ae",
+    "accessed_at": "2026-10-23T04:13:46+00:00",
+    "models": [],
+    "config_sha256": "2db5a55b60f4704d1a3c829ed21763485cd4b7a4c8afcaa123d6adbb52bbd402",
+    "output": "/Volumes/Code/AIS-predictor/data/runs/hexsets/P-known_noaa_us_gulf_2023-06-07_corpus_christi_20261023T020247Z/20261023T041346Z",
+    "informed_by": [],
+    "rerun_reason": null
   }
 ]
