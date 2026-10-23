@@ -518,5 +518,29 @@
       "hexsets_h1@2026-10-23T04:27:57+00:00"
     ],
     "rerun_reason": null
+  },
+  {
+    "run_id": "P-known_noaa_us_gulf_2023-06-07_tampa_bay_20261023T021700Z",
+    "kind": "hexsets_h1_started",
+    "protocol": null,
+    "git_sha": "d05749f87033d06f46d179a1d36b10146f952761",
+    "accessed_at": "2026-10-23T04:37:26+00:00",
+    "models": [],
+    "config_sha256": "cbf1ae8d91d08169ae5406d3f0a6ba93d12a51128b7acc1edea99e6a9848594c",
+    "output": "(started)",
+    "informed_by": [],
+    "rerun_reason": null
+  },
+  {
+    "run_id": "P-known_noaa_us_gulf_2023-06-07_tampa_bay_20261023T021700Z",
+    "kind": "hexsets_h1",
+    "protocol": null,
+    "git_sha": "d05749f87033d06f46d179a1d36b10146f952761",
+    "accessed_at": "2026-10-23T04:40:21+00:00",
+    "models": [],
+    "config_sha256": "cbf1ae8d91d08169ae5406d3f0a6ba93d12a51128b7acc1edea99e6a9848594c",
+    "output": "/Volumes/Code/AIS-predictor/data/runs/hexsets/P-known_noaa_us_gulf_2023-06-07_tampa_bay_20261023T021700Z/20261023T044021Z",
+    "informed_by": [],
+    "rerun_reason": null
   }
 ]
